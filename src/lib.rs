@@ -6,5 +6,6 @@ pub mod stmt_parser;
 pub mod token;
 pub mod ast;
 pub mod bytecode;
+pub mod compiler;
 
 //TODO Better errors

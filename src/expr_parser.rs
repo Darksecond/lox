@@ -267,6 +267,7 @@ mod tests {
     fn test_primary() {
         assert_eq!(parse_str("nil"), Ok(Expr::Nil));
         assert_eq!(parse_str("1.0"), Ok(Expr::Number(1.0)));
+        assert_eq!(parse_str("1"), Ok(Expr::Number(1.0)));
         assert_eq!(parse_str("true"), Ok(Expr::Boolean(true)));
         assert_eq!(parse_str("false"), Ok(Expr::Boolean(false)));
         assert_eq!(parse_str("\"test\""), Ok(Expr::String(String::from("test"))));
