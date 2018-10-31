@@ -18,7 +18,6 @@ pub enum Instruction {
     Equal,
     Greater,
     Less,
-
     // etc
 }
 
@@ -45,7 +44,11 @@ impl Chunk {
         self.instructions.push(instruction);
     }
 
-    pub fn add_two_instructions(&mut self, instruction_one: Instruction, instruction_two: Instruction) {
+    pub fn add_two_instructions(
+        &mut self,
+        instruction_one: Instruction,
+        instruction_two: Instruction,
+    ) {
         self.add_instruction(instruction_one);
         self.add_instruction(instruction_two);
     }

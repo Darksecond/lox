@@ -21,19 +21,19 @@ enum Precedence {
 
 impl<'a> From<&'a Token> for Precedence {
     fn from(token: &Token) -> Precedence {
-        match token {
-            &Token::Equal => Precedence::Assign,
-            &Token::Or => Precedence::Or,
-            &Token::And => Precedence::And,
-            &Token::BangEqual | &Token::EqualEqual => Precedence::Equality,
-            &Token::Less | &Token::LessEqual | &Token::Greater | &Token::GreaterEqual => {
+        match *token {
+            Token::Equal => Precedence::Assign,
+            Token::Or => Precedence::Or,
+            Token::And => Precedence::And,
+            Token::BangEqual | Token::EqualEqual => Precedence::Equality,
+            Token::Less | Token::LessEqual | Token::Greater | Token::GreaterEqual => {
                 Precedence::Comparison
             }
-            &Token::Plus | &Token::Minus => Precedence::Term,
-            &Token::Star | &Token::Slash => Precedence::Factor,
-            &Token::Bang => Precedence::Unary, // Minus is already specified, but I think this is only for infix ops
-            &Token::LeftParen => Precedence::Call,
-            &Token::Dot => Precedence::Call,
+            Token::Plus | Token::Minus => Precedence::Term,
+            Token::Star | Token::Slash => Precedence::Factor,
+            Token::Bang => Precedence::Unary, // Minus is already specified, but I think this is only for infix ops
+            Token::LeftParen => Precedence::Call,
+            Token::Dot => Precedence::Call,
             _ => Precedence::None,
         }
     }

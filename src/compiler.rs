@@ -6,10 +6,16 @@ pub fn compile_expr(chunk: &mut Chunk, expr: &Expr) {
         Expr::Number(num) => compile_number(chunk, num),
         Expr::Boolean(state) => compile_bool(chunk, state),
         Expr::Nil => compile_nil(chunk),
+        Expr::String(ref string) => compile_string(chunk, string),
         Expr::Binary(ref left, operator, ref right) => compile_binary(chunk, left, right, operator),
         Expr::Unary(operator, ref left) => compile_unary(chunk, left, operator),
         _ => unimplemented!(),
     }
+}
+
+fn compile_string(chunk: &mut Chunk, string: &str) {
+    let constant = chunk.add_constant(Constant::String(String::from(string)));
+    chunk.add_instruction(Instruction::Constant(constant));
 }
 
 fn compile_nil(chunk: &mut Chunk) {
@@ -17,13 +23,17 @@ fn compile_nil(chunk: &mut Chunk) {
 }
 
 fn compile_bool(chunk: &mut Chunk, state: bool) {
-    let instruction = if state { Instruction::True } else { Instruction::False };
+    let instruction = if state {
+        Instruction::True
+    } else {
+        Instruction::False
+    };
     chunk.add_instruction(instruction);
 }
 
 fn compile_number(chunk: &mut Chunk, num: f64) {
-    let index = chunk.add_constant(Constant::Number(num));
-    chunk.add_instruction(Instruction::Constant(index));
+    let constant = chunk.add_constant(Constant::Number(num));
+    chunk.add_instruction(Instruction::Constant(constant));
 }
 
 fn compile_binary(chunk: &mut Chunk, left: &Expr, right: &Expr, operator: BinaryOperator) {
@@ -34,12 +44,18 @@ fn compile_binary(chunk: &mut Chunk, left: &Expr, right: &Expr, operator: Binary
         BinaryOperator::Minus => chunk.add_instruction(Instruction::Subtract),
         BinaryOperator::Star => chunk.add_instruction(Instruction::Multiply),
         BinaryOperator::Slash => chunk.add_instruction(Instruction::Divide),
-        BinaryOperator::BangEqual => chunk.add_two_instructions(Instruction::Equal, Instruction::Not),
+        BinaryOperator::BangEqual => {
+            chunk.add_two_instructions(Instruction::Equal, Instruction::Not)
+        }
         BinaryOperator::EqualEqual => chunk.add_instruction(Instruction::Equal),
         BinaryOperator::Greater => chunk.add_instruction(Instruction::Greater),
-        BinaryOperator::GreaterEqual => chunk.add_two_instructions(Instruction::Less, Instruction::Not),
+        BinaryOperator::GreaterEqual => {
+            chunk.add_two_instructions(Instruction::Less, Instruction::Not)
+        }
         BinaryOperator::Less => chunk.add_instruction(Instruction::Less),
-        BinaryOperator::LessEqual => chunk.add_two_instructions(Instruction::Greater, Instruction::Not),
+        BinaryOperator::LessEqual => {
+            chunk.add_two_instructions(Instruction::Greater, Instruction::Not)
+        }
     };
 }
 
@@ -85,23 +101,34 @@ mod tests {
 
     #[test]
     fn test_bool() {
-        assert_chunk(
-            "true",
-            vec![Instruction::True],
-            vec![],
-        );
-        assert_chunk(
-            "false",
-            vec![Instruction::False],
-            vec![],
-        );
+        assert_chunk("true", vec![Instruction::True], vec![]);
+        assert_chunk("false", vec![Instruction::False], vec![]);
     }
     #[test]
     fn test_nil() {
+        assert_chunk("nil", vec![Instruction::Nil], vec![]);
+    }
+
+    #[test]
+    fn test_string() {
         assert_chunk(
-            "nil",
-            vec![Instruction::Nil],
-            vec![],
+            "\"\"",
+            vec![Instruction::Constant(0)],
+            vec![Constant::String("".into())],
+        );
+        assert_chunk(
+            "\"test\"",
+            vec![Instruction::Constant(0)],
+            vec![Constant::String("test".into())],
+        );
+        assert_chunk(
+            "\"te\"+\"st\"",
+            vec![
+                Instruction::Constant(0),
+                Instruction::Constant(1),
+                Instruction::Add,
+            ],
+            vec![Constant::String("te".into()), Constant::String("st".into())],
         );
     }
 
@@ -159,21 +186,13 @@ mod tests {
         );
         assert_chunk(
             "true == false",
-            vec![
-                Instruction::True,
-                Instruction::False,
-                Instruction::Equal,
-            ],
+            vec![Instruction::True, Instruction::False, Instruction::Equal],
             vec![],
         );
 
         assert_chunk(
             "true > false",
-            vec![
-                Instruction::True,
-                Instruction::False,
-                Instruction::Greater,
-            ],
+            vec![Instruction::True, Instruction::False, Instruction::Greater],
             vec![],
         );
 
@@ -190,11 +209,7 @@ mod tests {
 
         assert_chunk(
             "true < false",
-            vec![
-                Instruction::True,
-                Instruction::False,
-                Instruction::Less,
-            ],
+            vec![Instruction::True, Instruction::False, Instruction::Less],
             vec![],
         );
 
@@ -217,10 +232,6 @@ mod tests {
             vec![Instruction::Constant(0), Instruction::Negate],
             vec![Constant::Number(1.0)],
         );
-        assert_chunk(
-            "!false",
-            vec![Instruction::False, Instruction::Not],
-            vec![],
-        );
+        assert_chunk("!false", vec![Instruction::False, Instruction::Not], vec![]);
     }
 }
