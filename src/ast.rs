@@ -55,5 +55,5 @@ pub enum Stmt {
     While(Box<Expr>, Box<Stmt>),
     Return(Option<Box<Expr>>),
     Function(Identifier, Vec<Identifier>, Vec<Stmt>), //TODO Extract into enum Decl or Declaration
-    Class(Identifier, Vec<Stmt>),  //TODO Extract into enum Decl or Declaration
+    Class(Identifier, Vec<Stmt>),                     //TODO Extract into enum Decl or Declaration
 }

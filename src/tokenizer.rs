@@ -1,7 +1,7 @@
 use super::token::*;
 use std::iter::Peekable;
-use std::str::Chars;
 use std::str;
+use std::str::Chars;
 
 struct Scanner<'a> {
     it: Peekable<Chars<'a>>,
@@ -23,7 +23,10 @@ impl<'a> Scanner<'a> {
     }
 
     // Consume next char if it matches
-    fn consume_if<F>(&mut self, x: F) -> bool where F : Fn(char) -> bool {
+    fn consume_if<F>(&mut self, x: F) -> bool
+    where
+        F: Fn(char) -> bool,
+    {
         if let Some(&ch) = self.peek() {
             if x(ch) {
                 self.next().unwrap();
@@ -37,7 +40,10 @@ impl<'a> Scanner<'a> {
     }
 
     // Consume next char if the next one after matches (so .3 eats . if 3 is numeric, for example)
-    fn consume_if_next<F>(&mut self, x: F) -> bool where F: Fn(char) -> bool {
+    fn consume_if_next<F>(&mut self, x: F) -> bool
+    where
+        F: Fn(char) -> bool,
+    {
         let mut it = self.it.clone();
         match it.next() {
             None => return false,
@@ -56,7 +62,10 @@ impl<'a> Scanner<'a> {
         }
     }
 
-    fn consume_while<F>(&mut self, x: F) -> Vec<char> where F : Fn(char) -> bool {
+    fn consume_while<F>(&mut self, x: F) -> Vec<char>
+    where
+        F: Fn(char) -> bool,
+    {
         let mut chars: Vec<char> = Vec::new();
         while let Some(&ch) = self.peek() {
             if x(ch) {
@@ -77,7 +86,7 @@ struct Lexer<'a> {
 impl<'a> Lexer<'a> {
     fn new(buf: &str) -> Lexer {
         Lexer {
-            it: Scanner::new(buf)
+            it: Scanner::new(buf),
         }
     }
 
@@ -89,24 +98,25 @@ impl<'a> Lexer<'a> {
             '>' => Some(self.either('=', Token::GreaterEqual, Token::Greater)),
             ' ' => None,
             '/' => {
-                if self.it.consume_if(|ch|ch=='/') {
-                    self.it.consume_while(|ch|ch!='\n');
+                if self.it.consume_if(|ch| ch == '/') {
+                    self.it.consume_while(|ch| ch != '\n');
                     None
                 } else {
                     Some(Token::Slash)
                 }
-            },
+            }
             '\n' => None,
             '\t' => None,
             '\r' => None,
             '"' => {
-                let string: String = self.it.consume_while(|ch|ch!='"').into_iter().collect();
-                match self.it.next() { // Skip last "
+                let string: String = self.it.consume_while(|ch| ch != '"').into_iter().collect();
+                match self.it.next() {
+                    // Skip last "
                     None => panic!("Unterminated string"),
                     _ => (),
                 }
                 Some(Token::String(string))
-            },
+            }
             x if x.is_numeric() => self.number(x),
             x if x.is_ascii_alphabetic() || x == '_' => self.identifier(x),
             '.' => Some(Token::Dot),
@@ -154,14 +164,18 @@ impl<'a> Lexer<'a> {
 
         match keywords.get(identifier.as_str()) {
             None => None,
-            Some(token) => Some(token.clone())
+            Some(token) => Some(token.clone()),
         }
     }
 
     fn identifier(&mut self, x: char) -> Option<Token> {
         let mut identifier = String::new();
         identifier.push(x);
-        let rest: String = self.it.consume_while(|a| a.is_ascii_alphanumeric() || a=='_').into_iter().collect();
+        let rest: String = self
+            .it
+            .consume_while(|a| a.is_ascii_alphanumeric() || a == '_')
+            .into_iter()
+            .collect();
         identifier.push_str(rest.as_str());
         match self.keyword(&identifier) {
             None => Some(Token::Identifier(identifier)),
@@ -172,10 +186,18 @@ impl<'a> Lexer<'a> {
     fn number(&mut self, x: char) -> Option<Token> {
         let mut number = String::new();
         number.push(x);
-        let num: String = self.it.consume_while(|a| a.is_numeric()).into_iter().collect();
+        let num: String = self
+            .it
+            .consume_while(|a| a.is_numeric())
+            .into_iter()
+            .collect();
         number.push_str(num.as_str());
-        if self.it.peek() == Some(&'.') && self.it.consume_if_next(|ch|ch.is_numeric()) {
-            let num2: String = self.it.consume_while(|a| a.is_numeric()).into_iter().collect();
+        if self.it.peek() == Some(&'.') && self.it.consume_if_next(|ch| ch.is_numeric()) {
+            let num2: String = self
+                .it
+                .consume_while(|a| a.is_numeric())
+                .into_iter()
+                .collect();
             number.push('.');
             number.push_str(num2.as_str());
         }
@@ -203,19 +225,39 @@ fn test() {
     assert_eq!(tokenize(""), vec![]);
     assert_eq!(tokenize("="), vec![Token::Equal]);
     assert_eq!(tokenize("=="), vec![Token::EqualEqual]);
-    assert_eq!(tokenize("== = =="), vec![Token::EqualEqual, Token::Equal, Token::EqualEqual]);
+    assert_eq!(
+        tokenize("== = =="),
+        vec![Token::EqualEqual, Token::Equal, Token::EqualEqual]
+    );
     assert_eq!(tokenize("//test"), vec![]);
     assert_eq!(tokenize("=//test"), vec![Token::Equal]);
-    assert_eq!(tokenize("=//test
-    ="), vec![Token::Equal, Token::Equal]);
-    assert_eq!(tokenize("\"test\""), vec![Token::String("test".to_string())]);
+    assert_eq!(
+        tokenize(
+            "=//test
+    ="
+        ),
+        vec![Token::Equal, Token::Equal]
+    );
+    assert_eq!(
+        tokenize("\"test\""),
+        vec![Token::String("test".to_string())]
+    );
     assert_eq!(tokenize("12.34"), vec![Token::Number(12.34)]);
     assert_eq!(tokenize("99"), vec![Token::Number(99.00)]);
     assert_eq!(tokenize("99."), vec![Token::Number(99.00), Token::Dot]);
-    assert_eq!(tokenize("99.="), vec![Token::Number(99.00), Token::Dot, Token::Equal]);
+    assert_eq!(
+        tokenize("99.="),
+        vec![Token::Number(99.00), Token::Dot, Token::Equal]
+    );
     assert_eq!(tokenize("!"), vec![Token::Bang]);
     assert_eq!(tokenize("!="), vec![Token::BangEqual]);
-    assert_eq!(tokenize("test"), vec![Token::Identifier("test".to_string())]);
-    assert_eq!(tokenize("orchid"), vec![Token::Identifier("orchid".to_string())]);
+    assert_eq!(
+        tokenize("test"),
+        vec![Token::Identifier("test".to_string())]
+    );
+    assert_eq!(
+        tokenize("orchid"),
+        vec![Token::Identifier("orchid".to_string())]
+    );
     assert_eq!(tokenize("or"), vec![Token::Or]);
 }

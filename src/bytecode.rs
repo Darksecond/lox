@@ -27,11 +27,11 @@ pub struct Chunk {
 impl Chunk {
     pub fn new() -> Chunk {
         Chunk {
-            instructions: vec!(),
-            constants: vec!(),
+            instructions: vec![],
+            constants: vec![],
         }
     }
-    pub fn add_instruction(&mut self, instruction: Instruction) -> InstructionIndex{
+    pub fn add_instruction(&mut self, instruction: Instruction) -> InstructionIndex {
         self.instructions.push(instruction);
         self.instructions.len() - 1
     }
@@ -41,11 +41,11 @@ impl Chunk {
         self.constants.len() - 1
     }
 
-   pub fn instructions(&self) -> &[Instruction] {
-       &self.instructions
-   }
+    pub fn instructions(&self) -> &[Instruction] {
+        &self.instructions
+    }
 
-   pub fn constants(&self) -> &[Constant] {
-       &self.constants
-   }
+    pub fn constants(&self) -> &[Constant] {
+        &self.constants
+    }
 }

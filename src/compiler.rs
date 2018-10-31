@@ -12,7 +12,7 @@ fn compile_expr(chunk: &mut Chunk, expr: &Expr) {
         &Expr::Number(num) => compile_number(chunk, num),
         &Expr::Binary(ref left, BinaryOperator::Plus, ref right) => compile_add(chunk, left, right),
         &Expr::Unary(UnaryOperator::Minus, ref left) => compile_negate(chunk, left),
-        _ => unimplemented!()
+        _ => unimplemented!(),
     }
 }
 
@@ -34,8 +34,8 @@ fn compile_negate(chunk: &mut Chunk, left: &Box<Expr>) {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::tokenizer::*;
+    use super::*;
     fn parse_str(data: &str) -> Result<Expr, String> {
         let tokens = tokenize(data);
         let mut it = tokens.as_slice().into_iter().peekable();
@@ -50,27 +50,32 @@ mod tests {
 
     #[test]
     fn test_number() {
-        assert_chunk("1", vec![Instruction::Constant(0)], vec![Constant::Number(1.0)]);
+        assert_chunk(
+            "1",
+            vec![Instruction::Constant(0)],
+            vec![Constant::Number(1.0)],
+        );
     }
 
     #[test]
     fn test_add() {
         assert_chunk(
-            "1+2", 
+            "1+2",
             vec![
-                Instruction::Constant(0), 
-                Instruction::Constant(1), 
-                Instruction::Add], 
-            vec![Constant::Number(1.0), Constant::Number(2.0)]
+                Instruction::Constant(0),
+                Instruction::Constant(1),
+                Instruction::Add,
+            ],
+            vec![Constant::Number(1.0), Constant::Number(2.0)],
         );
     }
-    
+
     #[test]
     fn test_negate() {
         assert_chunk(
-            "-1", 
-            vec![Instruction::Constant(0), Instruction::Negate], 
-            vec![Constant::Number(1.0)]
+            "-1",
+            vec![Instruction::Constant(0), Instruction::Negate],
+            vec![Constant::Number(1.0)],
         );
     }
 }

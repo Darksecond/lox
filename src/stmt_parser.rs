@@ -1,10 +1,12 @@
-use super::token::*;
 use super::ast::*;
 use super::common::*;
-use std::iter::{Peekable, Iterator};
+use super::token::*;
+use std::iter::{Iterator, Peekable};
 
 fn parse_program<'a, It>(it: &mut Peekable<It>) -> Result<Vec<Stmt>, String>
-    where It: Iterator<Item=&'a Token> {
+where
+    It: Iterator<Item = &'a Token>,
+{
     let mut statements = Vec::new();
     while let Some(_) = it.peek() {
         statements.push(parse_declaration(it)?);
@@ -16,17 +18,21 @@ fn parse_program<'a, It>(it: &mut Peekable<It>) -> Result<Vec<Stmt>, String>
 }
 
 fn parse_declaration<'a, It>(it: &mut Peekable<It>) -> Result<Stmt, String>
-    where It: Iterator<Item=&'a Token> {
+where
+    It: Iterator<Item = &'a Token>,
+{
     match peek(it)? {
         &Token::Var => parse_var_declaration(it),
         &Token::Fun => parse_function_declaration(it),
         &Token::Class => parse_class_declaration(it),
-        _ => parse_statement(it)
-    }        
+        _ => parse_statement(it),
+    }
 }
 
 fn parse_statement<'a, It>(it: &mut Peekable<It>) -> Result<Stmt, String>
-    where It: Iterator<Item=&'a Token> {
+where
+    It: Iterator<Item = &'a Token>,
+{
     match peek(it)? {
         &Token::Print => parse_print_statement(it),
         &Token::If => parse_if_statement(it),
@@ -39,7 +45,9 @@ fn parse_statement<'a, It>(it: &mut Peekable<It>) -> Result<Stmt, String>
 }
 
 fn parse_class_declaration<'a, It>(it: &mut Peekable<It>) -> Result<Stmt, String>
-    where It: Iterator<Item=&'a Token> {
+where
+    It: Iterator<Item = &'a Token>,
+{
     expect(it, &Token::Class)?;
     let name = expect!(it, Token::Identifier(i) => i)?;
     expect(it, &Token::LeftBrace)?;
@@ -48,18 +56,22 @@ fn parse_class_declaration<'a, It>(it: &mut Peekable<It>) -> Result<Stmt, String
         functions.push(parse_function(it)?);
     }
     expect(it, &Token::RightBrace)?;
-    
+
     Ok(Stmt::Class(name.clone(), functions))
 }
 
 fn parse_function_declaration<'a, It>(it: &mut Peekable<It>) -> Result<Stmt, String>
-    where It: Iterator<Item=&'a Token> {
+where
+    It: Iterator<Item = &'a Token>,
+{
     expect(it, &Token::Fun)?;
     parse_function(it)
 }
 
 fn parse_function<'a, It>(it: &mut Peekable<It>) -> Result<Stmt, String>
-    where It: Iterator<Item=&'a Token> {
+where
+    It: Iterator<Item = &'a Token>,
+{
     let name = expect!(it, Token::Identifier(i) => i)?;
     expect(it, &Token::LeftParen)?;
     let params = if peek(it)? != &Token::RightParen {
@@ -74,15 +86,13 @@ fn parse_function<'a, It>(it: &mut Peekable<It>) -> Result<Stmt, String>
         body.push(parse_declaration(it)?);
     }
     expect(it, &Token::RightBrace)?;
-    Ok(Stmt::Function(
-        name.clone(),
-        params,
-        body,
-    ))
+    Ok(Stmt::Function(name.clone(), params, body))
 }
 
 fn parse_params<'a, It>(it: &mut Peekable<It>) -> Result<Vec<Identifier>, String>
-    where It: Iterator<Item=&'a Token> {
+where
+    It: Iterator<Item = &'a Token>,
+{
     let mut params: Vec<Identifier> = Vec::new();
     params.push(expect!(it, Token::Identifier(i) => i.clone())?);
     while peek(it)? == &Token::Comma {
@@ -93,7 +103,9 @@ fn parse_params<'a, It>(it: &mut Peekable<It>) -> Result<Vec<Identifier>, String
 }
 
 fn parse_var_declaration<'a, It>(it: &mut Peekable<It>) -> Result<Stmt, String>
-    where It: Iterator<Item=&'a Token> {
+where
+    It: Iterator<Item = &'a Token>,
+{
     expect(it, &Token::Var)?;
     let name = expect!(it, Token::Identifier(i) => i)?;
     let mut initializer: Option<Expr> = None;
@@ -103,17 +115,21 @@ fn parse_var_declaration<'a, It>(it: &mut Peekable<It>) -> Result<Stmt, String>
     }
 
     expect(it, &Token::Semicolon)?;
-    
+
     Ok(Stmt::Var(name.clone(), initializer.map(|i| Box::new(i))))
 }
 
 fn parse_expr<'a, It>(it: &mut Peekable<It>) -> Result<Expr, String>
-    where It: Iterator<Item=&'a Token> {
+where
+    It: Iterator<Item = &'a Token>,
+{
     super::expr_parser::parse(it)
 }
 
 fn parse_for_statement<'a, It>(it: &mut Peekable<It>) -> Result<Stmt, String>
-    where It: Iterator<Item=&'a Token> {
+where
+    It: Iterator<Item = &'a Token>,
+{
     expect(it, &Token::For)?;
     expect(it, &Token::LeftParen)?;
     let initializer = match peek(it)? {
@@ -121,7 +137,7 @@ fn parse_for_statement<'a, It>(it: &mut Peekable<It>) -> Result<Stmt, String>
         &Token::Semicolon => {
             expect(it, &Token::Semicolon)?;
             None
-        },
+        }
         _ => Some(parse_expr_statement(it)?),
     };
     let condition = if peek(it)? != &Token::Semicolon {
@@ -139,22 +155,12 @@ fn parse_for_statement<'a, It>(it: &mut Peekable<It>) -> Result<Stmt, String>
     let body = parse_statement(it)?;
     // Add increment if it exists
     let body = match increment {
-        Some(expr) => {
-            Stmt::Block(vec![
-                body,
-                Stmt::Expression(Box::new(expr)),
-            ])
-        },
+        Some(expr) => Stmt::Block(vec![body, Stmt::Expression(Box::new(expr))]),
         None => body,
     };
     let body = Stmt::While(Box::new(condition), Box::new(body));
     let body = match initializer {
-        Some(stmt) => {
-            Stmt::Block(vec![
-                stmt,
-                body,
-            ])
-        },
+        Some(stmt) => Stmt::Block(vec![stmt, body]),
         None => body,
     };
 
@@ -162,18 +168,22 @@ fn parse_for_statement<'a, It>(it: &mut Peekable<It>) -> Result<Stmt, String>
 }
 
 fn parse_return_statement<'a, It>(it: &mut Peekable<It>) -> Result<Stmt, String>
-    where It: Iterator<Item=&'a Token> {
-        expect(it, &Token::Return)?;
-        let mut expr: Option<Expr> = None;
-        if peek(it)? != &Token::Semicolon {
-            expr = Some(parse_expr(it)?);
-        }
-        expect(it, &Token::Semicolon)?;
-        Ok(Stmt::Return(expr.map(|i|Box::new(i))))
+where
+    It: Iterator<Item = &'a Token>,
+{
+    expect(it, &Token::Return)?;
+    let mut expr: Option<Expr> = None;
+    if peek(it)? != &Token::Semicolon {
+        expr = Some(parse_expr(it)?);
+    }
+    expect(it, &Token::Semicolon)?;
+    Ok(Stmt::Return(expr.map(|i| Box::new(i))))
 }
 
 fn parse_expr_statement<'a, It>(it: &mut Peekable<It>) -> Result<Stmt, String>
-    where It: Iterator<Item=&'a Token> {
+where
+    It: Iterator<Item = &'a Token>,
+{
     let expr = parse_expr(it)?;
     expect(it, &Token::Semicolon)?;
 
@@ -181,48 +191,56 @@ fn parse_expr_statement<'a, It>(it: &mut Peekable<It>) -> Result<Stmt, String>
 }
 
 fn parse_block_statement<'a, It>(it: &mut Peekable<It>) -> Result<Stmt, String>
-    where It: Iterator<Item=&'a Token> {
-        expect(it, &Token::LeftBrace)?;
-        let mut statements: Vec<Stmt> = Vec::new();
-        while peek(it)? != &Token::RightBrace {
-            statements.push(parse_declaration(it)?);
-        }
-        expect(it, &Token::RightBrace)?;
-        Ok(Stmt::Block(statements))
+where
+    It: Iterator<Item = &'a Token>,
+{
+    expect(it, &Token::LeftBrace)?;
+    let mut statements: Vec<Stmt> = Vec::new();
+    while peek(it)? != &Token::RightBrace {
+        statements.push(parse_declaration(it)?);
+    }
+    expect(it, &Token::RightBrace)?;
+    Ok(Stmt::Block(statements))
 }
 
 fn parse_while_statement<'a, It>(it: &mut Peekable<It>) -> Result<Stmt, String>
-    where It: Iterator<Item=&'a Token> {
-        expect(it, &Token::While)?;
-        expect(it, &Token::LeftParen)?;
-        let condition = parse_expr(it)?;
-        expect(it, &Token::RightParen)?;
-        let statement = parse_statement(it)?;
-        Ok(Stmt::While(Box::new(condition), Box::new(statement)))
+where
+    It: Iterator<Item = &'a Token>,
+{
+    expect(it, &Token::While)?;
+    expect(it, &Token::LeftParen)?;
+    let condition = parse_expr(it)?;
+    expect(it, &Token::RightParen)?;
+    let statement = parse_statement(it)?;
+    Ok(Stmt::While(Box::new(condition), Box::new(statement)))
 }
 
 fn parse_if_statement<'a, It>(it: &mut Peekable<It>) -> Result<Stmt, String>
-    where It: Iterator<Item=&'a Token> {
-        expect(it, &Token::If)?;
-        expect(it, &Token::LeftParen)?;
-        let condition = parse_expr(it)?;
-        expect(it, &Token::RightParen)?;
-        let if_stmt = parse_statement(it)?;
-        let mut else_stmt: Option<Stmt> = None;
+where
+    It: Iterator<Item = &'a Token>,
+{
+    expect(it, &Token::If)?;
+    expect(it, &Token::LeftParen)?;
+    let condition = parse_expr(it)?;
+    expect(it, &Token::RightParen)?;
+    let if_stmt = parse_statement(it)?;
+    let mut else_stmt: Option<Stmt> = None;
 
-        if optionally(it, &Token::Else)? {
-            else_stmt = Some(parse_statement(it)?);
-        }
+    if optionally(it, &Token::Else)? {
+        else_stmt = Some(parse_statement(it)?);
+    }
 
-        Ok(Stmt::If(
-            Box::new(condition),
-            Box::new(if_stmt),
-            else_stmt.map(|i| Box::new(i)),
-        ))
+    Ok(Stmt::If(
+        Box::new(condition),
+        Box::new(if_stmt),
+        else_stmt.map(|i| Box::new(i)),
+    ))
 }
 
 fn parse_print_statement<'a, It>(it: &mut Peekable<It>) -> Result<Stmt, String>
-    where It: Iterator<Item=&'a Token> {
+where
+    It: Iterator<Item = &'a Token>,
+{
     expect(it, &Token::Print)?;
     let expr = parse_expr(it)?;
     expect(it, &Token::Semicolon)?;
@@ -230,7 +248,9 @@ fn parse_print_statement<'a, It>(it: &mut Peekable<It>) -> Result<Stmt, String>
 }
 
 pub fn parse<'a, It>(it: &mut Peekable<It>) -> Result<Vec<Stmt>, String>
-    where It: Iterator<Item=&'a Token> {
+where
+    It: Iterator<Item = &'a Token>,
+{
     parse_program(it)
 }
 
@@ -246,164 +266,179 @@ mod tests {
 
     #[test]
     fn test_expr_stmt() {
-        assert_eq!(parse_str("nil;"), Ok(vec![
-            Stmt::Expression(Box::new(Expr::Nil)),
-        ]));
-        assert_eq!(parse_str("nil;nil;"), Ok(vec![
-            Stmt::Expression(Box::new(Expr::Nil)),
-            Stmt::Expression(Box::new(Expr::Nil)),
-        ]));
+        assert_eq!(
+            parse_str("nil;"),
+            Ok(vec![Stmt::Expression(Box::new(Expr::Nil)),])
+        );
+        assert_eq!(
+            parse_str("nil;nil;"),
+            Ok(vec![
+                Stmt::Expression(Box::new(Expr::Nil)),
+                Stmt::Expression(Box::new(Expr::Nil)),
+            ])
+        );
     }
 
     #[test]
     fn test_print_stmt() {
-        assert_eq!(parse_str("print nil;"), Ok(vec![
-            Stmt::Print(Box::new(Expr::Nil)),
-        ]));
+        assert_eq!(
+            parse_str("print nil;"),
+            Ok(vec![Stmt::Print(Box::new(Expr::Nil)),])
+        );
     }
 
     #[test]
     fn test_var_decl() {
-        assert_eq!(parse_str("var beverage;"), Ok(vec![
-            Stmt::Var("beverage".into(), None),
-        ]));
-        assert_eq!(parse_str("var beverage = nil;"), Ok(vec![
-            Stmt::Var("beverage".into(), Some(Box::new(Expr::Nil))),
-        ]));
+        assert_eq!(
+            parse_str("var beverage;"),
+            Ok(vec![Stmt::Var("beverage".into(), None),])
+        );
+        assert_eq!(
+            parse_str("var beverage = nil;"),
+            Ok(vec![Stmt::Var(
+                "beverage".into(),
+                Some(Box::new(Expr::Nil))
+            ),])
+        );
 
-        assert_eq!(parse_str("if (nil) var beverage = nil;"), Err("unexpected token: Var".into()));
+        assert_eq!(
+            parse_str("if (nil) var beverage = nil;"),
+            Err("unexpected token: Var".into())
+        );
     }
 
     #[test]
     fn test_if_stmt() {
-        assert_eq!(parse_str("if(nil) print nil;"), Ok(vec![
-            Stmt::If(
+        assert_eq!(
+            parse_str("if(nil) print nil;"),
+            Ok(vec![Stmt::If(
                 Box::new(Expr::Nil),
-                Box::new(
-                    Stmt::Print(Box::new(Expr::Nil))
-                ),
+                Box::new(Stmt::Print(Box::new(Expr::Nil))),
                 None,
-            ),
-        ]));
-        assert_eq!(parse_str("if(nil) print nil; else print false;"), Ok(vec![
-            Stmt::If(
+            ),])
+        );
+        assert_eq!(
+            parse_str("if(nil) print nil; else print false;"),
+            Ok(vec![Stmt::If(
                 Box::new(Expr::Nil),
-                Box::new(
-                    Stmt::Print(Box::new(Expr::Nil))
-                ),
-                Some(Box::new(
-                    Stmt::Print(Box::new(Expr::Boolean(false)))
-                )),
-            ),
-        ]));
+                Box::new(Stmt::Print(Box::new(Expr::Nil))),
+                Some(Box::new(Stmt::Print(Box::new(Expr::Boolean(false))))),
+            ),])
+        );
     }
 
     #[test]
     fn test_block_stmt() {
-        assert_eq!(parse_str("{}"), Ok(vec![
-            Stmt::Block(vec![])
-        ]));
-        assert_eq!(parse_str("{nil;}"), Ok(vec![
-            Stmt::Block(vec![
+        assert_eq!(parse_str("{}"), Ok(vec![Stmt::Block(vec![])]));
+        assert_eq!(
+            parse_str("{nil;}"),
+            Ok(vec![Stmt::Block(vec![Stmt::Expression(Box::new(
+                Expr::Nil
+            )),])])
+        );
+        assert_eq!(
+            parse_str("{nil;nil;}"),
+            Ok(vec![Stmt::Block(vec![
                 Stmt::Expression(Box::new(Expr::Nil)),
-            ])
-        ]));
-        assert_eq!(parse_str("{nil;nil;}"), Ok(vec![
-            Stmt::Block(vec![
                 Stmt::Expression(Box::new(Expr::Nil)),
-                Stmt::Expression(Box::new(Expr::Nil)),
-            ])
-        ]));
+            ])])
+        );
     }
 
     #[test]
     fn test_while_stmt() {
-        assert_eq!(parse_str("while(nil)false;"), Ok(vec![
-            Stmt::While(
+        assert_eq!(
+            parse_str("while(nil)false;"),
+            Ok(vec![Stmt::While(
                 Box::new(Expr::Nil),
-                Box::new(
-                    Stmt::Expression(Box::new(Expr::Boolean(false)))
-                ),
-            )
-        ]));
+                Box::new(Stmt::Expression(Box::new(Expr::Boolean(false)))),
+            )])
+        );
     }
 
     #[test]
     fn test_return_stmt() {
-        assert_eq!(parse_str("return;"), Ok(vec![
-            Stmt::Return(None),
-        ]));
-        assert_eq!(parse_str("return nil;"), Ok(vec![
-            Stmt::Return(Some(Box::new(Expr::Nil)))
-        ]));
+        assert_eq!(parse_str("return;"), Ok(vec![Stmt::Return(None),]));
+        assert_eq!(
+            parse_str("return nil;"),
+            Ok(vec![Stmt::Return(Some(Box::new(Expr::Nil)))])
+        );
     }
 
     #[test]
     fn test_function_stmt() {
-        assert_eq!(parse_str("fun test(){}"), Ok(vec![
-            Stmt::Function(
-                "test".into(),
-                vec![],
-                vec![]
-                ),
-        ]));
-        assert_eq!(parse_str("fun test(a){}"), Ok(vec![
-            Stmt::Function(
+        assert_eq!(
+            parse_str("fun test(){}"),
+            Ok(vec![Stmt::Function("test".into(), vec![], vec![]),])
+        );
+        assert_eq!(
+            parse_str("fun test(a){}"),
+            Ok(vec![Stmt::Function(
                 "test".into(),
                 vec!["a".into()],
                 vec![]
-                ),
-        ]));
-        assert_eq!(parse_str("fun test(){nil;}"), Ok(vec![
-            Stmt::Function(
+            ),])
+        );
+        assert_eq!(
+            parse_str("fun test(){nil;}"),
+            Ok(vec![Stmt::Function(
                 "test".into(),
                 vec![],
-                vec![
-                    Stmt::Expression(Box::new(
-                        Expr::Nil,
-                    )),
-                ]
-                ),
-        ]));
+                vec![Stmt::Expression(Box::new(Expr::Nil,)),]
+            ),])
+        );
     }
 
     #[test]
     fn test_class_stmt() {
-        assert_eq!(parse_str("class test{}"), Ok(vec![
-            Stmt::Class("test".into(), vec![]),
-        ]));
-        assert_eq!(parse_str("class test{a(){}}"), Ok(vec![
-            Stmt::Class("test".into(), vec![
-                Stmt::Function("a".into(),vec![],vec![])
-            ])
-        ]));
+        assert_eq!(
+            parse_str("class test{}"),
+            Ok(vec![Stmt::Class("test".into(), vec![]),])
+        );
+        assert_eq!(
+            parse_str("class test{a(){}}"),
+            Ok(vec![Stmt::Class(
+                "test".into(),
+                vec![Stmt::Function("a".into(), vec![], vec![])]
+            )])
+        );
     }
 
     #[test]
     fn test_for() {
-        fn block(what: Vec<Stmt>) -> Stmt { Stmt::Block(what) }
-        fn var_i_zero() -> Stmt { Stmt::Var("i".into(), Some(Box::new(Expr::Number(0.)))) }
-        fn nil() -> Expr { Expr::Nil }
-        fn while_stmt(e: Expr, s: Stmt) -> Stmt { Stmt::While(Box::new(e), Box::new(s)) }
+        fn block(what: Vec<Stmt>) -> Stmt {
+            Stmt::Block(what)
+        }
+        fn var_i_zero() -> Stmt {
+            Stmt::Var("i".into(), Some(Box::new(Expr::Number(0.))))
+        }
+        fn nil() -> Expr {
+            Expr::Nil
+        }
+        fn while_stmt(e: Expr, s: Stmt) -> Stmt {
+            Stmt::While(Box::new(e), Box::new(s))
+        }
 
-        assert_eq!(parse_str("for(;;){}"), Ok(vec![
-            while_stmt(Expr::Boolean(true),Stmt::Block(vec![])),
-        ]));
-        assert_eq!(parse_str("for(var i=0;;){}"), Ok(vec![
-            block(vec![
+        assert_eq!(
+            parse_str("for(;;){}"),
+            Ok(vec![while_stmt(Expr::Boolean(true), Stmt::Block(vec![])),])
+        );
+        assert_eq!(
+            parse_str("for(var i=0;;){}"),
+            Ok(vec![block(vec![
                 var_i_zero(),
-                while_stmt(Expr::Boolean(true),Stmt::Block(vec![])),
-            ])
-        ]));
-        assert_eq!(parse_str("for(nil;nil;nil){}"), Ok(vec![
-            block(vec![
+                while_stmt(Expr::Boolean(true), Stmt::Block(vec![])),
+            ])])
+        );
+        assert_eq!(
+            parse_str("for(nil;nil;nil){}"),
+            Ok(vec![block(vec![
                 Stmt::Expression(Box::new(nil())),
-                while_stmt(Expr::Nil,Stmt::Block(vec![
-                    Stmt::Block(vec![]),
-                    Stmt::Expression(Box::new(nil())),
-                ])),
-            ])
-        ]));
-        
+                while_stmt(
+                    Expr::Nil,
+                    Stmt::Block(vec![Stmt::Block(vec![]), Stmt::Expression(Box::new(nil())),])
+                ),
+            ])])
+        );
     }
 }
