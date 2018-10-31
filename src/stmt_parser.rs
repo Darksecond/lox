@@ -116,7 +116,7 @@ where
 
     expect(it, &Token::Semicolon)?;
 
-    Ok(Stmt::Var(name.clone(), initializer.map(|i| Box::new(i))))
+    Ok(Stmt::Var(name.clone(), initializer.map(Box::new)))
 }
 
 fn parse_expr<'a, It>(it: &mut Peekable<It>) -> Result<Expr, String>
@@ -177,7 +177,7 @@ where
         expr = Some(parse_expr(it)?);
     }
     expect(it, &Token::Semicolon)?;
-    Ok(Stmt::Return(expr.map(|i| Box::new(i))))
+    Ok(Stmt::Return(expr.map(Box::new)))
 }
 
 fn parse_expr_statement<'a, It>(it: &mut Peekable<It>) -> Result<Stmt, String>
@@ -233,7 +233,7 @@ where
     Ok(Stmt::If(
         Box::new(condition),
         Box::new(if_stmt),
-        else_stmt.map(|i| Box::new(i)),
+        else_stmt.map(Box::new),
     ))
 }
 

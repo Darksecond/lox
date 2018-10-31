@@ -142,7 +142,7 @@ impl<'a> Lexer<'a> {
     }
 
     //TODO Static the keywords
-    fn keyword(&self, identifier: &String) -> Option<Token> {
+    fn keyword(&self, identifier: &str) -> Option<Token> {
         use std::collections::HashMap;
         let mut keywords: HashMap<&str, Token> = HashMap::new();
         keywords.insert("and", Token::And);
@@ -162,7 +162,7 @@ impl<'a> Lexer<'a> {
         keywords.insert("var", Token::Var);
         keywords.insert("while", Token::While);
 
-        match keywords.get(identifier.as_str()) {
+        match keywords.get(identifier) {
             None => None,
             Some(token) => Some(token.clone()),
         }

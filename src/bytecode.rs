@@ -4,11 +4,21 @@ pub type ConstantIndex = usize;
 #[derive(Debug, PartialEq)]
 pub enum Instruction {
     Constant(ConstantIndex),
+    True,
+    False,
+    Nil,
+
     Negate,
     Add,
     Subtract,
     Multiply,
     Divide,
+
+    Not,
+    Equal,
+    Greater,
+    Less,
+
     // etc
 }
 
@@ -31,9 +41,13 @@ impl Chunk {
             constants: vec![],
         }
     }
-    pub fn add_instruction(&mut self, instruction: Instruction) -> InstructionIndex {
+    pub fn add_instruction(&mut self, instruction: Instruction) {
         self.instructions.push(instruction);
-        self.instructions.len() - 1
+    }
+
+    pub fn add_two_instructions(&mut self, instruction_one: Instruction, instruction_two: Instruction) {
+        self.add_instruction(instruction_one);
+        self.add_instruction(instruction_two);
     }
 
     pub fn add_constant(&mut self, constant: Constant) -> ConstantIndex {

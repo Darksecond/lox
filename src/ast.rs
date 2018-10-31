@@ -1,12 +1,12 @@
 pub type Identifier = String;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Copy, Clone)]
 pub enum UnaryOperator {
     Bang,
     Minus,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Copy, Clone)]
 pub enum BinaryOperator {
     Slash,
     Star,
