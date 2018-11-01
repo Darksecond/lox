@@ -50,6 +50,12 @@ where
 {
     expect(it, &Token::Class)?;
     let name = expect!(it, Token::Identifier(i) => i)?;
+    let superclass = if optionally(it, &Token::Less)? {
+        let name = expect!(it, Token::Identifier(i) => i)?;
+        Some(name.clone())
+    } else {
+        None
+    };
     expect(it, &Token::LeftBrace)?;
     let mut functions: Vec<Stmt> = vec![];
     while peek(it)? != &Token::RightBrace {
@@ -57,7 +63,7 @@ where
     }
     expect(it, &Token::RightBrace)?;
 
-    Ok(Stmt::Class(name.clone(), functions))
+    Ok(Stmt::Class(name.clone(), superclass, functions))
 }
 
 fn parse_function_declaration<'a, It>(it: &mut Peekable<It>) -> Result<Stmt, String>
@@ -393,14 +399,31 @@ mod tests {
     fn test_class_stmt() {
         assert_eq!(
             parse_str("class test{}"),
-            Ok(vec![Stmt::Class("test".into(), vec![]),])
+            Ok(vec![Stmt::Class("test".into(), None, vec![]),])
         );
         assert_eq!(
             parse_str("class test{a(){}}"),
             Ok(vec![Stmt::Class(
                 "test".into(),
+                None,
                 vec![Stmt::Function("a".into(), vec![], vec![])]
             )])
+        );
+    }
+
+    #[test]
+    fn test_class_inheritance() {
+        assert_eq!(
+            parse_str("class BostonCream < Doughnut {}"),
+            Ok(vec![Stmt::Class("BostonCream".into(), Some("Doughnut".into()), vec![]),])
+        );
+        assert_eq!(
+            parse_str("class BostonCream < {}"),
+            Err("Unexpected LeftBrace".into())
+        );
+        assert_eq!(
+            parse_str("class BostonCream < Doughnut < BakedGood {}"),
+            Err("Expected LeftBrace got Less".into())
         );
     }
 
