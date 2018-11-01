@@ -23,7 +23,7 @@ exprStmt -> expression ";" ;
 printStmt -> "print" expression ";" ;
 ifStmt -> "if" "(" expression ")" statement ( "else" statement )? ;
 
-classDecl -> "class" IDENTIFIER "{" function* "}" ;
+classDecl -> "class" IDENTIFIER ( "<" IDENTIFIER )? "{" function* "}" ;
 funDecl -> "fun" function ;
 varDecl -> "var" IDENTIFIER ( "=" expression )? ";" ;
 
