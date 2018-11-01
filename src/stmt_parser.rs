@@ -415,7 +415,11 @@ mod tests {
     fn test_class_inheritance() {
         assert_eq!(
             parse_str("class BostonCream < Doughnut {}"),
-            Ok(vec![Stmt::Class("BostonCream".into(), Some("Doughnut".into()), vec![]),])
+            Ok(vec![Stmt::Class(
+                "BostonCream".into(),
+                Some("Doughnut".into()),
+                vec![]
+            ),])
         );
         assert_eq!(
             parse_str("class BostonCream < {}"),
