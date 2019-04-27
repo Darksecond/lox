@@ -18,6 +18,10 @@ pub enum Instruction {
     Equal,
     Greater,
     Less,
+
+    Pop,
+    
+    Print,
     // etc
 }
 

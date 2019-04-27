@@ -1,7 +1,22 @@
 use super::ast::*;
 use super::bytecode::*;
 
-pub fn compile_expr(chunk: &mut Chunk, expr: &Expr) {
+//TODO tests
+pub fn compile_stmt(chunk: &mut Chunk, stmt: &Stmt) {
+    match stmt {
+        Stmt::Expression(expr) =>  {
+            compile_expr(chunk, expr);
+            chunk.add_instruction(Instruction::Pop);
+        },
+        Stmt::Print(ref expr) => {
+            compile_expr(chunk, expr);
+            chunk.add_instruction(Instruction::Print);
+        },
+        _ => unimplemented!(),
+    }
+}
+
+fn compile_expr(chunk: &mut Chunk, expr: &Expr) {
     match *expr {
         Expr::Number(num) => compile_number(chunk, num),
         Expr::Boolean(state) => compile_bool(chunk, state),
