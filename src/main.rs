@@ -3,6 +3,7 @@ use lox::bytecode::*;
 use lox::tokenizer::*;
 use lox::ast::*;
 use lox::compiler::*;
+use lox::vm::*;
 
 fn compile(ast: &Vec<Stmt>) -> Chunk {
     let mut chunk = Chunk::new();
@@ -19,9 +20,17 @@ fn parse_stmt(data: &str) -> Result<Vec<Stmt>, String> {
 }
 
 fn main() {
-    let data = "print 1 + 2;1+2;print 3;";
+    // let data = "print 1 + 2;1+2;print 3;";
+    let data = "print 1+2*5+12;print 3;print 2+3;";
     let ast = parse_stmt(data).unwrap();
-    let chunk = compile(&ast);
+    let mut chunk = compile(&ast);
+    chunk.add_instruction(Instruction::Return);
     println!("{:?}", chunk.constants());
     println!("{:?}", chunk.instructions());
+    
+
+    let mut state = VmState::new();
+    let mut vm = Vm::new(&mut state, &chunk);
+    while vm.interpret_next() {
+    }
 }

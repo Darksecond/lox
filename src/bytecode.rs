@@ -21,6 +21,7 @@ pub enum Instruction {
 
     Pop,
     
+    Return,
     Print,
     // etc
 }
