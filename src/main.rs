@@ -23,7 +23,8 @@ fn parse_stmt(data: &str) -> Result<Vec<Stmt>, String> {
 
 fn main() {
     // let data = "print 1 + 2;1+2;print 3;";
-    let data = "print 1+2*5+12;print 3;print 2+3;";
+    // let data = "print 1+2*5+12;print 3;print 2+3;";
+    let data = "var x=1+3;x=x+2;print x;";
     let ast = parse_stmt(data).unwrap();
     println!();
     let mut chunk = compile(&ast);
