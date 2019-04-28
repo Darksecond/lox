@@ -25,7 +25,11 @@ impl VmState {
     }
 
     pub fn push(&mut self, value: Value) {
-        self.stack.push(value);
+        self.stack.push(value)
+    }
+
+    pub fn push_number(&mut self, value: f64) {
+        self.push(Value::Number(value))
     }
 
     pub fn pop(&mut self) -> Value { //TODO Result
@@ -60,17 +64,13 @@ impl<'a> Vm<'a> {
                 }
             },
             Instruction::Add => {
-                let b = self.state.pop();
-                let a = self.state.pop();
-                match (a,b) {
-                    (Value::Number(b), Value::Number(a)) => self.state.push(Value::Number(a+b)),
+                match (self.state.pop(), self.state.pop()) {
+                    (Value::Number(b), Value::Number(a)) => self.state.push_number(a+b),
                 }
             },
             Instruction::Multiply => {
-                let b = self.state.pop();
-                let a = self.state.pop();
-                match (a,b) {
-                    (Value::Number(b), Value::Number(a)) => self.state.push(Value::Number(a*b)),
+                match (self.state.pop(), self.state.pop()) {
+                    (Value::Number(b), Value::Number(a)) => self.state.push_number(a*b),
                 }
             },
             _ => unimplemented!(),
