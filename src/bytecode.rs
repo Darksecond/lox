@@ -23,6 +23,10 @@ pub enum Instruction {
     
     Return,
     Print,
+
+    DefineGlobal(ConstantIndex),
+    GetGlobal(ConstantIndex),
+    SetGlobal(ConstantIndex),
     // etc
 }
 
@@ -61,6 +65,10 @@ impl Chunk {
     pub fn add_constant(&mut self, constant: Constant) -> ConstantIndex {
         self.constants.push(constant);
         self.constants.len() - 1
+    }
+
+    pub fn add_str_constant(&mut self, constant: &str) -> ConstantIndex {
+        self.add_constant(Constant::String(constant.to_string()))
     }
 
     pub fn instructions(&self) -> &[Instruction] {

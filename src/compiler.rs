@@ -19,8 +19,20 @@ impl Compiler {
                 self.compile_expr(chunk, expr);
                 chunk.add_instruction(Instruction::Print);
             },
+            Stmt::Var(ref identifier, ref expr) => self.compile_var_stmt(chunk, identifier, expr),
             _ => unimplemented!(),
         }
+    }
+
+    fn compile_var_stmt(&mut self, chunk: &mut Chunk, identifier: &str, expr: &Option<Box<Expr>>) {
+        if let Some(expr) = expr {
+            self.compile_expr(chunk, expr);
+        } else {
+            self.compile_nil(chunk);
+        }
+        
+        let constant = chunk.add_str_constant(identifier);
+        chunk.add_instruction(Instruction::DefineGlobal(constant));
     }
 
     fn compile_expr(&mut self, chunk: &mut Chunk, expr: &Expr) {
@@ -31,12 +43,25 @@ impl Compiler {
             Expr::String(ref string) => self.compile_string(chunk, string),
             Expr::Binary(ref left, operator, ref right) => self.compile_binary(chunk, left, right, operator),
             Expr::Unary(operator, ref left) => self.compile_unary(chunk, left, operator),
+            Expr::Variable(ref identifier) => self.compile_variable(chunk, identifier),
+            Expr::Assign(ref identifier, ref expr) => self.compile_assign(chunk, identifier, expr),
             _ => unimplemented!(),
         }
     }
 
+    fn compile_variable(&mut self, chunk: &mut Chunk, identifier: &str) {
+        let constant = chunk.add_str_constant(identifier);
+        chunk.add_instruction(Instruction::GetGlobal(constant));
+    }
+
+    fn compile_assign(&mut self, chunk: &mut Chunk, identifier: &str, expr: &Expr) {
+        self.compile_expr(chunk, expr);
+        let constant = chunk.add_str_constant(identifier);
+        chunk.add_instruction(Instruction::SetGlobal(constant));
+    }
+
     fn compile_string(&mut self, chunk: &mut Chunk, string: &str) {
-        let constant = chunk.add_constant(Constant::String(String::from(string)));
+        let constant = chunk.add_str_constant(string);
         chunk.add_instruction(Instruction::Constant(constant));
     }
 
@@ -144,11 +169,57 @@ mod tests {
         );
     }
 
+    #[test]
     fn test_stmt_expr() {
         assert_stmt_chunk(
             "3;", 
             vec![Instruction::Constant(0), Instruction::Pop], 
             vec![Constant::Number(3.0)]
+        );
+    }
+
+    #[test]
+    fn test_stmt_global_var_expr() {
+        assert_stmt_chunk(
+            "var x = 3;", 
+            vec![Instruction::Constant(0), Instruction::DefineGlobal(1)], 
+            vec![Constant::Number(3.0), Constant::String("x".into())]
+        );
+    }
+
+    #[test]
+    fn test_stmt_global_var_complex_expr() {
+        assert_stmt_chunk(
+            "var x = 2+3;", 
+            vec![Instruction::Constant(0), Instruction::Constant(1), Instruction::Add, Instruction::DefineGlobal(2)], 
+            vec![Constant::Number(2.0), Constant::Number(3.0), Constant::String("x".into())]
+        );
+    }
+
+    #[test]
+    fn test_stmt_global_var_nil() {
+        assert_stmt_chunk(
+            "var x;", 
+            vec![Instruction::Nil, Instruction::DefineGlobal(0)], 
+            vec![Constant::String("x".into())]
+        );
+    }
+
+    #[test]
+    fn test_stmt_global_get() {
+        assert_stmt_chunk(
+            "x;", 
+            vec![Instruction::GetGlobal(0), Instruction::Pop], 
+            vec![Constant::String("x".into())]
+        );
+    }
+
+    #[test]
+    fn test_stmt_global_set() {
+        assert_stmt_chunk(
+            "x=3;", 
+            vec![Instruction::Constant(0), Instruction::SetGlobal(1), Instruction::Pop], 
+            vec![Constant::Number(3.0), Constant::String("x".into())]
         );
     }
 
