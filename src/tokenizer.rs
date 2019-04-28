@@ -295,7 +295,6 @@ pub fn tokenize_with_context(buf: &str) -> Vec<TokenWithContext> {
     t.tokenize_with_context()
 }
 
-#[deprecated(note="Please use `tokenize_with_context` instead.")]
 pub fn tokenize(buf: &str) -> Vec<Token> {
     let mut t = Lexer::new(buf);
     t.tokenize()

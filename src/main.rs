@@ -7,8 +7,9 @@ use lox::vm::*;
 
 fn compile(ast: &Vec<Stmt>) -> Chunk {
     let mut chunk = Chunk::new();
+    let mut compiler = Compiler::new();
     for stmt in ast {
-        compile_stmt(&mut chunk, stmt);
+        compiler.compile_stmt(&mut chunk, stmt);
     }
     chunk
 }
