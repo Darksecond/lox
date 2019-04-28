@@ -8,19 +8,18 @@ pub enum Value {
 
 pub struct VmState {
     stack: Vec<Value>,
-    program_counter: usize,
 }
 
 pub struct Vm<'a> {
     state: &'a mut VmState,
     chunk: &'a Chunk,
+    program_counter: usize,
 }
 
 impl VmState {
     pub fn new() -> VmState {
         VmState {
             stack: vec![],
-            program_counter: 0,
         }
     }
 
@@ -42,12 +41,13 @@ impl<'a> Vm<'a> {
         Vm {
             state,
             chunk,
+            program_counter: 0,
         }
     }
 
     pub fn interpret_next(&mut self) -> bool { //TODO Result
-        self.state.program_counter += 1;
-        let instr = &self.chunk.instructions()[self.state.program_counter-1];
+        self.program_counter += 1;
+        let instr = &self.chunk.instructions()[self.program_counter-1];
         // println!("Instr: {:?}", instr);
         match *instr {
             Instruction::Return => {return false;},
