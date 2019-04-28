@@ -308,6 +308,14 @@ mod tests {
         );
 
         assert_eq!(
+            parse_str("var beverage = x = nil;"),
+            Ok(vec![Stmt::Var(
+                "beverage".into(),
+                Some(Box::new(Expr::Assign("x".into(), Box::new(Expr::Nil))))
+            ),])
+        );
+
+        assert_eq!(
             parse_str("if (nil) var beverage = nil;"),
             Err("unexpected token: Var".into())
         );

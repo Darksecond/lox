@@ -14,8 +14,9 @@ fn compile(ast: &Vec<Stmt>) -> Chunk {
 }
 
 fn parse_stmt(data: &str) -> Result<Vec<Stmt>, String> {
-    let tokens = tokenize(data);
-    let mut it = tokens.as_slice().into_iter().peekable();
+    let tokens = tokenize_with_context(data);
+    println!("Tokens: {:?}", tokens);
+    let mut it = tokens.as_slice().into_iter().map(|tc| &tc.token).peekable();
     lox::stmt_parser::parse(&mut it)
 }
 
@@ -23,10 +24,13 @@ fn main() {
     // let data = "print 1 + 2;1+2;print 3;";
     let data = "print 1+2*5+12;print 3;print 2+3;";
     let ast = parse_stmt(data).unwrap();
+    println!();
     let mut chunk = compile(&ast);
     chunk.add_instruction(Instruction::Return);
     println!("{:?}", chunk.constants());
     println!("{:?}", chunk.instructions());
+
+    println!();
     
 
     let mut state = VmState::new();
