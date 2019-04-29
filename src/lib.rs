@@ -8,5 +8,6 @@ pub mod expr_parser;
 pub mod stmt_parser;
 pub mod token;
 pub mod vm;
+pub mod gc;
 
 //TODO Better errors

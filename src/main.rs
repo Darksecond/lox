@@ -24,7 +24,10 @@ fn parse_stmt(data: &str) -> Result<Vec<Stmt>, String> {
 fn main() {
     // let data = "print 1 + 2;1+2;print 3;";
     // let data = "print 1+2*5+12;print 3;print 2+3;";
-    let data = "var x=1+3;x=x+2;print x;";
+    // let data = "var x=1+3;x=x+2;print x;";
+    // let data = "var x = \"Hi!\";print \"Hello, World!\";x=3;";
+    // let data = "var a = \"He\"; var b = \"llo\";print a+b;";
+    let data = "print \"He\"+\"llo\";";
     let ast = parse_stmt(data).unwrap();
     println!();
     let mut chunk = compile(&ast);
@@ -38,5 +41,7 @@ fn main() {
     let mut state = VmState::new();
     let mut vm = Vm::new(&mut state, &chunk);
     while vm.interpret_next() {
+        vm.collect();
     }
+    vm.collect();
 }
