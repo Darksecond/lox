@@ -9,5 +9,6 @@ pub mod stmt_parser;
 pub mod token;
 pub mod vm;
 pub mod gc;
+pub mod bettergc;
 
 //TODO Better errors

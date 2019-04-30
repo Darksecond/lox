@@ -1,7 +1,7 @@
 use crate::bytecode::*;
 use std::collections::HashMap;
 use std::cell::RefCell;
-use crate::gc::*;
+use crate::bettergc::*;
 
 #[derive(Debug)]
 pub enum Object {
@@ -33,9 +33,9 @@ impl Trace for Value {
 }
 
 pub struct VmState {
-    stack: Vec<Value>,
-    globals: HashMap<String, Value>,
-    heap: Vec<Box<Root<RefCell<Object>>>>, //TODO GcHeap / Heap
+    stack: UniqueRoot<Vec<Value>>,
+    globals: UniqueRoot<HashMap<String, Value>>,
+    heap: Heap,
 }
 
 pub struct Vm<'a> {
@@ -46,33 +46,18 @@ pub struct Vm<'a> {
 
 impl VmState {
     pub fn new() -> VmState {
+        let mut heap = Heap::new();
+        let stack = heap.unique(vec![]);
+        let globals = heap.unique(HashMap::new());
         VmState {
-            stack: vec![],
-            globals: HashMap::new(),
-            heap: vec![],
+            stack,
+            globals,
+            heap,
         }
     }
 
-    //TODO Move to Heap
     pub fn manage(&mut self, object: Object) -> Gc<RefCell<Object>> {
-        let root = Box::new(Root::new(RefCell::new(object)));
-        let gc = root.as_gc();
-        self.heap.push(root);
-        gc
-    }
-
-    //TODO Move to Heap
-    pub fn mark(&mut self) {
-        for root in &self.heap {
-            root.unmark();
-        }
-        self.stack.trace();
-        self.globals.trace();
-    }
-
-    //TODO Move to Heap
-    pub fn sweep(&mut self) {
-        self.heap.retain(|el| el.marked() );
+        self.heap.manage(RefCell::new(object))
     }
 
     pub fn push(&mut self, value: Value) {
@@ -102,11 +87,9 @@ impl<'a> Vm<'a> {
     }
 
     pub fn collect(&mut self) {
+        self.state.heap.collect();
         // println!("before: {:?}", self.state.heap);
-        self.state.mark();
-        // println!("between: {:?}", self.state.heap);
-        self.state.sweep();
-        // println!("after: {:?}", self.state.heap);
+        println!("after: {:?}", self.state.heap);
     }
 
     pub fn interpret_next(&mut self) -> bool { //TODO Result
