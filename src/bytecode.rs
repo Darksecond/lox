@@ -1,5 +1,6 @@
 pub type InstructionIndex = usize;
 pub type ConstantIndex = usize;
+pub type StackIndex = usize;
 
 #[derive(Debug, PartialEq)]
 pub enum Instruction {
@@ -27,6 +28,7 @@ pub enum Instruction {
     DefineGlobal(ConstantIndex),
     GetGlobal(ConstantIndex),
     SetGlobal(ConstantIndex),
+    GetLocal(StackIndex),
     // etc
 }
 

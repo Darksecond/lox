@@ -1,12 +1,48 @@
 use super::ast::*;
 use super::bytecode::*;
 
+#[derive(Debug)]
+struct Local {
+    name: String,
+    depth: usize,
+}
+
 pub struct Compiler {
+    locals: Vec<Local>,
+    scope_depth: usize,
 }
 
 impl Compiler {
     pub fn new() -> Compiler {
-        Compiler {}
+        Compiler {
+            locals: vec![],
+            scope_depth: 0,
+        }
+    }
+
+    //TODO use RAII
+    fn begin_scope(&mut self) {
+        self.scope_depth += 1;
+    }
+    fn end_scope(&mut self, chunk: &mut Chunk) {
+        self.scope_depth -= 1;
+        let scope_depth = self.scope_depth;
+        let count = self.locals.len();
+        self.locals.retain(|l| l.depth <= scope_depth);
+        let count = count - self.locals.len();
+        
+        for _ in 0..count {
+            chunk.add_instruction(Instruction::Pop);
+        }
+    }
+    fn resolve_local(&self, name: &str) -> Option<usize> {
+        let count = self.locals.len();
+        for (i, local) in self.locals.iter().rev().enumerate() {
+            if local.name == name {
+                return Some(count-i-1);
+            }
+        }
+        None
     }
 
     pub fn compile_stmt(&mut self, chunk: &mut Chunk, stmt: &Stmt) {
@@ -20,19 +56,38 @@ impl Compiler {
                 chunk.add_instruction(Instruction::Print);
             },
             Stmt::Var(ref identifier, ref expr) => self.compile_var_stmt(chunk, identifier, expr),
+            Stmt::Block(ref stmts) => self.compile_block(chunk, stmts),
             _ => unimplemented!(),
         }
     }
 
+    fn compile_block(&mut self, chunk: &mut Chunk, stmts: &Vec<Stmt>) {
+        self.begin_scope();
+        for stmt in stmts {
+            self.compile_stmt(chunk, stmt);
+        }
+        self.end_scope(chunk);
+    }
+
     fn compile_var_stmt(&mut self, chunk: &mut Chunk, identifier: &str, expr: &Option<Box<Expr>>) {
+        if self.scope_depth > 0 {
+            // Check if local exists at current depth level
+            if self.locals.iter().any(|local| local.depth == self.scope_depth && local.name == identifier) {
+                panic!("Local already defined"); //TODO Result
+            }
+            self.locals.push(Local{name: identifier.to_string(), depth: self.scope_depth});
+        }
+
         if let Some(expr) = expr {
             self.compile_expr(chunk, expr);
         } else {
             self.compile_nil(chunk);
         }
         
-        let constant = chunk.add_str_constant(identifier);
-        chunk.add_instruction(Instruction::DefineGlobal(constant));
+        if self.scope_depth == 0 {
+            let constant = chunk.add_str_constant(identifier);
+            chunk.add_instruction(Instruction::DefineGlobal(constant));
+        }
     }
 
     fn compile_expr(&mut self, chunk: &mut Chunk, expr: &Expr) {
@@ -50,8 +105,12 @@ impl Compiler {
     }
 
     fn compile_variable(&mut self, chunk: &mut Chunk, identifier: &str) {
-        let constant = chunk.add_str_constant(identifier);
-        chunk.add_instruction(Instruction::GetGlobal(constant));
+        if let Some(local) = self.resolve_local(identifier) {
+            chunk.add_instruction(Instruction::GetLocal(local));
+        } else {
+            let constant = chunk.add_str_constant(identifier);
+            chunk.add_instruction(Instruction::GetGlobal(constant));
+        }
     }
 
     fn compile_assign(&mut self, chunk: &mut Chunk, identifier: &str, expr: &Expr) {

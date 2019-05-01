@@ -27,7 +27,8 @@ fn main() {
     // let data = "var x=1+3;x=x+2;print x;";
     // let data = "var x = \"Hi!\";print \"Hello, World!\";x=3;";
     // let data = "var a = \"He\"; var b = \"llo\";print a+b;";
-    let data = "print \"He\"+\"llo\";";
+    // let data = "print \"He\"+\"llo\";";
+    let data = "{var x=123; {var y=3; var x=4; print x;} print x;}";
     let ast = parse_stmt(data).unwrap();
     println!();
     let mut chunk = compile(&ast);

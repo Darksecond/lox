@@ -89,7 +89,7 @@ impl<'a> Vm<'a> {
     pub fn collect(&mut self) {
         self.state.heap.collect();
         // println!("before: {:?}", self.state.heap);
-        println!("after: {:?}", self.state.heap);
+        // println!("after: {:?}", self.state.heap);
     }
 
     pub fn interpret_next(&mut self) -> bool { //TODO Result
@@ -156,6 +156,9 @@ impl<'a> Vm<'a> {
                         panic!("Runtime error, global not defined"); //TODO else runtime error
                     }
                 } else { panic!("String constant expected") } //TODO else runtime error
+            },
+            Instruction::GetLocal(index) => {
+                self.state.push(self.state.stack[index]);
             },
             Instruction::SetGlobal(index) => {
                 if let Constant::String(identifier) = &self.chunk.constants()[index] {
