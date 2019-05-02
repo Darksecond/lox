@@ -29,6 +29,7 @@ pub enum Instruction {
     GetGlobal(ConstantIndex),
     SetGlobal(ConstantIndex),
     GetLocal(StackIndex),
+    SetLocal(StackIndex),
     // etc
 }
 

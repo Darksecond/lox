@@ -88,14 +88,12 @@ impl<'a> Vm<'a> {
 
     pub fn collect(&mut self) {
         self.state.heap.collect();
-        // println!("before: {:?}", self.state.heap);
-        // println!("after: {:?}", self.state.heap);
     }
 
     pub fn interpret_next(&mut self) -> bool { //TODO Result
         self.program_counter += 1;
         let instr = &self.chunk.instructions()[self.program_counter-1];
-        // println!("Instr: {:?}", instr);
+        // println!("Instr: {:?} ({})", instr, self.state.stack.len());
         match *instr {
             Instruction::Return => {return false;},
             Instruction::Constant(index) => {
@@ -160,6 +158,9 @@ impl<'a> Vm<'a> {
             Instruction::GetLocal(index) => {
                 self.state.push(self.state.stack[index]);
             },
+            Instruction::SetLocal(index) => {
+                self.state.stack[index] = *self.state.peek();
+            }
             Instruction::SetGlobal(index) => {
                 if let Constant::String(identifier) = &self.chunk.constants()[index] {
                     let value = *self.state.peek();
