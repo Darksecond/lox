@@ -57,3 +57,5 @@ pub enum Stmt {
     Function(Identifier, Vec<Identifier>, Vec<Stmt>), //TODO Extract into enum Decl or Declaration
     Class(Identifier, Option<Identifier>, Vec<Stmt>), //TODO Extract into enum Decl or Declaration
 }
+
+pub type Ast = Vec<Stmt>;

@@ -28,10 +28,16 @@ fn main() {
     // let data = "var x = \"Hi!\";print \"Hello, World!\";x=3;";
     // let data = "var a = \"He\"; var b = \"llo\";print a+b;";
     // let data = "print \"He\"+\"llo\";";
-    let data = "var x=93;{var x=123; {var y=3; var x=4; {print x;x=6;}print x+3;} print x;}print x;";
+    // let data = "var x=93;{var x=123; {var y=3; var x=4; {print x;x=6;}print x+3;} print x;}print x;";
+    let data ="print 12+8-3;";
     let ast = parse_stmt(data).unwrap();
     println!();
-    let mut chunk = compile(&ast);
+    // let mut chunk = compile(&ast);
+
+    let mut module = lox::bettercompiler::compile(&ast).unwrap();
+    let chunk = module.chunk_mut(0);
+
+    //HACK
     chunk.add_instruction(Instruction::Return);
     println!("{:?}", chunk.constants());
     println!("{:?}", chunk.instructions());

@@ -127,8 +127,14 @@ impl<'a> Vm<'a> {
                             },
                         }
                     },
-                    (Value::Number(_), Value::Object(_)) => unimplemented!(),
-                    (Value::Object(_), Value::Number(_)) => unimplemented!(),
+                    (Value::Number(_), _) => unimplemented!(),
+                    (Value::Object(_), _) => unimplemented!(),
+                }
+            },
+            Instruction::Subtract => {
+                match (self.state.pop(), self.state.pop()) {
+                    (Value::Number(b), Value::Number(a)) => self.state.push_number(a-b),
+                    (_,_) => unimplemented!(),
                 }
             },
             Instruction::Multiply => {

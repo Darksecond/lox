@@ -1,6 +1,6 @@
 use super::ast::*;
 use super::bytecode::*;
-mod locals;
+pub mod locals;
 use locals::*;
 
 pub struct Compiler {
@@ -21,7 +21,7 @@ impl Compiler {
             chunk.add_instruction(Instruction::Pop);
         }
     }
-    fn resolve_local(&self, name: &str) -> Option<usize> {
+    fn resolve_local(&self, name: &str) -> Option<StackIndex> {
         if let Some(local) = self.locals.get(name) {
             if !local.initialized() {
                 panic!("Cannot read local variable in its own initializer.");
@@ -31,7 +31,7 @@ impl Compiler {
             None
         }
     }
-    fn add_local(&mut self, name: &str) -> Option<usize> {
+    fn add_local(&mut self, name: &str) -> Option<StackIndex> {
         self.locals.insert(name).map(|l| l.slot())
     }
 

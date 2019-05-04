@@ -10,5 +10,6 @@ pub mod token;
 pub mod vm;
 pub mod gc;
 pub mod bettergc;
+pub mod bettercompiler;
 
 //TODO Better errors
