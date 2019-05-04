@@ -19,7 +19,7 @@ fn assert_first_chunk(data: &str, constants: Vec<Constant>, instructions: Vec<In
 }
 
 #[test]
-fn test_stmt_print() {
+fn test_stmt_print_numbers() {
     assert_first_chunk(
         "print 3;", 
         vec![3.0.into()],
@@ -34,5 +34,19 @@ fn test_stmt_print() {
         "print 1-2;", 
         vec![1.0.into(), 2.0.into()],
         vec![Instruction::Constant(0), Instruction::Constant(1), Instruction::Subtract, Instruction::Print]
+    );
+}
+
+#[test]
+fn test_stmt_print_strings() {
+    assert_first_chunk(
+        "print \"Hello, World!\";", 
+        vec!["Hello, World!".into()],
+        vec![Instruction::Constant(0), Instruction::Print]
+    );
+    assert_first_chunk(
+        "print \"Hello, \" + \"World!\";", 
+        vec!["Hello, ".into(), "World!".into()],
+        vec![Instruction::Constant(0), Instruction::Constant(1), Instruction::Add, Instruction::Print]
     );
 }

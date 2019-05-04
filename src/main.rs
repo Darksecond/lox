@@ -29,7 +29,7 @@ fn main() {
     // let data = "var a = \"He\"; var b = \"llo\";print a+b;";
     // let data = "print \"He\"+\"llo\";";
     // let data = "var x=93;{var x=123; {var y=3; var x=4; {print x;x=6;}print x+3;} print x;}print x;";
-    let data ="print 12+8-3;";
+    let data ="print 12+8-3;print 12.3;";
     let ast = parse_stmt(data).unwrap();
     println!();
     // let mut chunk = compile(&ast);

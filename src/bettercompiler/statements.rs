@@ -27,6 +27,7 @@ fn compile_print(compiler: &mut Compiler, expr: &Expr) -> Result<(), CompilerErr
 fn compile_expr(compiler: &mut Compiler, expr: &Expr) -> Result<(), CompilerError> {
     match *expr {
         Expr::Number(num) => compile_number(compiler, num),
+        Expr::String(ref string) => compile_string(compiler, string),
         Expr::Binary(ref left, operator, ref right) => compile_binary(compiler, operator, left, right),
         _ => unimplemented!(),
     }
@@ -34,6 +35,12 @@ fn compile_expr(compiler: &mut Compiler, expr: &Expr) -> Result<(), CompilerErro
 
 fn compile_number(compiler: &mut Compiler, num: f64) -> Result<(), CompilerError> {
     let constant = compiler.add_constant(num);
+    compiler.add_instruction(Instruction::Constant(constant))?;
+    Ok(())
+}
+
+fn compile_string(compiler: &mut Compiler, string: &str) -> Result<(), CompilerError> {
+    let constant = compiler.add_constant(string);
     compiler.add_instruction(Instruction::Constant(constant))?;
     Ok(())
 }
