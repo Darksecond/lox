@@ -56,6 +56,16 @@ impl Compiler {
         let context = self.contexts.pop().ok_or(CompilerError::NoContext)?;
         Ok((context.chunk_index, context.upvalues))
     }
+    fn begin_scope(&mut self) -> Result<(), CompilerError> {
+        self.current_context_mut()?.locals.begin_scope();
+        Ok(())
+    }
+    fn end_scope(&mut self) -> Result<(), CompilerError> {
+        for _ in 0..self.current_context_mut()?.locals.end_scope() {
+            self.add_instruction(Instruction::Pop)?;
+        }
+        Ok(())
+    }
 
     pub fn new() -> Compiler {
         Compiler {
@@ -70,8 +80,15 @@ impl Compiler {
         Ok(self.current_context()?.context_type)
     }
 
-    pub fn with_scope<F>(&mut self, f: F)  where F: FnOnce(&mut Self) -> Result<(), CompilerError> {
-        unimplemented!()
+    pub fn with_scope<F>(&mut self, f: F) -> Result<(), CompilerError>  where F: FnOnce(&mut Self) -> Result<(), CompilerError> {
+        self.begin_scope()?;
+        let result = f(self);
+        self.end_scope()?;
+        result
+    }
+
+    pub fn is_scoped(&mut self) -> bool {
+        self.current_context().and_then(|c: &CompilerContext| Ok(c.locals.scope_depth() > 0)).unwrap_or(false)
     }
 
     pub fn with_context<F>(&mut self, context_type: ContextType, f: F) -> Result<(ChunkIndex, Vec<Upvalue>), CompilerError> where F: FnOnce(&mut Self) -> Result<(), CompilerError> {
@@ -98,11 +115,25 @@ impl Compiler {
     }
 
     pub fn add_local(&mut self, name: &str) -> Result<StackIndex, CompilerError> {
-        unimplemented!()
+        self.current_context_mut()?.locals
+            .insert(name)
+            .map(|l| l.slot())
+            .ok_or(CompilerError::LocalAlreadyDefined(name.into()))
+    }
+
+    pub fn mark_local_initialized(&mut self) -> Result<(), CompilerError> { //TODO refactor
+        self.current_context_mut()?.locals.mark_initialized();
+        Ok(())
     }
 
     pub fn resolve_local(&mut self, name: &str) -> Result<Option<StackIndex>, CompilerError> {
-        unimplemented!()
+        if let Some(local) = self.current_context()?.locals.get(name) {
+            if !local.initialized() {
+                Err(CompilerError::LocalNotInitialized(name.into()))
+            } else { Ok(Some(local.slot()))}
+        } else {
+            Ok(None)
+        }
     }
 
     pub fn add_constant<C: Into<Constant>>(&mut self, constant: C) -> ConstantIndex {
