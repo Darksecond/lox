@@ -58,6 +58,7 @@ fn test_stmt_print_strings() {
 
 #[test]
 fn test_global_variables() {
+    use crate::bytecode::Instruction::*;
     assert_first_chunk(
         "var x=3;", 
         vec![3.0.into(), "x".into()],
@@ -72,6 +73,11 @@ fn test_global_variables() {
         "var x=3; print x;", 
         vec![3.0.into(), "x".into(), "x".into()],
         vec![Instruction::Constant(0), Instruction::DefineGlobal(1), Instruction::GetGlobal(2), Instruction::Print]
+    );
+    assert_first_chunk(
+        "var x=3;x=2;", 
+        vec![3.0.into(), "x".into(), 2.0.into(), "x".into()],
+        vec![Constant(0), DefineGlobal(1), Constant(2), SetGlobal(3), Pop]
     );
 }
 
@@ -97,5 +103,20 @@ fn test_local_variables() {
         "{var x;}", 
         vec![],
         vec![Instruction::Nil, Instruction::Pop]
+    );
+    assert_first_chunk(
+        "{var x;x=2;}", 
+        vec![2.0.into()],
+        vec![Nil, Constant(0), SetLocal(0), Pop, Pop]
+    );
+}
+
+#[test]
+fn test_expression() {
+    use crate::bytecode::Instruction::*;
+    assert_first_chunk(
+        "3;", 
+        vec![3.0.into()],
+        vec![Instruction::Constant(0), Instruction::Pop]
     );
 }

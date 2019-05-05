@@ -16,8 +16,15 @@ fn compile_stmt(compiler: &mut Compiler, stmt: &Stmt) -> Result<(), CompilerErro
         Stmt::Print(ref expr) => compile_print(compiler, expr),
         Stmt::Var(ref identifier, ref expr) => compile_var_declaration(compiler, identifier, expr.as_ref()),
         Stmt::Block(ref stmts) => compile_block(compiler, stmts),
+        Stmt::Expression(ref expr) => compile_expression_statement(compiler, expr),
         _ => unimplemented!(),
     }
+}
+
+fn compile_expression_statement(compiler: &mut Compiler, expr: &Expr) -> Result<(), CompilerError> {
+    compile_expr(compiler, expr)?;
+    compiler.add_instruction(Instruction::Pop)?;
+    Ok(())
 }
 
 fn compile_block(compiler: &mut Compiler, ast: &Ast) -> Result<(), CompilerError> {
@@ -63,8 +70,22 @@ fn compile_expr(compiler: &mut Compiler, expr: &Expr) -> Result<(), CompilerErro
         Expr::Binary(ref left, operator, ref right) => compile_binary(compiler, operator, left, right),
         Expr::Variable(ref identifier) => compile_variable(compiler, identifier),
         Expr::Nil => compile_nil(compiler),
+        Expr::Assign(ref identifier, ref expr) => compile_assign(compiler, identifier, expr),
         _ => unimplemented!(),
     }
+}
+
+fn compile_assign(compiler: &mut Compiler, identifier: &str, expr: &Expr) -> Result<(), CompilerError> {
+    compile_expr(compiler, expr)?;
+    if let Some(local) = compiler.resolve_local(identifier)? {
+        // Local
+        compiler.add_instruction(Instruction::SetLocal(local))?;
+    } else {
+        // Global
+        let constant = compiler.add_constant(identifier);
+        compiler.add_instruction(Instruction::SetGlobal(constant))?;
+    }
+    Ok(())
 }
 
 fn compile_variable(compiler: &mut Compiler, identifier: &str) -> Result<(), CompilerError> {
