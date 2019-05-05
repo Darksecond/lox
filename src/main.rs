@@ -33,7 +33,9 @@ fn main() {
     // let data = "var x = 3;";
     // let data = "var x=2; {var x=3; { var x=4; print x; } print x;} print x;";
     // let data = "{var x=2;{ x=3;} print x;}";
-    let data ="{var x=2; x=3;print x;}";
+    // let data ="{var x=2; x=3;print x;}";
+    // let data = "{var x;} {var x; var y;} {var w; {var x; var y;} var z;}";
+    let data ="{var x=1;{}var y=2;{var z=3;}var a=4;}";
     let ast = parse_stmt(data).unwrap();
     println!();
     // let mut chunk = compile(&ast);

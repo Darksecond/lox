@@ -1,10 +1,11 @@
 use crate::bytecode::*;
 use super::CompilerError;
+use super::locals::*;
 
 #[derive(Debug)]
 pub struct Upvalue {
     slot: usize,
-    isLocal: bool,
+    is_local: bool,
 }
 
 #[derive(Copy, Clone)]
@@ -18,7 +19,7 @@ pub enum ContextType {
 struct CompilerContext {
     context_type: ContextType,
     chunk_index: ChunkIndex,
-    locals: crate::compiler::locals::Locals,
+    locals: Locals,
     upvalues: Vec<Upvalue>,
 }
 
@@ -32,7 +33,7 @@ impl CompilerContext {
         CompilerContext {
             context_type,
             chunk_index,
-            locals: crate::compiler::locals::Locals::new(),
+            locals: Locals::new(),
             upvalues: vec![],
         }
     }
@@ -61,7 +62,7 @@ impl Compiler {
         Ok(())
     }
     fn end_scope(&mut self) -> Result<(), CompilerError> {
-        for _ in 0..self.current_context_mut()?.locals.end_scope() {
+        for _local in self.current_context_mut()?.locals.end_scope() {
             self.add_instruction(Instruction::Pop)?;
         }
         Ok(())

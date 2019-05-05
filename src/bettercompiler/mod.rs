@@ -1,5 +1,6 @@
 mod compiler;
 mod statements;
+mod locals;
 
 #[cfg(test)]
 mod tests;
