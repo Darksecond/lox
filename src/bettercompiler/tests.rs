@@ -64,6 +64,11 @@ fn test_global_variables() {
         vec![Instruction::Constant(0), Instruction::DefineGlobal(1)]
     );
     assert_first_chunk(
+        "var x;", 
+        vec!["x".into()],
+        vec![Instruction::Nil, Instruction::DefineGlobal(0)]
+    );
+    assert_first_chunk(
         "var x=3; print x;", 
         vec![3.0.into(), "x".into(), "x".into()],
         vec![Instruction::Constant(0), Instruction::DefineGlobal(1), Instruction::GetGlobal(2), Instruction::Print]
@@ -87,5 +92,10 @@ fn test_local_variables() {
         "var x=2; {var x=3; { var x=4; print x; } print x;} print x;", 
         vec![2.0.into(), "x".into(), 3.0.into(), 4.0.into(), "x".into()],
         vec![Constant(0), DefineGlobal(1), Constant(2), Constant(3), GetLocal(1), Print, Pop, GetLocal(0), Print, Pop, GetGlobal(4), Print]
+    );
+    assert_first_chunk(
+        "{var x;}", 
+        vec![],
+        vec![Instruction::Nil, Instruction::Pop]
     );
 }
