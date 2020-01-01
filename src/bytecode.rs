@@ -104,16 +104,6 @@ impl Chunk {
         self.instructions.len() - 1
     }
 
-    pub fn add_two_instructions(
-        &mut self,
-        instruction_one: Instruction,
-        instruction_two: Instruction,
-    ) -> InstructionIndex {
-        self.add_instruction(instruction_one);
-        self.add_instruction(instruction_two);
-        self.instructions.len() - 2
-    }
-
     pub fn instruction_index(&self) -> InstructionIndex {
         self.instructions.len()
     }

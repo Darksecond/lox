@@ -12,7 +12,6 @@ use statements::compile_ast;
 
 #[derive(Debug)]
 pub enum CompilerError {
-    //TODO
     UnpatchableInstruction(Instruction),
     NoContext,
     LocalAlreadyDefined(String),
