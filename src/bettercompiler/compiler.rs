@@ -111,8 +111,9 @@ impl Compiler {
         unimplemented!()
     }
 
-    pub fn patch_instruction(&mut self, instruction: InstructionIndex) -> Result<(), CompilerError> {
-        unimplemented!()
+    pub fn patch_instruction(&mut self, index: InstructionIndex) -> Result<(), CompilerError> {
+        self.current_chunk_mut()?.patch_instruction(index);
+        Ok(())
     }
 
     pub fn add_local(&mut self, name: &str) -> Result<StackIndex, CompilerError> {

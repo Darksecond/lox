@@ -17,8 +17,28 @@ fn compile_stmt(compiler: &mut Compiler, stmt: &Stmt) -> Result<(), CompilerErro
         Stmt::Var(ref identifier, ref expr) => compile_var_declaration(compiler, identifier, expr.as_ref()),
         Stmt::Block(ref stmts) => compile_block(compiler, stmts),
         Stmt::Expression(ref expr) => compile_expression_statement(compiler, expr),
+        Stmt::If(ref condition, ref then_stmt, ref else_stmt) => compile_if(compiler, condition, then_stmt, else_stmt.as_ref()),
         _ => unimplemented!(),
     }
+}
+
+fn compile_if<S: AsRef<Stmt>>(compiler: &mut Compiler, condition: &Expr, then_stmt: &Stmt, else_stmt: Option<S>) -> Result<(), CompilerError> {
+    compile_expr(compiler, condition)?;
+
+    let then_index = compiler.add_instruction(Instruction::JumpIfFalse(0))?;
+    compiler.add_instruction(Instruction::Pop)?;
+    compile_stmt(compiler, then_stmt)?;
+    
+    if let Some(else_stmt) = else_stmt {
+        let else_index = compiler.add_instruction(Instruction::Jump(0))?;
+        compiler.patch_instruction(then_index)?;
+        compiler.add_instruction(Instruction::Pop)?;
+        compile_stmt(compiler, else_stmt.as_ref())?;
+        compiler.patch_instruction(else_index)?;
+    } else {
+        compiler.patch_instruction(then_index)?;
+    }
+    Ok(())
 }
 
 fn compile_expression_statement(compiler: &mut Compiler, expr: &Expr) -> Result<(), CompilerError> {
@@ -70,9 +90,20 @@ fn compile_expr(compiler: &mut Compiler, expr: &Expr) -> Result<(), CompilerErro
         Expr::Binary(ref left, operator, ref right) => compile_binary(compiler, operator, left, right),
         Expr::Variable(ref identifier) => compile_variable(compiler, identifier),
         Expr::Nil => compile_nil(compiler),
+        Expr::Boolean(boolean) => compile_boolean(compiler, boolean),
         Expr::Assign(ref identifier, ref expr) => compile_assign(compiler, identifier, expr),
         _ => unimplemented!(),
     }
+}
+
+fn compile_boolean(compiler: &mut Compiler, boolean: bool) -> Result<(), CompilerError> {
+    if boolean {
+        compiler.add_instruction(Instruction::True)?;
+    } else {
+        compiler.add_instruction(Instruction::False)?;
+    }
+
+    Ok(())
 }
 
 fn compile_assign(compiler: &mut Compiler, identifier: &str, expr: &Expr) -> Result<(), CompilerError> {

@@ -119,4 +119,39 @@ fn test_expression() {
         vec![3.0.into()],
         vec![Constant(0), Pop]
     );
+
+    assert_first_chunk(
+        "true;", 
+        vec![],
+        vec![True, Pop]
+    );
+
+    assert_first_chunk(
+        "false;", 
+        vec![],
+        vec![False, Pop]
+    );
+
+    assert_first_chunk(
+        "nil;", 
+        vec![],
+        vec![Nil, Pop]
+    );
+}
+
+#[test]
+fn test_if() {
+    use crate::bytecode::Instruction::*;
+
+    assert_first_chunk(
+        "if(false) 3;4;", 
+        vec![3.0.into(), 4.0.into()],
+        vec![False, JumpIfFalse(5), Pop, Constant(0), Pop, Constant(1), Pop],
+    );
+
+    assert_first_chunk(
+        "if(false) 3; else 4;5;", 
+        vec![3.0.into(), 4.0.into(), 5.0.into()],
+        vec![False, JumpIfFalse(6), Pop, Constant(0), Pop, Jump(9), Pop, Constant(1), Pop, Constant(2), Pop],
+    );
 }

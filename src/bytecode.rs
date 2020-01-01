@@ -31,6 +31,9 @@ pub enum Instruction {
     SetGlobal(ConstantIndex),
     GetLocal(StackIndex),
     SetLocal(StackIndex),
+
+    Jump(InstructionIndex),
+    JumpIfFalse(InstructionIndex),
     // etc
 }
 
@@ -64,14 +67,14 @@ pub struct Chunk {
 
 pub struct Module {
     chunks: Vec<Chunk>,
-    constants: Vec<Constant>,
+    // constants: Vec<Constant>,
 }
 
 impl Module {
     pub fn new() -> Module {
         Module {
             chunks: vec![],
-            constants: vec![],
+            // constants: vec![],
         }
     }
 
@@ -109,6 +112,15 @@ impl Chunk {
         self.add_instruction(instruction_one);
         self.add_instruction(instruction_two);
         self.instructions.len() - 2
+    }
+
+    pub fn patch_instruction(&mut self, index: InstructionIndex) {
+        let current = self.instructions.len();
+        match self.instructions[index] {
+            Instruction::JumpIfFalse(ref mut placeholder) => *placeholder = current,
+            Instruction::Jump(ref mut placeholder) => *placeholder = current,
+            _ => (), // Nothing to patch
+        };
     }
 
     pub fn add_constant(&mut self, constant: Constant) -> ConstantIndex {

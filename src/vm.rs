@@ -20,7 +20,9 @@ impl Trace for Object {
 pub enum Value {
     Number(f64),
     Object(Gc<RefCell<Object>>),
-    //Nil, Bool
+    Nil,
+    True,
+    False,
 }
 
 impl Trace for Value {
@@ -114,6 +116,9 @@ impl<'a> Vm<'a> {
                             Object::String(ref string) => println!("{}", string),
                         }
                     },
+                    Value::True => println!("true"),
+                    Value::False => println!("false"),
+                    Value::Nil => println!("nil"),
                 }
             },
             Instruction::Add => {
@@ -127,8 +132,7 @@ impl<'a> Vm<'a> {
                             },
                         }
                     },
-                    (Value::Number(_), _) => unimplemented!(),
-                    (Value::Object(_), _) => unimplemented!(),
+                    (_,_) => unimplemented!(),
                 }
             },
             Instruction::Subtract => {
@@ -140,9 +144,7 @@ impl<'a> Vm<'a> {
             Instruction::Multiply => {
                 match (self.state.pop(), self.state.pop()) {
                     (Value::Number(b), Value::Number(a)) => self.state.push_number(a*b),
-                    (Value::Object(_), Value::Object(_)) => unimplemented!(),
-                    (Value::Number(_), Value::Object(_)) => unimplemented!(),
-                    (Value::Object(_), Value::Number(_)) => unimplemented!(),
+                    (_, _) => unimplemented!(),
                 }
             },
             Instruction::DefineGlobal(index) => {
@@ -176,9 +178,35 @@ impl<'a> Vm<'a> {
             },
             Instruction::Pop => {
                 self.state.pop();
+            },
+            Instruction::False => {
+                self.state.push(Value::False);
+            },
+            Instruction::Nil => {
+                self.state.push(Value::Nil);
+            },
+            Instruction::True => {
+                self.state.push(Value::True);
+            },
+            Instruction::JumpIfFalse(index) => {
+                if is_falsey(&self.state.peek()) {
+                    self.program_counter = index;
+                }
+            },
+            Instruction::Jump(index) => {
+                self.program_counter = index;
             }
             _ => unimplemented!(),
         }
         true
+    }
+}
+
+
+fn is_falsey(value: &Value) -> bool {
+    match value {
+        Value::False => true,
+        Value::Nil => true,
+        _ => false,
     }
 }
