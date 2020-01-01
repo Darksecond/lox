@@ -27,7 +27,8 @@ fn main() {
     // let data = "{var x;} {var x; var y;} {var w; {var x; var y;} var z;}";
     // let data ="{var x=1;{}var y=2;{var z=3;}var a=4;}";
     // let data = "if(true) print 3; else print 4; print 5;";
-    let data = "var i =0; while(i < 1000) { print i; i = i + 1; }";
+    // let data = "var i =0; while(i < 1000) { print i; i = i + 1; }";
+    let data = "for(var i =0; i < 1000; i = i + 1) print i;";
     let ast = parse_stmt(data).unwrap();
     println!();
 
