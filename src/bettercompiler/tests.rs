@@ -243,3 +243,22 @@ fn test_function_with_one_argument() {
 
     assert_constants(&module, vec![crate::bytecode::Function{name: "first".into(), chunk_index: 1, arity: 1}.into(), "first".into(), "first".into(), 3.0.into()]);
 }
+
+#[test]
+fn test_recursive_function_with_one_argument() {
+    use crate::bytecode::Instruction::*;
+
+    let module = compile_code("fun first(a) { print first(a+1); } first(3);");
+
+    assert_instructions(module.chunk(0), vec![Constant(2), DefineGlobal(3), GetGlobal(4), Constant(5), Call(1), Pop]);
+    assert_instructions(module.chunk(1), vec![GetGlobal(0), GetLocal(1), Constant(1), Add, Call(1), Print, Nil, Return]);
+
+    assert_constants(&module, vec![
+        "first".into(), 
+        1.0.into(), 
+        crate::bytecode::Function{name: "first".into(), chunk_index: 1, arity: 1}.into(), 
+        "first".into(), 
+        "first".into(), 
+        3.0.into()
+    ]);
+}
