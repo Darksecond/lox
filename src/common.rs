@@ -1,4 +1,4 @@
-use super::token::*;
+use super::token::Token;
 use std::iter::{Iterator, Peekable};
 
 pub fn peek<'a, It>(it: &mut Peekable<It>) -> Result<&'a Token, String>

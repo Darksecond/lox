@@ -300,44 +300,54 @@ pub fn tokenize(buf: &str) -> Vec<Token> {
     t.tokenize()
 }
 
-#[test]
-fn test() {
-    assert_eq!(tokenize(""), vec![]);
-    assert_eq!(tokenize("="), vec![Token::Equal]);
-    assert_eq!(tokenize("=="), vec![Token::EqualEqual]);
-    assert_eq!(
-        tokenize("== = =="),
-        vec![Token::EqualEqual, Token::Equal, Token::EqualEqual]
-    );
-    assert_eq!(tokenize("//test"), vec![]);
-    assert_eq!(tokenize("=//test"), vec![Token::Equal]);
-    assert_eq!(
-        tokenize(
-            "=//test
-    ="
-        ),
-        vec![Token::Equal, Token::Equal]
-    );
-    assert_eq!(
-        tokenize("\"test\""),
-        vec![Token::String("test".to_string())]
-    );
-    assert_eq!(tokenize("12.34"), vec![Token::Number(12.34)]);
-    assert_eq!(tokenize("99"), vec![Token::Number(99.00)]);
-    assert_eq!(tokenize("99."), vec![Token::Number(99.00), Token::Dot]);
-    assert_eq!(
-        tokenize("99.="),
-        vec![Token::Number(99.00), Token::Dot, Token::Equal]
-    );
-    assert_eq!(tokenize("!"), vec![Token::Bang]);
-    assert_eq!(tokenize("!="), vec![Token::BangEqual]);
-    assert_eq!(
-        tokenize("test"),
-        vec![Token::Identifier("test".to_string())]
-    );
-    assert_eq!(
-        tokenize("orchid"),
-        vec![Token::Identifier("orchid".to_string())]
-    );
-    assert_eq!(tokenize("or"), vec![Token::Or]);
+#[cfg(test)]
+mod tests {
+    use super::Token;
+    fn tokenize(buf: &str) -> Vec<Token> {
+        use super::tokenize_with_context;
+        tokenize_with_context(buf).iter().map(|tc| tc.token.clone()).collect()
+    }
+
+    #[test]
+    fn test() {
+        assert_eq!(tokenize(""), vec![]);
+        assert_eq!(tokenize("="), vec![Token::Equal]);
+        assert_eq!(tokenize("=="), vec![Token::EqualEqual]);
+        assert_eq!(
+            tokenize("== = =="),
+            vec![Token::EqualEqual, Token::Equal, Token::EqualEqual]
+        );
+        assert_eq!(tokenize("//test"), vec![]);
+        assert_eq!(tokenize("=//test"), vec![Token::Equal]);
+        assert_eq!(
+            tokenize(
+                "=//test
+        ="
+            ),
+            vec![Token::Equal, Token::Equal]
+        );
+        assert_eq!(
+            tokenize("\"test\""),
+            vec![Token::String("test".to_string())]
+        );
+        assert_eq!(tokenize("12.34"), vec![Token::Number(12.34)]);
+        assert_eq!(tokenize("99"), vec![Token::Number(99.00)]);
+        assert_eq!(tokenize("99."), vec![Token::Number(99.00), Token::Dot]);
+        assert_eq!(
+            tokenize("99.="),
+            vec![Token::Number(99.00), Token::Dot, Token::Equal]
+        );
+        assert_eq!(tokenize("!"), vec![Token::Bang]);
+        assert_eq!(tokenize("!="), vec![Token::BangEqual]);
+        assert_eq!(
+            tokenize("test"),
+            vec![Token::Identifier("test".to_string())]
+        );
+        assert_eq!(
+            tokenize("orchid"),
+            vec![Token::Identifier("orchid".to_string())]
+        );
+        assert_eq!(tokenize("or"), vec![Token::Or]);
+    }
+
 }
