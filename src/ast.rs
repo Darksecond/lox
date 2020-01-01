@@ -20,7 +20,7 @@ pub enum BinaryOperator {
     EqualEqual,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Copy, Clone)]
 pub enum LogicalOperator {
     And,
     Or,

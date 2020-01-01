@@ -92,8 +92,37 @@ fn compile_expr(compiler: &mut Compiler, expr: &Expr) -> Result<(), CompilerErro
         Expr::Nil => compile_nil(compiler),
         Expr::Boolean(boolean) => compile_boolean(compiler, boolean),
         Expr::Assign(ref identifier, ref expr) => compile_assign(compiler, identifier, expr),
+        Expr::Logical(ref left, operator, ref right) => compile_logical(compiler, operator, left, right),
         _ => unimplemented!(),
     }
+}
+
+fn compile_logical(compiler: &mut Compiler, operator: LogicalOperator, left: &Expr, right: &Expr) -> Result<(), CompilerError> {
+    match operator {
+        LogicalOperator::And => compile_logical_and(compiler, left, right),
+        LogicalOperator::Or => compile_logical_or(compiler, left, right),
+    }
+}
+
+//TODO Implement this better, using one less jump, we can easily introduce a JumpIfTrue instruction.
+fn compile_logical_or(compiler: &mut Compiler, left: &Expr, right: &Expr) -> Result<(), CompilerError> {
+    compile_expr(compiler, left)?;
+    let else_jump = compiler.add_instruction(Instruction::JumpIfFalse(0))?;
+    let end_jump = compiler.add_instruction(Instruction::Jump(0))?;
+    compiler.patch_instruction(else_jump)?;
+    compiler.add_instruction(Instruction::Pop)?;
+    compile_expr(compiler, right)?;
+    compiler.patch_instruction(end_jump)?;
+    Ok(())
+}
+
+fn compile_logical_and(compiler: &mut Compiler, left: &Expr, right: &Expr) -> Result<(), CompilerError> {
+    compile_expr(compiler, left)?;
+    let end_jump = compiler.add_instruction(Instruction::JumpIfFalse(0))?;
+    compiler.add_instruction(Instruction::Pop)?;
+    compile_expr(compiler, right)?;
+    compiler.patch_instruction(end_jump)?;
+    Ok(())
 }
 
 fn compile_boolean(compiler: &mut Compiler, boolean: bool) -> Result<(), CompilerError> {

@@ -155,3 +155,20 @@ fn test_if() {
         vec![False, JumpIfFalse(6), Pop, Constant(0), Pop, Jump(9), Pop, Constant(1), Pop, Constant(2), Pop],
     );
 }
+
+#[test]
+fn test_logical_operators() {
+    use crate::bytecode::Instruction::*;
+
+    assert_first_chunk(
+        "3 and 4;", 
+        vec![3.0.into(), 4.0.into()],
+        vec![Constant(0), JumpIfFalse(4), Pop, Constant(1), Pop],
+    );
+
+    assert_first_chunk(
+        "3 or 4;", 
+        vec![3.0.into(), 4.0.into()],
+        vec![Constant(0), JumpIfFalse(3), Jump(5), Pop, Constant(1), Pop],
+    );
+}
