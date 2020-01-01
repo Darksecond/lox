@@ -2,6 +2,7 @@ pub type InstructionIndex = usize;
 pub type ConstantIndex = usize;
 pub type StackIndex = usize;
 pub type ChunkIndex = usize;
+pub type ArgumentCount = usize;
 
 #[derive(Debug, PartialEq)]
 pub enum Instruction {
@@ -34,22 +35,23 @@ pub enum Instruction {
 
     Jump(InstructionIndex),
     JumpIfFalse(InstructionIndex),
+    Call(ArgumentCount),
     // etc
 }
 
-// #[derive(Debug)]
-// pub struct Function {
-//     name: ConstantIndex|String,
-//     chunk_index: ChunkIndex,
-//     arity: usize,
-//     // upvalues: usize,
-// }
+#[derive(Debug, PartialEq)]
+pub struct Function {
+    pub name: String,
+    pub chunk_index: ChunkIndex,
+    pub arity: usize,
+    // pub upvalues: usize,
+}
 
 #[derive(Debug, PartialEq)]
 pub enum Constant {
     Number(f64),
     String(String),
-    //Function(Function),
+    Function(Function),
 }
 
 impl From<f64> for Constant {
@@ -57,6 +59,9 @@ impl From<f64> for Constant {
 }
 impl From<&str> for Constant {
     fn from(item: &str) -> Self { Constant::String(String::from(item)) }
+}
+impl From<Function> for Constant {
+    fn from(item: Function) -> Self { Constant::Function(item) }
 }
 
 #[derive(Debug)]
@@ -90,6 +95,10 @@ impl Module {
         self.chunk_mut(0).add_constant(constant);
         self.chunk(0).constants.len() - 1
     }
+
+    pub fn constants(&self) -> &[Constant] {
+        &self.chunk(0).constants
+    }
 }
 
 impl Chunk {
@@ -121,19 +130,16 @@ impl Chunk {
         };
     }
 
-    pub fn add_constant(&mut self, constant: Constant) -> ConstantIndex {
+    fn add_constant(&mut self, constant: Constant) -> ConstantIndex {
         self.constants.push(constant);
         self.constants.len() - 1
-    }
-
-    pub fn add_str_constant(&mut self, constant: &str) -> ConstantIndex {
-        self.add_constant(Constant::String(constant.to_string()))
     }
 
     pub fn instructions(&self) -> &[Instruction] {
         &self.instructions
     }
 
+    //TODO Get this of this method, right now it's used a lot in the VM, which needs a (complete) rewrite
     pub fn constants(&self) -> &[Constant] {
         &self.constants
     }

@@ -2,6 +2,7 @@ use super::{CompilerError};
 use crate::ast::*;
 use crate::bytecode::*;
 use super::compiler::Compiler;
+use super::compiler::ContextType;
 
 pub fn compile_ast(compiler: &mut Compiler, ast: &Ast) -> Result<(), CompilerError> {
     let errors: Vec<_> = ast.iter()
@@ -19,8 +20,47 @@ fn compile_stmt(compiler: &mut Compiler, stmt: &Stmt) -> Result<(), CompilerErro
         Stmt::Expression(ref expr) => compile_expression_statement(compiler, expr),
         Stmt::If(ref condition, ref then_stmt, ref else_stmt) => compile_if(compiler, condition, then_stmt, else_stmt.as_ref()),
         Stmt::While(ref expr, ref stmt) => compile_while(compiler, expr, stmt),
+        Stmt::Function(ref identifier, ref args, ref stmts) => compile_function(compiler, identifier, args, stmts),
         _ => unimplemented!(),
     }
+}
+
+fn compile_function(compiler: &mut Compiler, identifier: &str, args: &Vec<Identifier>, block: &Vec<Stmt>) -> Result<(), CompilerError> {
+    use crate::bytecode::Function;
+    //declare
+    if compiler.is_scoped() {
+        compiler.add_local(identifier)?;
+        compiler.mark_local_initialized()?;
+    }
+
+    let (chunk_index, _upvalues) = compiler.with_scoped_context(ContextType::Function, |compiler| {
+        compiler.add_local("")?; //the slot with the functions name in it
+        for arg in args {
+            compiler.add_local(arg)?;
+            compiler.mark_local_initialized()?;
+        }
+
+        compile_block(compiler, block)?;
+
+        compiler.add_instruction(Instruction::Nil)?;
+        compiler.add_instruction(Instruction::Return)?;
+        Ok(())
+    })?;
+
+    let constant = compiler.add_constant(Function {
+        name: identifier.into(),
+        chunk_index,
+        arity: args.len(),
+    });
+    compiler.add_instruction(Instruction::Constant(constant))?;
+
+    //define
+    if !compiler.is_scoped() {
+        let constant = compiler.add_constant(identifier);
+        compiler.add_instruction(Instruction::DefineGlobal(constant))?;
+    }
+
+    Ok(())
 }
 
 fn compile_while(compiler: &mut Compiler, condition: &Expr, body: &Stmt) -> Result<(), CompilerError> {
@@ -107,8 +147,19 @@ fn compile_expr(compiler: &mut Compiler, expr: &Expr) -> Result<(), CompilerErro
         Expr::Boolean(boolean) => compile_boolean(compiler, boolean),
         Expr::Assign(ref identifier, ref expr) => compile_assign(compiler, identifier, expr),
         Expr::Logical(ref left, operator, ref right) => compile_logical(compiler, operator, left, right),
+        Expr::Call(ref identifier, ref args) => compile_call(compiler, identifier, args),
+        Expr::Grouping(ref expr) => compile_expr(compiler, expr),
         _ => unimplemented!(),
     }
+}
+
+fn compile_call(compiler: &mut Compiler, identifier: &Expr, args: &Vec<Expr>) -> Result<(), CompilerError> {
+    compile_expr(compiler, identifier)?;
+    for arg in args {
+        compile_expr(compiler, arg)?;
+    }
+    compiler.add_instruction(Instruction::Call(args.len()))?;
+    Ok(())
 }
 
 fn compile_logical(compiler: &mut Compiler, operator: LogicalOperator, left: &Expr, right: &Expr) -> Result<(), CompilerError> {

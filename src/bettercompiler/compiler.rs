@@ -106,6 +106,13 @@ impl Compiler {
         ctx_result
     }
 
+    pub fn with_scoped_context<F>(&mut self, context_type: ContextType, f: F) -> Result<(ChunkIndex, Vec<Upvalue>), CompilerError> where F: FnOnce(&mut Self) -> Result<(), CompilerError> {
+        self.with_context(context_type, |compiler| {
+            compiler.begin_scope()?;
+            f(compiler)
+        })
+    }
+
     pub fn add_instruction(&mut self, instruction: Instruction) -> Result<InstructionIndex, CompilerError> {
         Ok(self.current_chunk_mut()?.add_instruction(instruction))
     }

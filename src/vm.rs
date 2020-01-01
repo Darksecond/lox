@@ -105,6 +105,7 @@ impl<'a> Vm<'a> {
                         let obj = self.state.manage(Object::String(string.clone()));
                         self.state.push(Value::Object(obj))
                     },
+                    Constant::Function(_) => unimplemented!(),
                 }
             },
             Instruction::Print => {

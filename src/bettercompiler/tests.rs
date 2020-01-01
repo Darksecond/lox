@@ -15,7 +15,21 @@ fn assert_first_chunk(data: &str, constants: Vec<Constant>, instructions: Vec<In
     let module = compile(&ast).unwrap();
     let chunk = module.chunk(0);
     assert_eq!(instructions, chunk.instructions());
-    assert_eq!(constants, chunk.constants()); //TODO should be module
+    assert_eq!(constants, module.constants());
+}
+
+fn compile_code(data: &str) -> Module {
+    use super::compile;
+    let ast = parse_stmt(data).unwrap();
+    compile(&ast).unwrap()
+}
+
+fn assert_instructions(chunk: &Chunk, instructions: Vec<Instruction>) {
+    assert_eq!(instructions, chunk.instructions());
+}
+
+fn assert_constants(module: &Module, constants: Vec<Constant>) {
+    assert_eq!(constants, module.constants());
 }
 
 #[test]
@@ -204,4 +218,28 @@ fn test_for() {
         vec![0.0.into(), 10.0.into(), 1.0.into()],
         vec![Constant(0), GetLocal(0), Constant(1), Less, JumpIfFalse(14), Pop, GetLocal(0), Print, GetLocal(0), Constant(2), Add, SetLocal(0), Pop, Jump(1), Pop, Pop],
     );
+}
+
+#[test]
+fn test_simple_function() {
+    use crate::bytecode::Instruction::*;
+
+    let module = compile_code("fun first() { print 3; } first();");
+
+    assert_instructions(module.chunk(0), vec![Constant(1), DefineGlobal(2), GetGlobal(3), Call(0), Pop]);
+    assert_instructions(module.chunk(1), vec![Constant(0), Print, Nil, Return]);
+
+    assert_constants(&module, vec![3.0.into(), crate::bytecode::Function{name: "first".into(), chunk_index: 1, arity: 0}.into(), "first".into(), "first".into()]);
+}
+
+#[test]
+fn test_function_with_one_argument() {
+    use crate::bytecode::Instruction::*;
+
+    let module = compile_code("fun first(a) { print a; } first(3);");
+
+    assert_instructions(module.chunk(0), vec![Constant(0), DefineGlobal(1), GetGlobal(2), Constant(3), Call(1), Pop]);
+    assert_instructions(module.chunk(1), vec![GetLocal(1), Print, Nil, Return]);
+
+    assert_constants(&module, vec![crate::bytecode::Function{name: "first".into(), chunk_index: 1, arity: 1}.into(), "first".into(), "first".into(), 3.0.into()]);
 }
