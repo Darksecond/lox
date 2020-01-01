@@ -153,9 +153,9 @@ impl<'a> Vm<'a> {
             },
             Instruction::GetGlobal(index) => {
                 if let Constant::String(identifier) = &self.chunk.constants()[index] {
-                    let value = self.state.globals.get(identifier);
+                    let value = self.state.globals.get(identifier).cloned(); // We need to clone/copy here because otherwise we end up borrowing before mutable borrow which is not allowed
                     if let Some(value) = value {
-                        self.state.push(*value);
+                        self.state.push(value);
                     } else {
                         panic!("Runtime error, global not defined"); //TODO else runtime error
                     }

@@ -1,4 +1,4 @@
-use super::token::*;
+use super::token::Token;
 use std::iter::Peekable;
 use std::str;
 use std::str::Chars;
@@ -253,7 +253,6 @@ impl<'a> Lexer<'a> {
         Some(Token::Number(number.parse::<f64>().unwrap()))
     }
 
-    #[deprecated(note="Please use `tokenize_with_context` instead.")]
     fn tokenize(&mut self) -> Vec<Token> {
         let mut tokens: Vec<Token> = Vec::new();
         loop {
@@ -295,6 +294,7 @@ pub fn tokenize_with_context(buf: &str) -> Vec<TokenWithContext> {
     t.tokenize_with_context()
 }
 
+#[deprecated(note="Please use `tokenize_with_context` instead.")]
 pub fn tokenize(buf: &str) -> Vec<Token> {
     let mut t = Lexer::new(buf);
     t.tokenize()

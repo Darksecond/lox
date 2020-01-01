@@ -2,17 +2,17 @@ use lox;
 use lox::bytecode::*;
 use lox::tokenizer::*;
 use lox::ast::*;
-use lox::compiler::*;
+// use lox::compiler::*;
 use lox::vm::*;
 
-fn compile(ast: &Vec<Stmt>) -> Chunk {
-    let mut chunk = Chunk::new();
-    let mut compiler = Compiler::new();
-    for stmt in ast {
-        compiler.compile_stmt(&mut chunk, stmt);
-    }
-    chunk
-}
+// fn compile(ast: &Vec<Stmt>) -> Chunk {
+//     let mut chunk = Chunk::new();
+//     let mut compiler = Compiler::new();
+//     for stmt in ast {
+//         compiler.compile_stmt(&mut chunk, stmt);
+//     }
+//     chunk
+// }
 
 fn parse_stmt(data: &str) -> Result<Vec<Stmt>, String> {
     let tokens = tokenize_with_context(data);

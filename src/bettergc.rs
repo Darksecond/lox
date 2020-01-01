@@ -7,7 +7,8 @@ use std::fmt;
 pub trait Trace {
     fn trace(&self);
 }
-impl fmt::Debug for Trace {
+
+impl fmt::Debug for dyn Trace {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "<Trace>")
     }

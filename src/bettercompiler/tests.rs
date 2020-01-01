@@ -117,6 +117,6 @@ fn test_expression() {
     assert_first_chunk(
         "3;", 
         vec![3.0.into()],
-        vec![Instruction::Constant(0), Instruction::Pop]
+        vec![Constant(0), Pop]
     );
 }
