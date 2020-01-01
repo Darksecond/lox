@@ -197,6 +197,7 @@ fn compile_binary(compiler: &mut Compiler, operator: BinaryOperator, left: &Expr
     match operator {
         BinaryOperator::Plus => compiler.add_instruction(Instruction::Add)?,
         BinaryOperator::Minus => compiler.add_instruction(Instruction::Subtract)?,
+        BinaryOperator::Less => compiler.add_instruction(Instruction::Less)?,
         _ => unimplemented!(),
     };
     Ok(())

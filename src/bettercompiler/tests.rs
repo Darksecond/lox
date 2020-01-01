@@ -174,6 +174,17 @@ fn test_logical_operators() {
 }
 
 #[test]
+fn test_equality() {
+    use crate::bytecode::Instruction::*;
+
+    assert_first_chunk(
+        "3 < 4;", 
+        vec![3.0.into(), 4.0.into()],
+        vec![Constant(0), Constant(1), Less, Pop],
+    );
+}
+
+#[test]
 fn test_while() {
     use crate::bytecode::Instruction::*;
 
@@ -181,5 +192,16 @@ fn test_while() {
         "while(true) print 3;", 
         vec![3.0.into()],
         vec![True, JumpIfFalse(6), Pop, Constant(0), Print, Jump(0), Pop],
+    );
+}
+
+#[test]
+fn test_for() {
+    use crate::bytecode::Instruction::*;
+
+    assert_first_chunk(
+        "for(var i = 0; i < 10; i = i + 1) print i;", 
+        vec![0.0.into(), 10.0.into(), 1.0.into()],
+        vec![Constant(0), GetLocal(0), Constant(1), Less, JumpIfFalse(14), Pop, GetLocal(0), Print, GetLocal(0), Constant(2), Add, SetLocal(0), Pop, Jump(1), Pop, Pop],
     );
 }
