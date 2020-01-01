@@ -2,17 +2,7 @@ use lox;
 use lox::bytecode::*;
 use lox::tokenizer::*;
 use lox::ast::*;
-// use lox::compiler::*;
 use lox::vm::*;
-
-// fn compile(ast: &Vec<Stmt>) -> Chunk {
-//     let mut chunk = Chunk::new();
-//     let mut compiler = Compiler::new();
-//     for stmt in ast {
-//         compiler.compile_stmt(&mut chunk, stmt);
-//     }
-//     chunk
-// }
 
 fn parse_stmt(data: &str) -> Result<Vec<Stmt>, String> {
     let tokens = tokenize_with_context(data);
@@ -36,10 +26,10 @@ fn main() {
     // let data ="{var x=2; x=3;print x;}";
     // let data = "{var x;} {var x; var y;} {var w; {var x; var y;} var z;}";
     // let data ="{var x=1;{}var y=2;{var z=3;}var a=4;}";
-    let data = "if(true) print 3; else print 4; print 5;";
+    // let data = "if(true) print 3; else print 4; print 5;";
+    let data = "var i =0; while(i < 1000) { print i; i = i + 1; }";
     let ast = parse_stmt(data).unwrap();
     println!();
-    // let mut chunk = compile(&ast);
 
     let mut module = lox::bettercompiler::compile(&ast).unwrap();
     let chunk = module.chunk_mut(0);

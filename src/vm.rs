@@ -195,6 +195,15 @@ impl<'a> Vm<'a> {
             },
             Instruction::Jump(index) => {
                 self.program_counter = index;
+            },
+            Instruction::Less => {
+                match (self.state.pop(), self.state.pop()) {
+                    (Value::Number(b), Value::Number(a)) => {
+                        if a < b { self.state.push(Value::True); } 
+                        else { self.state.push(Value::False); }
+                    },
+                    (_,_) => unimplemented!(),
+                }
             }
             _ => unimplemented!(),
         }
