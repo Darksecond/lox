@@ -114,11 +114,19 @@ impl Chunk {
         self.instructions.len() - 2
     }
 
+    pub fn instruction_index(&self) -> InstructionIndex {
+        self.instructions.len()
+    }
+
     pub fn patch_instruction(&mut self, index: InstructionIndex) {
-        let current = self.instructions.len();
+        let current = self.instruction_index();
+        self.patch_instruction_to(index, current)
+    }
+
+    pub fn patch_instruction_to(&mut self, index: InstructionIndex, to: InstructionIndex) {
         match self.instructions[index] {
-            Instruction::JumpIfFalse(ref mut placeholder) => *placeholder = current,
-            Instruction::Jump(ref mut placeholder) => *placeholder = current,
+            Instruction::JumpIfFalse(ref mut placeholder) => *placeholder = to,
+            Instruction::Jump(ref mut placeholder) => *placeholder = to,
             _ => (), // Nothing to patch
         };
     }

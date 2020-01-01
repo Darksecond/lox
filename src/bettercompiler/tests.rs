@@ -172,3 +172,14 @@ fn test_logical_operators() {
         vec![Constant(0), JumpIfFalse(3), Jump(5), Pop, Constant(1), Pop],
     );
 }
+
+#[test]
+fn test_while() {
+    use crate::bytecode::Instruction::*;
+
+    assert_first_chunk(
+        "while(true) print 3;", 
+        vec![3.0.into()],
+        vec![True, JumpIfFalse(6), Pop, Constant(0), Print, Jump(0), Pop],
+    );
+}

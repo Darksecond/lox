@@ -18,8 +18,22 @@ fn compile_stmt(compiler: &mut Compiler, stmt: &Stmt) -> Result<(), CompilerErro
         Stmt::Block(ref stmts) => compile_block(compiler, stmts),
         Stmt::Expression(ref expr) => compile_expression_statement(compiler, expr),
         Stmt::If(ref condition, ref then_stmt, ref else_stmt) => compile_if(compiler, condition, then_stmt, else_stmt.as_ref()),
+        Stmt::While(ref expr, ref stmt) => compile_while(compiler, expr, stmt),
         _ => unimplemented!(),
     }
+}
+
+fn compile_while(compiler: &mut Compiler, condition: &Expr, body: &Stmt) -> Result<(), CompilerError> {
+    let loop_start = compiler.instruction_index()?;
+    compile_expr(compiler, condition)?;
+    let end_jump = compiler.add_instruction(Instruction::JumpIfFalse(0))?;
+    compiler.add_instruction(Instruction::Pop)?;
+    compile_stmt(compiler, body)?;
+    let loop_jump = compiler.add_instruction(Instruction::Jump(0))?;
+    compiler.patch_instruction_to(loop_jump, loop_start)?;
+    compiler.patch_instruction(end_jump)?;
+    compiler.add_instruction(Instruction::Pop)?;
+    Ok(())
 }
 
 fn compile_if<S: AsRef<Stmt>>(compiler: &mut Compiler, condition: &Expr, then_stmt: &Stmt, else_stmt: Option<S>) -> Result<(), CompilerError> {

@@ -49,6 +49,9 @@ impl Compiler {
     fn current_chunk_mut(&mut self) -> Result<&mut Chunk, CompilerError> {
         Ok(self.module.chunk_mut(self.current_context()?.chunk_index))
     }
+    fn current_chunk(&self) -> Result<&Chunk, CompilerError> {
+        Ok(self.module.chunk(self.current_context()?.chunk_index))
+    }
     fn begin_context(&mut self, context_type: ContextType) {
         let chunk = self.module.add_chunk();
         self.contexts.push(CompilerContext::new(context_type, chunk));
@@ -107,13 +110,18 @@ impl Compiler {
         Ok(self.current_chunk_mut()?.add_instruction(instruction))
     }
 
-    pub fn add_instructions(&mut self, instructions: &[Instruction]) -> Result<InstructionIndex, CompilerError> {
-        unimplemented!()
-    }
-
     pub fn patch_instruction(&mut self, index: InstructionIndex) -> Result<(), CompilerError> {
         self.current_chunk_mut()?.patch_instruction(index);
         Ok(())
+    }
+
+    pub fn patch_instruction_to(&mut self, index: InstructionIndex, to: InstructionIndex) -> Result<(), CompilerError> {
+        self.current_chunk_mut()?.patch_instruction_to(index, to);
+        Ok(())
+    }
+
+    pub fn instruction_index(&self) -> Result<InstructionIndex, CompilerError> {
+        Ok(self.current_chunk()?.instruction_index())
     }
 
     pub fn add_local(&mut self, name: &str) -> Result<StackIndex, CompilerError> {
