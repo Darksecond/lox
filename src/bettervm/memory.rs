@@ -1,6 +1,22 @@
 use crate::bettergc::{Trace, Gc};
-use std::cell::{RefCell, Ref};
+use std::cell::{RefCell};
 use crate::bytecode::ChunkIndex;
+
+pub struct NativeFunction {
+    pub name: String,
+    pub code: fn(&[Value]) -> Value,
+}
+
+impl std::fmt::Debug for NativeFunction {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "<native function {}>", self.name)
+    }
+}
+
+impl Trace for NativeFunction {
+    fn trace(&self) {
+    }
+}
 
 #[derive(Debug)]
 pub struct Function {
@@ -28,6 +44,7 @@ impl From<&crate::bytecode::Function> for Function {
 pub enum Object {
     String(String),
     Function(Function),
+    NativeFunction(NativeFunction),
 }
 
 impl Trace for Object {
@@ -35,6 +52,7 @@ impl Trace for Object {
         match self {
             Object::String(_) => (),
             Object::Function(function) => function.trace(),
+            Object::NativeFunction(function) => function.trace(),
         }
     }
 }

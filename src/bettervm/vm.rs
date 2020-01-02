@@ -9,12 +9,14 @@ enum InterpretResult {
     More,
 }
 
+#[derive(Debug)]
 pub enum VmError {
     StackEmpty,
     FrameEmpty,
     StringConstantExpected,
     GlobalNotDefined,
-    InvalidCallee
+    InvalidCallee,
+    IncorrectArity
 }
 
 struct CallFrame<'a> {
@@ -91,7 +93,8 @@ impl<'a> Vm<'a> {
                     Value::Object(obj) => {
                         match *obj.borrow() {
                             Object::String(ref string) => println!("{}", string),
-                            Object::Function(ref function) => println!("fn<{}({}) @ {}>", function.name, function.arity, function.chunk_index)
+                            Object::Function(ref function) => println!("fn<{}({}) @ {}>", function.name, function.arity, function.chunk_index),
+                            Object::NativeFunction(ref function) => println!("nativeFn<{}>", function.name),
                         }
                     },
                 }
@@ -217,8 +220,19 @@ impl<'a> Vm<'a> {
     fn call(&mut self, arity: usize) -> Result<(), VmError> {
         let callee = *self.peek_n(arity)?;
         if let Value::Object(callee) = callee {
-            if let Object::Function(callee) = &*callee.borrow() {
-                self.begin_frame(callee);
+            match  &*callee.borrow() {
+                Object::Function(callee) => {
+                    if callee.arity != arity { return Err(VmError::IncorrectArity); }
+                    self.begin_frame(callee);
+                },
+                Object::NativeFunction(callee) => {
+                    let mut args = self.pop_n(arity)?;
+                    args.reverse();
+                    self.pop()?; // discard callee
+                    let result = (callee.code)(&args);
+                    self.push(result);
+                },
+                _ => return Err(VmError::InvalidCallee),
             }
         } else {
             return Err(VmError::InvalidCallee);
@@ -251,6 +265,15 @@ impl<'a> Vm<'a> {
         self.stack.pop().ok_or(VmError::StackEmpty)
     }
 
+    fn pop_n(&mut self, n: usize) -> Result<Vec<Value>, VmError> {
+        let mut result = vec![];
+        while result.len() < n {
+            result.push(self.pop()?);
+        }
+
+        Ok(result)
+    }
+
     fn peek(&self) -> Result<&Value, VmError> {
         self.stack.last().ok_or(VmError::StackEmpty)
     }
@@ -265,5 +288,18 @@ impl<'a> Vm<'a> {
             base_counter: self.stack.len() - function.arity - 1,
             chunk: self.module.chunk(function.chunk_index),
         });
+    }
+
+    pub fn set_native_fn(&mut self, identifier: &str, code: fn(&[Value]) -> Value) {
+        use std::cell::RefCell;
+
+        let object = Object::NativeFunction(NativeFunction {
+            name: identifier.to_string(),
+            code: code,
+        });
+        
+        let root = gc::manage(RefCell::new(object));
+        let value = Value::Object(root.as_gc());
+        self.globals.insert(identifier.to_string(), value);
     }
 }

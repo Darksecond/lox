@@ -40,7 +40,9 @@ fn main() {
     // let data = "print -1;";
     // let data = "fun first(a) { print a + 3; } first(-1);";
     // let data = "print !false";
-    let data = "fun first(a) { if(!a) print \"is falsey\"; else print a; } first(3); first(false); first(nil); first(true);";
+    // let data = "fun first(a) { if(!a) print \"is falsey\"; else print a; } first(3); first(false); first(nil); first(true);";
+    // let data = "fun first() {} first(1);";
+    let data = "test(1); test(2,3);";
 
     let ast = parse_stmt(data).unwrap();
     println!();
@@ -61,7 +63,7 @@ fn main() {
 
     println!();
 
-    lox::bettervm::execute(&module);
+    lox::bettervm::execute(&module).unwrap();
     
 
     // let mut state = VmState::new();
