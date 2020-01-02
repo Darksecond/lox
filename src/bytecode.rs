@@ -67,19 +67,18 @@ impl From<Function> for Constant {
 #[derive(Debug)]
 pub struct Chunk {
     instructions: Vec<Instruction>,
-    constants: Vec<Constant>,
 }
 
 pub struct Module {
     chunks: Vec<Chunk>,
-    // constants: Vec<Constant>,
+    constants: Vec<Constant>,
 }
 
 impl Module {
     pub fn new() -> Module {
         Module {
             chunks: vec![],
-            // constants: vec![],
+            constants: vec![],
         }
     }
 
@@ -90,18 +89,18 @@ impl Module {
         self.chunks.push(Chunk::new());
         self.chunks.len() - 1
     }
+
     pub fn add_constant(&mut self, constant: Constant) -> ConstantIndex {
-        //TODO|HACK this should use module constants, not first chunk
-        self.chunk_mut(0).add_constant(constant);
-        self.chunk(0).constants.len() - 1
+        self.constants.push(constant);
+        self.constants.len() - 1
     }
 
     pub fn constants(&self) -> &[Constant] {
-        &self.chunk(0).constants
+        &self.constants
     }
 
     pub fn constant(&self, index: ConstantIndex) -> &Constant {
-        &self.chunk(0).constants[index]
+        &self.constants[index]
     }
 }
 
@@ -109,7 +108,6 @@ impl Chunk {
     pub fn new() -> Chunk {
         Chunk {
             instructions: vec![],
-            constants: vec![],
         }
     }
     pub fn add_instruction(&mut self, instruction: Instruction) -> InstructionIndex {
@@ -134,21 +132,7 @@ impl Chunk {
         };
     }
 
-    fn add_constant(&mut self, constant: Constant) -> ConstantIndex {
-        self.constants.push(constant);
-        self.constants.len() - 1
-    }
-
     pub fn instructions(&self) -> &[Instruction] {
         &self.instructions
-    }
-
-    //TODO Get this of this method, right now it's used a lot in the VM, which needs a (complete) rewrite
-    pub fn constants(&self) -> &[Constant] {
-        &self.constants
-    }
-
-    fn constant(&self, index: ConstantIndex) -> &Constant {
-        &self.constants[index]
     }
 }

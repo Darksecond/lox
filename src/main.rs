@@ -46,12 +46,17 @@ fn main() {
     println!();
 
     let mut module = lox::bettercompiler::compile(&ast).unwrap();
-    let chunk = module.chunk_mut(0);
+    
+    {
+        let chunk = module.chunk_mut(0);
+        //HACK
+        chunk.add_instruction(Instruction::Nil);
+        chunk.add_instruction(Instruction::Return);
+    }
+    
+    let chunk = module.chunk(0);
 
-    //HACK
-    chunk.add_instruction(Instruction::Nil);
-    chunk.add_instruction(Instruction::Return);
-    println!("{:?}", chunk.constants());
+    println!("{:?}", module.constants());
     println!("{:?}", chunk.instructions());
 
     println!();

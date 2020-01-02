@@ -52,7 +52,7 @@ impl<'a> Vm<'a> {
         Ok(())
     }
 
-    fn interpret_next(&mut self) -> Result<InterpretResult, VmError> { //TODO Result
+    fn interpret_next(&mut self) -> Result<InterpretResult, VmError> {
         use crate::bytecode::{Instruction, Constant};
 
         

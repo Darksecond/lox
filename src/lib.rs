@@ -6,7 +6,7 @@ pub mod bytecode;
 mod expr_parser;
 pub mod stmt_parser;
 mod token;
-pub mod vm;
+// pub mod vm;
 mod bettergc;
 pub mod bettercompiler;
 pub mod bettervm;
