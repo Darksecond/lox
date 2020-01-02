@@ -21,12 +21,22 @@ fn compile_stmt(compiler: &mut Compiler, stmt: &Stmt) -> Result<(), CompilerErro
         Stmt::If(ref condition, ref then_stmt, ref else_stmt) => compile_if(compiler, condition, then_stmt, else_stmt.as_ref()),
         Stmt::While(ref expr, ref stmt) => compile_while(compiler, expr, stmt),
         Stmt::Function(ref identifier, ref args, ref stmts) => compile_function(compiler, identifier, args, stmts),
+        Stmt::Return(ref expr) => compile_return(compiler, expr.as_ref()),
         _ => unimplemented!(),
     }
 }
 
+fn compile_return<E: AsRef<Expr>>(compiler: &mut Compiler, expr: Option<E>) -> Result<(), CompilerError> {
+    if let Some(expr) = expr {
+        compile_expr(compiler, expr.as_ref())?;
+    } else {
+        compile_nil(compiler)?;
+    }
+    compiler.add_instruction(Instruction::Return)?;
+    Ok(())
+}
+
 fn compile_function(compiler: &mut Compiler, identifier: &str, args: &Vec<Identifier>, block: &Vec<Stmt>) -> Result<(), CompilerError> {
-    use crate::bytecode::Function;
     //declare
     if compiler.is_scoped() {
         compiler.add_local(identifier)?;
@@ -149,8 +159,19 @@ fn compile_expr(compiler: &mut Compiler, expr: &Expr) -> Result<(), CompilerErro
         Expr::Logical(ref left, operator, ref right) => compile_logical(compiler, operator, left, right),
         Expr::Call(ref identifier, ref args) => compile_call(compiler, identifier, args),
         Expr::Grouping(ref expr) => compile_expr(compiler, expr),
+        Expr::Unary(operator, ref expr) => compile_unary(compiler, operator, expr),
         _ => unimplemented!(),
     }
+}
+
+fn compile_unary(compiler: &mut Compiler, operator: UnaryOperator, expr: &Expr) -> Result<(), CompilerError> {
+    compile_expr(compiler, expr)?;
+    match operator {
+        UnaryOperator::Minus => compiler.add_instruction(Instruction::Negate)?,
+        UnaryOperator::Bang => compiler.add_instruction(Instruction::Not)?,
+    };
+
+    Ok(())
 }
 
 fn compile_call(compiler: &mut Compiler, identifier: &Expr, args: &Vec<Expr>) -> Result<(), CompilerError> {
@@ -249,6 +270,7 @@ fn compile_binary(compiler: &mut Compiler, operator: BinaryOperator, left: &Expr
         BinaryOperator::Plus => compiler.add_instruction(Instruction::Add)?,
         BinaryOperator::Minus => compiler.add_instruction(Instruction::Subtract)?,
         BinaryOperator::Less => compiler.add_instruction(Instruction::Less)?,
+        BinaryOperator::Star => compiler.add_instruction(Instruction::Multiply)?,
         _ => unimplemented!(),
     };
     Ok(())

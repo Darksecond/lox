@@ -99,6 +99,10 @@ impl Module {
     pub fn constants(&self) -> &[Constant] {
         &self.chunk(0).constants
     }
+
+    pub fn constant(&self, index: ConstantIndex) -> &Constant {
+        &self.chunk(0).constants[index]
+    }
 }
 
 impl Chunk {
@@ -142,5 +146,9 @@ impl Chunk {
     //TODO Get this of this method, right now it's used a lot in the VM, which needs a (complete) rewrite
     pub fn constants(&self) -> &[Constant] {
         &self.constants
+    }
+
+    fn constant(&self, index: ConstantIndex) -> &Constant {
+        &self.constants[index]
     }
 }

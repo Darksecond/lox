@@ -229,7 +229,12 @@ fn test_simple_function() {
     assert_instructions(module.chunk(0), vec![Constant(1), DefineGlobal(2), GetGlobal(3), Call(0), Pop]);
     assert_instructions(module.chunk(1), vec![Constant(0), Print, Nil, Return]);
 
-    assert_constants(&module, vec![3.0.into(), crate::bytecode::Function{name: "first".into(), chunk_index: 1, arity: 0}.into(), "first".into(), "first".into()]);
+    assert_constants(&module, vec![
+        3.0.into(),
+        make_fun("first", 1, 0),
+        "first".into(), 
+        "first".into()
+    ]);
 }
 
 #[test]
@@ -241,7 +246,12 @@ fn test_function_with_one_argument() {
     assert_instructions(module.chunk(0), vec![Constant(0), DefineGlobal(1), GetGlobal(2), Constant(3), Call(1), Pop]);
     assert_instructions(module.chunk(1), vec![GetLocal(1), Print, Nil, Return]);
 
-    assert_constants(&module, vec![crate::bytecode::Function{name: "first".into(), chunk_index: 1, arity: 1}.into(), "first".into(), "first".into(), 3.0.into()]);
+    assert_constants(&module, vec![
+        make_fun("first", 1, 1),
+        "first".into(), 
+        "first".into(), 
+        3.0.into()
+    ]);
 }
 
 #[test]
@@ -255,10 +265,66 @@ fn test_recursive_function_with_one_argument() {
 
     assert_constants(&module, vec![
         "first".into(), 
-        1.0.into(), 
-        crate::bytecode::Function{name: "first".into(), chunk_index: 1, arity: 1}.into(), 
+        1.0.into(),  
+        make_fun("first", 1, 1),
         "first".into(), 
         "first".into(), 
         3.0.into()
     ]);
+}
+
+#[test]
+fn test_functions_calling_functions() {
+    use crate::bytecode::Instruction::*;
+
+    let module = compile_code("fun first() { second(); } fun second() { print 3; } first();");
+
+    assert_instructions(module.chunk(0), vec![Constant(1), DefineGlobal(2), Constant(4), DefineGlobal(5), GetGlobal(6), Call(0), Pop]);
+    assert_instructions(module.chunk(1), vec![GetGlobal(0), Call(0), Pop, Nil, Return]);
+    assert_instructions(module.chunk(2), vec![Constant(3), Print, Nil, Return]);
+
+    assert_constants(&module, vec![
+        "second".into(), 
+        make_fun("first", 1, 0),
+        "first".into(),
+        3.0.into(),
+        make_fun("second", 2, 0),
+        "second".into(), 
+        "first".into(),
+    ]);
+}
+
+#[test]
+fn test_simple_scoped_function() {
+    use crate::bytecode::Instruction::*;
+
+    let module = compile_code("{ fun first() { print 3; } first(); }");
+
+    assert_instructions(module.chunk(0), vec![Constant(1), GetLocal(0), Call(0), Pop, Pop]);
+    assert_instructions(module.chunk(1), vec![Constant(0), Print, Nil, Return]);
+
+    assert_constants(&module, vec![
+        3.0.into(), 
+        make_fun("first", 1, 0),
+    ]);
+}
+
+#[test]
+fn test_function_with_return() {
+    use crate::bytecode::Instruction::*;
+
+    let module = compile_code("fun first() { return 3; }");
+
+    assert_instructions(module.chunk(0), vec![Constant(1), DefineGlobal(2)]);
+    assert_instructions(module.chunk(1), vec![Constant(0), Return, Nil, Return]);
+
+    assert_constants(&module, vec![
+        3.0.into(),
+        make_fun("first", 1, 0),
+        "first".into()
+    ]);
+}
+
+fn make_fun(name: &str, index: usize, arity: usize) -> Constant {
+    crate::bytecode::Function{name: name.into(), chunk_index: index, arity: arity}.into()
 }

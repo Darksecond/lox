@@ -1,3 +1,5 @@
+pub mod gc;
+
 use std::ptr::NonNull;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::cell::Cell;
@@ -104,9 +106,17 @@ impl Heap {
         Root{ ptr: obj.ptr }
     }
 
-    pub fn collect(&mut self) {
+    pub fn manage_root<T: 'static + Trace>(&mut self, data: T) -> Root<T> {
+        let root = Root{ ptr: self.allocate(data) };
+        root.allocation().root();
+        root
+    }
+
+    pub fn collect(&mut self) -> usize {
         self.mark();
+        let bytes = self.bytes_marked();
         self.sweep();
+        bytes
     }
 
     fn mark(&mut self) {
@@ -116,6 +126,16 @@ impl Heap {
 
     fn sweep(&mut self) {
         self.objects.retain(|o| o.header.marked.get());
+    }
+
+    fn bytes_marked(&self) -> usize {
+        let mut bytes = 0;
+        for object in &self.objects {
+            if !object.header.marked.get() {
+                bytes += std::mem::size_of_val(&object.data);
+            }
+        }
+        bytes
     }
 }
 
