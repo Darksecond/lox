@@ -1,5 +1,4 @@
 use crate::bettergc::{Trace, Gc};
-use std::cell::{RefCell};
 use crate::bytecode::ChunkIndex;
 
 pub struct NativeFunction {
@@ -13,10 +12,7 @@ impl std::fmt::Debug for NativeFunction {
     }
 }
 
-impl Trace for NativeFunction {
-    fn trace(&self) {
-    }
-}
+impl Trace for NativeFunction { fn trace(&self) {} }
 
 #[derive(Debug)]
 pub struct Function {
@@ -25,10 +21,7 @@ pub struct Function {
     pub arity: usize,
 }
 
-impl Trace for Function {
-    fn trace(&self) {
-    }
-}
+impl Trace for Function { fn trace(&self) {} }
 
 impl From<&crate::bytecode::Function> for Function {
     fn from(value: &crate::bytecode::Function) -> Self {
@@ -40,17 +33,17 @@ impl From<&crate::bytecode::Function> for Function {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 pub enum Object {
-    String(String),
-    Function(Function),
-    NativeFunction(NativeFunction),
+    String(Gc<String>),
+    Function(Gc<Function>),
+    NativeFunction(Gc<NativeFunction>),
 }
 
 impl Trace for Object {
     fn trace(&self) {
         match self {
-            Object::String(_) => (),
+            Object::String(string) => string.trace(),
             Object::Function(function) => function.trace(),
             Object::NativeFunction(function) => function.trace(),
         }
@@ -60,7 +53,7 @@ impl Trace for Object {
 #[derive(Debug, Copy, Clone)] //TODO Double check we want Copy
 pub enum Value {
     Number(f64),
-    Object(Gc<RefCell<Object>>),
+    Object(Object),
     Nil,
     True,
     False,

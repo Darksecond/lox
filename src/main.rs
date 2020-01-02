@@ -42,7 +42,8 @@ fn main() {
     // let data = "print !false";
     // let data = "fun first(a) { if(!a) print \"is falsey\"; else print a; } first(3); first(false); first(nil); first(true);";
     // let data = "fun first() {} first(1);";
-    let data = "test(1); test(2,3);";
+    // let data = "test(1); test(2,3);";
+    let data = "var a = clock(); for(var i =0; i < 10000; i = i + 1) {} print clock()-a;";
 
     let ast = parse_stmt(data).unwrap();
     println!();

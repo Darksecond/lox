@@ -159,6 +159,12 @@ impl<T: fmt::Debug + 'static + Trace + ?Sized> fmt::Debug for Gc<T> {
         write!(f, "Gc({:?})", inner)
     }
 }
+impl<T: fmt::Display + 'static + Trace + ?Sized> fmt::Display for Gc<T> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let inner: &T = &*self;
+        inner.fmt(f)
+    }
+}
 impl<T: 'static + Trace + ?Sized> Trace for Gc<T> { fn trace(&self) { self.allocation().trace(); } }
 
 impl<T: 'static + Trace + ?Sized> Trace for Root<T> { fn trace(&self) { self.allocation().trace(); } }
@@ -260,3 +266,5 @@ impl<K: Eq + Hash, T: Trace> Trace for HashMap<K, T> {
         }
     }
 }
+
+impl Trace for String { fn trace(&self) {} }

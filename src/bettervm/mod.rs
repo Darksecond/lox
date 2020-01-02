@@ -16,6 +16,13 @@ pub fn execute(module: &Module) -> Result<(), VmError>{
         memory::Value::Nil
     });
 
+    vm.set_native_fn("clock", |_args| {
+        use std::time::{UNIX_EPOCH, SystemTime};
+
+        let time = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_secs_f64();
+        memory::Value::Number(time)
+    });
+
     vm.interpret()?;
 
     Ok(())

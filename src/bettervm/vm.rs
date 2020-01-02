@@ -76,11 +76,9 @@ impl<'a> Vm<'a> {
                     Constant::Number(n) => self.push(Value::Number(*n)),
                     Constant::String(string) => self.push_string(string),
                     Constant::Function(function) => {
-                        use std::cell::RefCell;
-
-                        let object = Object::Function(function.into());
-                        let root = gc::manage(RefCell::new(object));
-                        self.push(Value::Object(root.as_gc()));
+                        let root = gc::manage(Function::from(function));
+                        let object = Object::Function(root.as_gc());
+                        self.push(Value::Object(object));
                     },
                 }
             },
@@ -90,11 +88,11 @@ impl<'a> Vm<'a> {
                     Value::Nil => println!("nil"),
                     Value::True => println!("true"),
                     Value::False => println!("false"),
-                    Value::Object(obj) => {
-                        match *obj.borrow() {
-                            Object::String(ref string) => println!("{}", string),
-                            Object::Function(ref function) => println!("fn<{}({}) @ {}>", function.name, function.arity, function.chunk_index),
-                            Object::NativeFunction(ref function) => println!("nativeFn<{}>", function.name),
+                    Value::Object(ref obj) => {
+                        match obj {
+                            Object::String(string) => println!("{}", string),
+                            Object::Function(function) => println!("fn<{}({}) @ {}>", function.name, function.arity, function.chunk_index),
+                            Object::NativeFunction(function) => println!("nativeFn<{}>", function.name),
                         }
                     },
                 }
@@ -112,8 +110,8 @@ impl<'a> Vm<'a> {
             Instruction::Add => {
                 match (self.pop()?, self.pop()?) {
                     (Value::Number(b), Value::Number(a)) => self.push(Value::Number(a+b)),
-                    (Value::Object(b), Value::Object(a)) => {
-                        match (&*b.borrow(), &*a.borrow()) {
+                    (Value::Object(ref b), Value::Object(ref a)) => {
+                        match (b, a) {
                             (Object::String(b), Object::String(a)) => self.push_string(&format!("{}{}", a, b)),
                             (b, a) => unimplemented!("{:?} + {:?}", a, b),
                         }
@@ -219,8 +217,8 @@ impl<'a> Vm<'a> {
 
     fn call(&mut self, arity: usize) -> Result<(), VmError> {
         let callee = *self.peek_n(arity)?;
-        if let Value::Object(callee) = callee {
-            match  &*callee.borrow() {
+        if let Value::Object(ref callee) = callee {
+            match  callee {
                 Object::Function(callee) => {
                     if callee.arity != arity { return Err(VmError::IncorrectArity); }
                     self.begin_frame(callee);
@@ -254,11 +252,9 @@ impl<'a> Vm<'a> {
     }
 
     fn push_string(&mut self, string: &str) {
-        use std::cell::RefCell;
-
-        let object = Object::String(string.to_string());
-        let root = gc::manage(RefCell::new(object));
-        self.push(Value::Object(root.as_gc()));
+        let root = gc::manage(string.to_string());
+        let object = Object::String(root.as_gc());
+        self.push(Value::Object(object));
     }
 
     fn pop(&mut self) -> Result<Value, VmError> {
@@ -291,15 +287,13 @@ impl<'a> Vm<'a> {
     }
 
     pub fn set_native_fn(&mut self, identifier: &str, code: fn(&[Value]) -> Value) {
-        use std::cell::RefCell;
-
-        let object = Object::NativeFunction(NativeFunction {
+        let native_function = NativeFunction {
             name: identifier.to_string(),
             code: code,
-        });
-        
-        let root = gc::manage(RefCell::new(object));
-        let value = Value::Object(root.as_gc());
-        self.globals.insert(identifier.to_string(), value);
+        };
+
+        let root = gc::manage(native_function);
+        let object = Object::NativeFunction(root.as_gc());
+        self.globals.insert(identifier.to_string(), Value::Object(object));
     }
 }
