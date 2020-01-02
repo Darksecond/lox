@@ -2,7 +2,6 @@ use lox;
 use lox::bytecode::*;
 use lox::tokenizer::*;
 use lox::ast::*;
-// use lox::vm::*;
 
 fn parse_stmt(data: &str) -> Result<Vec<Stmt>, String> {
     let tokens = tokenize_with_context(data);
@@ -65,12 +64,4 @@ fn main() {
     println!();
 
     lox::bettervm::execute(&module).unwrap();
-    
-
-    // let mut state = VmState::new();
-    // let mut vm = Vm::new(&mut state, &chunk);
-    // while vm.interpret_next() {
-    //     vm.collect();
-    // }
-    // vm.collect();
 }
