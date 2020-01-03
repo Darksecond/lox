@@ -6,7 +6,17 @@ use std::cell::RefCell;
 pub enum Upvalue {
     Open(usize),
     Closed(Value),
-    Upvalue(Gc<RefCell<Upvalue>>), //TODO Remove me, this state shouldn't be required
+}
+
+impl Upvalue {
+    pub fn is_open_with_index(&self, index: usize) -> bool {
+        match self {
+            Self::Open(i) => {
+                if *i == index { true } else { false }
+            },
+            Self::Closed(_) => false,
+        }
+    }
 }
 
 impl Trace for Upvalue {
@@ -14,7 +24,6 @@ impl Trace for Upvalue {
         match self {
             Upvalue::Closed(value) => value.trace(),
             Upvalue::Open(_) => (),
-            Upvalue::Upvalue(upvalue) => upvalue.trace(),
         }
     }
 }
@@ -69,7 +78,6 @@ impl From<&crate::bytecode::Function> for Function {
 #[derive(Debug, Copy, Clone)]
 pub enum Object {
     String(Gc<String>),
-    // Function(Gc<Function>),
     Closure(Gc<Closure>),
     NativeFunction(Gc<NativeFunction>),
 }
@@ -78,7 +86,6 @@ impl Trace for Object {
     fn trace(&self) {
         match self {
             Object::String(string) => string.trace(),
-            // Object::Function(function) => function.trace(),
             Object::NativeFunction(function) => function.trace(),
             Object::Closure(closure) => closure.trace(),
         }

@@ -90,14 +90,7 @@ impl<'a> Vm<'a> {
                 match self.module.constant(index) {
                     Constant::Number(n) => self.push(Value::Number(*n)),
                     Constant::String(string) => self.push_string(string),
-                    // Constant::Function(function) => {
-                    //     let root = gc::manage(Function::from(function));
-                    //     let object = Object::Function(root.as_gc());
-                    //     self.push(Value::Object(object));
-                    // },
                     Constant::Closure(closure) => {
-                        use crate::bettergc::Root;
-
                         let upvalues = closure.upvalues.iter().map(|u| {
                             match u {
                                 crate::bytecode::Upvalue::Local(index) => {
@@ -108,25 +101,21 @@ impl<'a> Vm<'a> {
                                     //TODO Write a test for this
                                     // Try to find an existing upvalue that matches ours
                                     for upvalue in self.upvalues.iter().rev() {
-                                        let upvalue = gc::upgrade(upvalue);
-                                        if let Some(root) = upvalue {
-                                            let upvalue = &*root.borrow();
-                                            if let Upvalue::Open(i) = upvalue {
-                                                if *i == index {
-                                                    return Upvalue::Upvalue(root.as_gc());
-                                                }
-                                            }
+                                        if let Some(root) = gc::upgrade(upvalue) {
+                                            if root.borrow().is_open_with_index(index) { return root; }
                                         }
                                     }
 
-                                    Upvalue::Open(index)
+                                    gc::manage(RefCell::new(Upvalue::Open(index)))
                                 },
-                                crate::bytecode::Upvalue::Upvalue(u) => Upvalue::Upvalue(self.find_upvalue_by_index(*u)),
+                                crate::bytecode::Upvalue::Upvalue(u) => gc::root(self.find_upvalue_by_index(*u)),
                             }
                         });
-                        let upvalue_roots: Vec<Root<RefCell<Upvalue>>> = upvalues.map(|u| gc::manage(RefCell::new(u))).collect();
+                        let upvalue_roots: Vec<Root<RefCell<Upvalue>>> = upvalues.collect();
 
                         // Put all upvalues into a big list so we can iterate through them.
+                        //TODO In the future only push open upvalues, and only if they are not in the list already
+                        //     We should consider making it a Set
                         for upvalue in &upvalue_roots {
                             self.upvalues.push(gc::downgrade(upvalue.as_gc()));
                         }
@@ -150,7 +139,6 @@ impl<'a> Vm<'a> {
                     Value::Object(ref obj) => {
                         match obj {
                             Object::String(string) => println!("{}", string),
-                            // Object::Function(function) => println!("fun<{}({}) @ {}>", function.name, function.arity, function.chunk_index),
                             Object::NativeFunction(function) => println!("<native fun {}>", function.name),
                             Object::Closure(closure) => println!("<fun {}({}) @ {}>", closure.function.name, closure.function.arity, closure.function.chunk_index),
                         }
@@ -163,7 +151,7 @@ impl<'a> Vm<'a> {
             Instruction::Return => {
                 let result = self.pop()?;
                 let frame = self.frames.pop().ok_or(VmError::FrameEmpty)?;
-                if self.frames.len() == 0 { return Ok(InterpretResult::Done); } // We are done interpreting
+                if self.frames.len() == 0 { return Ok(InterpretResult::Done); } // We are done interpreting //TODO Move this down
 
                 for i in frame.base_counter..self.stack.len() {
                     self.close_upvalues(i)?;
@@ -285,18 +273,8 @@ impl<'a> Vm<'a> {
             },
             Instruction::CloseUpvalue => {
                 let index = self.stack.len() - 1;
-                let value = self.stack.pop().ok_or(VmError::StackEmpty)?;
-                for upvalue in &self.upvalues {
-                    if let Some(root) = gc::upgrade(upvalue) {
-                        let close = if let Upvalue::Open(i) = &*root.borrow() {
-                            if *i == index { true } else { false }
-                        } else { false };
-
-                        if close {
-                            root.replace(Upvalue::Closed(value));
-                        }
-                    }
-                }
+                self.close_upvalues(index)?;
+                self.stack.pop().ok_or(VmError::StackEmpty)?;
             },
             _ => unimplemented!("{:?}", instr),
         }
@@ -305,14 +283,10 @@ impl<'a> Vm<'a> {
     }
 
     fn close_upvalues(&mut self, index: usize) -> Result<(), VmError> {
-        let value = self.stack[index];
+        let value = self.stack[index]; //TODO Result
         for upvalue in &self.upvalues {
             if let Some(root) = gc::upgrade(upvalue) {
-                let close = if let Upvalue::Open(i) = &*root.borrow() {
-                    if *i == index { true } else { false }
-                } else { false };
-
-                if close {
+                if root.borrow().is_open_with_index(index) {
                     root.replace(Upvalue::Closed(value));
                 }
             }
@@ -329,7 +303,6 @@ impl<'a> Vm<'a> {
     fn resolve_upvalue_into_value(&self, upvalue: &Upvalue) -> Value {
         match upvalue {
             Upvalue::Closed(value) => *value,
-            Upvalue::Upvalue(upvalue) => self.resolve_upvalue_into_value(&*upvalue.borrow()),
             Upvalue::Open(index) => self.stack[*index],
         }
     }
@@ -337,7 +310,6 @@ impl<'a> Vm<'a> {
     fn set_upvalue(&mut self, upvalue: &mut Upvalue, new_value: Value) {
         match upvalue {
             Upvalue::Closed(value) => *value = new_value,
-            Upvalue::Upvalue(upvalue) => self.set_upvalue(&mut *upvalue.borrow_mut(), new_value),
             Upvalue::Open(index) => self.stack[*index] = new_value,
         }
     }
