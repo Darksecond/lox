@@ -53,21 +53,11 @@ fn main() {
     let ast = parse_stmt(data).unwrap();
     println!();
 
-    let mut module = lox::bettercompiler::compile(&ast).unwrap();
-    
-    {
-        let chunk = module.chunk_mut(0);
-        //HACK
-        chunk.add_instruction(Instruction::Nil);
-        chunk.add_instruction(Instruction::Return);
-    }
-    
-    let chunk = module.chunk(0);
+    let module = lox::bettercompiler::compile(&ast).unwrap();
 
-    println!("{:?}", module.constants());
-    println!("{:?}", chunk.instructions());
-
-    println!("chunk 1: {:?}", module.chunk(1).instructions());
+    println!("constants: {:?}", module.constants());
+    println!("chunk 0: {:?}", module.chunk(0).instructions());
+    // println!("chunk 1: {:?}", module.chunk(1).instructions());
     // println!("chunk 2: {:?}", module.chunk(2).instructions());
 
     println!();
