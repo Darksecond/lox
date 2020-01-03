@@ -1,7 +1,7 @@
 use super::memory::*;
 use std::collections::HashMap;
 use crate::bytecode::{Module, Chunk};
-use crate::bettergc::{UniqueRoot, Gc, Weak, gc};
+use crate::bettergc::{UniqueRoot, Gc, Weak, Root, gc};
 use std::cell::RefCell;
 
 #[derive(PartialEq)]
@@ -24,7 +24,7 @@ struct CallFrame<'a> {
     program_counter: usize,
     base_counter: usize,
     chunk: &'a Chunk,
-    closure: Gc<Closure>,
+    closure: Root<Closure>,
 }
 
 pub struct Vm<'a> {
@@ -32,7 +32,7 @@ pub struct Vm<'a> {
     frames: Vec<CallFrame<'a>>,
     stack: UniqueRoot<Vec<Value>>,
     globals: UniqueRoot<HashMap<String, Value>>,
-    upvalues: Vec<Weak<RefCell<Upvalue>>>,
+    upvalues: Vec<Weak<RefCell<Upvalue>>>, //TODO Replace this with a list of *just* open upvalues, then we don't care about it being weak.
 }
 
 impl<'a> Vm<'a> {
@@ -55,7 +55,7 @@ impl<'a> Vm<'a> {
             program_counter: 0,
             base_counter: 0,
             chunk: self.module.chunk(0),
-            closure: closure.as_gc(),
+            closure: closure,
         });
 
         while self.interpret_next()? == InterpretResult::More {};
@@ -410,7 +410,7 @@ impl<'a> Vm<'a> {
             program_counter: 0,
             base_counter: self.stack.len() - closure.function.arity - 1,
             chunk: self.module.chunk(closure.function.chunk_index),
-            closure,
+            closure: gc::root(closure),
         });
     }
 
