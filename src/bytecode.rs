@@ -3,6 +3,7 @@ pub type ConstantIndex = usize;
 pub type StackIndex = usize;
 pub type ChunkIndex = usize;
 pub type ArgumentCount = usize;
+pub type UpvalueIndex = usize;
 
 #[derive(Debug, PartialEq)]
 pub enum Instruction {
@@ -32,11 +33,26 @@ pub enum Instruction {
     SetGlobal(ConstantIndex),
     GetLocal(StackIndex),
     SetLocal(StackIndex),
+    GetUpvalue(StackIndex),
+    SetUpvalue(StackIndex),
 
     Jump(InstructionIndex),
     JumpIfFalse(InstructionIndex),
     Call(ArgumentCount),
+    CloseUpvalue,
     // etc
+}
+
+#[derive(Debug, PartialEq)]
+pub struct Closure {
+    pub function: Function,
+    pub upvalues: Vec<Upvalue>,
+}
+
+#[derive(Debug, PartialEq)]
+pub enum Upvalue {
+    Local(StackIndex),
+    Upvalue(UpvalueIndex),
 }
 
 #[derive(Debug, PartialEq)]
@@ -44,14 +60,14 @@ pub struct Function {
     pub name: String,
     pub chunk_index: ChunkIndex,
     pub arity: usize,
-    // pub upvalues: usize,
 }
 
 #[derive(Debug, PartialEq)]
 pub enum Constant {
     Number(f64),
     String(String),
-    Function(Function),
+    // Function(Function),
+    Closure(Closure),
 }
 
 impl From<f64> for Constant {
@@ -61,7 +77,7 @@ impl From<&str> for Constant {
     fn from(item: &str) -> Self { Constant::String(String::from(item)) }
 }
 impl From<Function> for Constant {
-    fn from(item: Function) -> Self { Constant::Function(item) }
+    fn from(item: Function) -> Self { Constant::Closure(Closure{ function: item, upvalues: vec![]}) }
 }
 
 #[derive(Debug)]
@@ -110,6 +126,7 @@ impl Chunk {
             instructions: vec![],
         }
     }
+
     pub fn add_instruction(&mut self, instruction: Instruction) -> InstructionIndex {
         self.instructions.push(instruction);
         self.instructions.len() - 1

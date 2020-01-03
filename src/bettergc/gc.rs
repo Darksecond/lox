@@ -29,6 +29,14 @@ pub fn root<T: 'static + Trace + ?Sized>(obj: Gc<T>) -> Root<T> {
     HEAP.with(|heap| heap.borrow_mut().root(obj))
 }
 
+pub fn downgrade<T: 'static + Trace + ?Sized>(obj: Gc<T>) -> Weak<T> {
+    HEAP.with(|heap| heap.borrow_mut().downgrade(obj))
+}
+
+pub fn upgrade<T: 'static + Trace + ?Sized>(obj: &Weak<T>) -> Option<Root<T>> {
+    HEAP.with(|heap| heap.borrow_mut().upgrade(obj))
+}
+
 pub fn force_collect() {
     STATS.with(|stats| {
         let mut stats = stats.borrow_mut();

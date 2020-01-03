@@ -2,12 +2,6 @@ use crate::bytecode::*;
 use super::CompilerError;
 use super::locals::*;
 
-#[derive(Debug)]
-pub struct Upvalue {
-    slot: usize,
-    is_local: bool,
-}
-
 #[derive(Copy, Clone)]
 pub enum ContextType {
     Function,
@@ -35,6 +29,29 @@ impl CompilerContext {
             chunk_index,
             locals: Locals::new(),
             upvalues: vec![],
+        }
+    }
+
+    fn add_upvalue(&mut self, upvalue: Upvalue) -> StackIndex {
+        for i in 0..self.upvalues.len() {
+            let existing_upvalue = &self.upvalues[i];
+            if upvalue == *existing_upvalue {
+                return i;
+            }
+        }
+
+        self.upvalues.push(upvalue);
+
+        self.upvalues.len() - 1
+    }
+
+    fn resolve_local(&self, name: &str) -> Result<Option<StackIndex>, CompilerError> {
+        if let Some(local) = self.locals.get(name) {
+            if !local.initialized() {
+                Err(CompilerError::LocalNotInitialized(name.into()))
+            } else { Ok(Some(local.slot()))}
+        } else {
+            Ok(None)
         }
     }
 }
@@ -65,8 +82,12 @@ impl Compiler {
         Ok(())
     }
     fn end_scope(&mut self) -> Result<(), CompilerError> {
-        for _local in self.current_context_mut()?.locals.end_scope() {
-            self.add_instruction(Instruction::Pop)?;
+        for local in self.current_context_mut()?.locals.end_scope().iter().rev() {
+            if local.captured() {
+                self.add_instruction(Instruction::CloseUpvalue)?;
+            } else {
+                self.add_instruction(Instruction::Pop)?;
+            }
         }
         Ok(())
     }
@@ -143,8 +164,12 @@ impl Compiler {
         Ok(())
     }
 
-    pub fn resolve_local(&mut self, name: &str) -> Result<Option<StackIndex>, CompilerError> {
-        if let Some(local) = self.current_context()?.locals.get(name) {
+    pub fn resolve_local(&self, name: &str) -> Result<Option<StackIndex>, CompilerError> {
+        self.current_context()?.resolve_local(name)
+    }
+
+    fn resolve_local_in_context(name: &str, context: &CompilerContext) -> Result<Option<StackIndex>, CompilerError> {
+        if let Some(local) = context.locals.get(name) {
             if !local.initialized() {
                 Err(CompilerError::LocalNotInitialized(name.into()))
             } else { Ok(Some(local.slot()))}
@@ -158,6 +183,17 @@ impl Compiler {
     }
 
     pub fn resolve_upvalue(&mut self, name: &str) -> Result<Option<StackIndex>, CompilerError> {
-        unimplemented!()
+        for i in (0..(self.contexts.len()-1)).rev() { // Skip the current context
+            if let Some(local) = Self::resolve_local_in_context(name, &self.contexts[i])? {
+                self.contexts[i].locals.mark_captured(local);
+                let mut upvalue = self.contexts[i+1].add_upvalue(Upvalue::Local(local));
+                for j in (i+2)..self.contexts.len() {
+                    upvalue = self.contexts[j].add_upvalue(Upvalue::Upvalue(upvalue));
+                }
+                return Ok(Some(upvalue));
+            }
+        }
+
+        Ok(None)
     }
 }

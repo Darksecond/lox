@@ -43,7 +43,7 @@ fn compile_function(compiler: &mut Compiler, identifier: &str, args: &Vec<Identi
         compiler.mark_local_initialized()?;
     }
 
-    let (chunk_index, _upvalues) = compiler.with_scoped_context(ContextType::Function, |compiler| {
+    let (chunk_index, upvalues) = compiler.with_scoped_context(ContextType::Function, |compiler| {
         compiler.add_local("")?; //the slot with the functions name in it
         for arg in args {
             compiler.add_local(arg)?;
@@ -57,15 +57,23 @@ fn compile_function(compiler: &mut Compiler, identifier: &str, args: &Vec<Identi
         Ok(())
     })?;
 
-    let constant = compiler.add_constant(Function {
+    let function = Function {
         name: identifier.into(),
         chunk_index,
         arity: args.len(),
-    });
+    };
+
+    let closure = Closure {
+        function,
+        upvalues: upvalues,
+    };
+
+    let constant = compiler.add_constant(Constant::Closure(closure));
     compiler.add_instruction(Instruction::Constant(constant))?;
 
     //define
     if !compiler.is_scoped() {
+        
         let constant = compiler.add_constant(identifier);
         compiler.add_instruction(Instruction::DefineGlobal(constant))?;
     }
@@ -226,6 +234,9 @@ fn compile_assign(compiler: &mut Compiler, identifier: &str, expr: &Expr) -> Res
     if let Some(local) = compiler.resolve_local(identifier)? {
         // Local
         compiler.add_instruction(Instruction::SetLocal(local))?;
+    } else if let Some(upvalue) = compiler.resolve_upvalue(identifier)? {
+        // Upvalue
+        compiler.add_instruction(Instruction::SetUpvalue(upvalue))?;
     } else {
         // Global
         let constant = compiler.add_constant(identifier);
@@ -238,6 +249,9 @@ fn compile_variable(compiler: &mut Compiler, identifier: &str) -> Result<(), Com
     if let Some(local) = compiler.resolve_local(identifier)? {
         // Local
         compiler.add_instruction(Instruction::GetLocal(local))?;
+    } else if let Some(upvalue) = compiler.resolve_upvalue(identifier)? {
+        // Upvalue
+        compiler.add_instruction(Instruction::GetUpvalue(upvalue))?;
     } else {
         // Global
         let constant = compiler.add_constant(identifier);

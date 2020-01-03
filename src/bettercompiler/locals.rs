@@ -11,6 +11,7 @@ pub struct Local {
 impl Local {
     pub fn slot(&self) -> usize { self.slot }
     pub fn initialized(&self) -> bool { self.initialized }
+    pub fn captured(&self) -> bool { self.is_upvalue }
 }
 
 #[derive(Debug)]
@@ -44,6 +45,13 @@ impl Locals {
 
     pub fn get(&self, identifier: &str) -> Option<&Local> {
         self.stack.iter().rev().find(|l| l.name == identifier)
+    }
+
+    pub fn mark_captured(&mut self, slot: usize) {
+        let local = self.stack.iter_mut().find(|l| l.slot == slot);
+        if let Some(local) = local {
+            local.is_upvalue = true;
+        }
     }
 
     fn get_at_depth(&self, identifier: &str, depth: usize) -> Option<&Local> {

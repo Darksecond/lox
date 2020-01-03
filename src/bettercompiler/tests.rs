@@ -4,7 +4,7 @@ use crate::ast::*;
 fn parse_stmt(data: &str) -> Result<Vec<Stmt>, String> {
     use crate::tokenizer::tokenize_with_context;
     let tokens = tokenize_with_context(data);
-    println!("Tokens: {:?}", tokens);
+    // println!("Tokens: {:?}", tokens);
     let mut it = tokens.as_slice().into_iter().map(|tc| &tc.token).peekable();
     crate::stmt_parser::parse(&mut it)
 }
@@ -106,12 +106,12 @@ fn test_local_variables() {
     assert_first_chunk(
         "{var x=3; print x;}", 
         vec![3.0.into()],
-        vec![Instruction::Constant(0), Instruction::GetLocal(0), Instruction::Print, Instruction::Pop]
+        vec![Instruction::Constant(0), Instruction::GetLocal(1), Instruction::Print, Instruction::Pop]
     );
     assert_first_chunk(
         "var x=2; {var x=3; { var x=4; print x; } print x;} print x;", 
         vec![2.0.into(), "x".into(), 3.0.into(), 4.0.into(), "x".into()],
-        vec![Constant(0), DefineGlobal(1), Constant(2), Constant(3), GetLocal(1), Print, Pop, GetLocal(0), Print, Pop, GetGlobal(4), Print]
+        vec![Constant(0), DefineGlobal(1), Constant(2), Constant(3), GetLocal(2), Print, Pop, GetLocal(1), Print, Pop, GetGlobal(4), Print]
     );
     assert_first_chunk(
         "{var x;}", 
@@ -121,7 +121,7 @@ fn test_local_variables() {
     assert_first_chunk(
         "{var x;x=2;}", 
         vec![2.0.into()],
-        vec![Nil, Constant(0), SetLocal(0), Pop, Pop]
+        vec![Nil, Constant(0), SetLocal(1), Pop, Pop]
     );
 }
 
@@ -216,7 +216,7 @@ fn test_for() {
     assert_first_chunk(
         "for(var i = 0; i < 10; i = i + 1) print i;", 
         vec![0.0.into(), 10.0.into(), 1.0.into()],
-        vec![Constant(0), GetLocal(0), Constant(1), Less, JumpIfFalse(14), Pop, GetLocal(0), Print, GetLocal(0), Constant(2), Add, SetLocal(0), Pop, Jump(1), Pop, Pop],
+        vec![Constant(0), GetLocal(1), Constant(1), Less, JumpIfFalse(14), Pop, GetLocal(1), Print, GetLocal(1), Constant(2), Add, SetLocal(1), Pop, Jump(1), Pop, Pop],
     );
 }
 
@@ -300,7 +300,7 @@ fn test_simple_scoped_function() {
 
     let module = compile_code("{ fun first() { print 3; } first(); }");
 
-    assert_instructions(module.chunk(0), vec![Constant(1), GetLocal(0), Call(0), Pop, Pop]);
+    assert_instructions(module.chunk(0), vec![Constant(1), GetLocal(1), Call(0), Pop, Pop]);
     assert_instructions(module.chunk(1), vec![Constant(0), Print, Nil, Return]);
 
     assert_constants(&module, vec![
@@ -325,6 +325,94 @@ fn test_function_with_return() {
     ]);
 }
 
+#[test]
+fn test_upvalue() {
+    use crate::bytecode::Instruction::*;
+
+    let module = compile_code("{var a = 3; fun f() { print a; }}");
+
+    assert_instructions(module.chunk(0), vec![Constant(0), Constant(1), Pop, Pop]);
+    assert_instructions(module.chunk(1), vec![GetUpvalue(0), Print, Nil, Return]);
+
+    assert_constants(&module, vec![
+        3.0.into(),
+        make_closure("f", 1, 0, vec![Upvalue::Local(1)]),
+    ]);
+}
+
+#[test]
+fn test_double_upvalue() {
+    use crate::bytecode::Instruction::*;
+
+    let module = compile_code("{var a = 3; fun f() { fun g() { print a; } }}");
+
+    assert_instructions(module.chunk(0), vec![Constant(0), Constant(2), Pop, Pop]);
+    assert_instructions(module.chunk(1), vec![Constant(1), Pop, Nil, Return]);
+    assert_instructions(module.chunk(2), vec![GetUpvalue(0), Print, Nil, Return]);
+
+    assert_constants(&module, vec![
+        3.0.into(),
+        make_closure("g", 2, 0, vec![Upvalue::Upvalue(0)]),
+        make_closure("f", 1, 0, vec![Upvalue::Local(1)]),
+    ]);
+}
+
+#[test]
+fn test_multiple_upvalue() {
+    use crate::bytecode::Instruction::*;
+
+    let module = compile_code("{var a = 3; var b = 4; fun f() {print b; print a; }}");
+
+    assert_instructions(module.chunk(0), vec![Constant(0), Constant(1), Constant(2), Pop, Pop, Pop]);
+    assert_instructions(module.chunk(1), vec![GetUpvalue(0), Print, GetUpvalue(1), Print, Nil, Return]);
+
+    assert_constants(&module, vec![
+        3.0.into(),
+        4.0.into(),
+        make_closure("f", 1, 0, vec![Upvalue::Local(2), Upvalue::Local(1)]),
+    ]);
+}
+
+#[test]
+fn test_multiple_double_upvalue() {
+    use crate::bytecode::Instruction::*;
+
+    let module = compile_code("{var a = 3; var b = 4; fun f() { fun g() { print a; print b; }}}");
+
+    assert_instructions(module.chunk(0), vec![Constant(0), Constant(1), Constant(3), Pop, Pop, Pop]);
+    assert_instructions(module.chunk(1), vec![Constant(2), Pop, Nil, Return]);
+    assert_instructions(module.chunk(2), vec![GetUpvalue(0), Print, GetUpvalue(1), Print, Nil, Return]);
+
+    assert_constants(&module, vec![
+        3.0.into(),
+        4.0.into(),
+        make_closure("g", 2, 0, vec![Upvalue::Upvalue(0), Upvalue::Upvalue(1)]),
+        make_closure("f", 1, 0, vec![Upvalue::Local(1), Upvalue::Local(2)]),
+    ]);
+}
+
+#[test]
+fn test_scoped_upvalue() {
+    use crate::bytecode::Instruction::*;
+
+    let module = compile_code("var global; fun main() { { var a = 3; fun one() { print a; } global = one; } } main();");
+
+    assert_instructions(module.chunk(0), vec![Nil, DefineGlobal(0), Constant(4), DefineGlobal(5), GetGlobal(6), Call(0), Pop]);
+    assert_instructions(module.chunk(1), vec![Constant(1), Constant(2), GetLocal(2), SetGlobal(3), Pop, CloseUpvalue, Pop, Nil, Return]);
+    assert_instructions(module.chunk(2), vec![GetUpvalue(0), Print, Nil, Return]);
+
+    assert_constants(&module, vec![
+        3.0.into(),
+        make_closure("f", 1, 0, vec![Upvalue::Local(1)]),
+    ]);
+}
+
 fn make_fun(name: &str, index: usize, arity: usize) -> Constant {
     crate::bytecode::Function{name: name.into(), chunk_index: index, arity: arity}.into()
+}
+
+fn make_closure(name: &str, index: usize, arity: usize, upvalues: Vec<Upvalue>) -> Constant {
+    let function = crate::bytecode::Function{name: name.into(), chunk_index: index, arity: arity};
+    let closure = crate::bytecode::Closure{function, upvalues};
+    Constant::Closure(closure)
 }

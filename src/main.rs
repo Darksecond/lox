@@ -42,7 +42,13 @@ fn main() {
     // let data = "fun first(a) { if(!a) print \"is falsey\"; else print a; } first(3); first(false); first(nil); first(true);";
     // let data = "fun first() {} first(1);";
     // let data = "test(1); test(2,3);";
-    let data = "var a = clock(); for(var i =0; i < 10000; i = i + 1) {} print clock()-a;";
+    // let data = "var a = clock(); for(var i =0; i < 10000; i = i + 1) {} print clock()-a;";
+
+    // closures
+    // let data = "{ var a = 3; fun first() { print a; } first(); }";
+    // let data = "fun outer() {var x = 3; fun inner() { print x; } return inner; } var closure = outer(); closure();";
+    let data = "var global; fun main() { { var a = 3; fun one() { print a; } global = one; } } main(); global();";
+    // let data = "{ var a = 3; fun first() { print a; } fun second() { print a; } }";
 
     let ast = parse_stmt(data).unwrap();
     println!();
@@ -60,6 +66,9 @@ fn main() {
 
     println!("{:?}", module.constants());
     println!("{:?}", chunk.instructions());
+
+    println!("chunk 1: {:?}", module.chunk(1).instructions());
+    // println!("chunk 2: {:?}", module.chunk(2).instructions());
 
     println!();
 

@@ -1,5 +1,36 @@
 use crate::bettergc::{Trace, Gc};
 use crate::bytecode::ChunkIndex;
+use std::cell::RefCell;
+
+#[derive(Debug, Copy, Clone)]
+pub enum Upvalue {
+    Open(usize),
+    Closed(Value),
+    Upvalue(Gc<RefCell<Upvalue>>),
+}
+
+impl Trace for Upvalue {
+    fn trace(&self) {
+        match self {
+            Upvalue::Closed(value) => value.trace(),
+            Upvalue::Open(_) => (),
+            Upvalue::Upvalue(upvalue) => upvalue.trace(),
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct Closure {
+    pub function: Gc<Function>,
+    pub upvalues: Vec<Gc<RefCell<Upvalue>>>,
+}
+
+impl Trace for Closure {
+    fn trace(&self) {
+        self.function.trace();
+        self.upvalues.trace();
+    }
+}
 
 pub struct NativeFunction {
     pub name: String,
@@ -36,7 +67,8 @@ impl From<&crate::bytecode::Function> for Function {
 #[derive(Debug, Copy, Clone)]
 pub enum Object {
     String(Gc<String>),
-    Function(Gc<Function>),
+    // Function(Gc<Function>),
+    Closure(Gc<Closure>),
     NativeFunction(Gc<NativeFunction>),
 }
 
@@ -44,8 +76,9 @@ impl Trace for Object {
     fn trace(&self) {
         match self {
             Object::String(string) => string.trace(),
-            Object::Function(function) => function.trace(),
+            // Object::Function(function) => function.trace(),
             Object::NativeFunction(function) => function.trace(),
+            Object::Closure(closure) => closure.trace(),
         }
     }
 }
