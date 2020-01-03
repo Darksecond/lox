@@ -1,5 +1,4 @@
 use lox;
-use lox::bytecode::*;
 use lox::tokenizer::*;
 use lox::ast::*;
 

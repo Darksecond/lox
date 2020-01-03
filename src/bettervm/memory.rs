@@ -6,7 +6,7 @@ use std::cell::RefCell;
 pub enum Upvalue {
     Open(usize),
     Closed(Value),
-    Upvalue(Gc<RefCell<Upvalue>>),
+    Upvalue(Gc<RefCell<Upvalue>>), //TODO Remove me, this state shouldn't be required
 }
 
 impl Trace for Upvalue {
@@ -64,6 +64,8 @@ impl From<&crate::bytecode::Function> for Function {
     }
 }
 
+//TODO Think about merging this into Value
+//     It's no longer stringly required as a seperate thing.
 #[derive(Debug, Copy, Clone)]
 pub enum Object {
     String(Gc<String>),

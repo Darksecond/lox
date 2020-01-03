@@ -2,7 +2,7 @@ pub mod tokenizer;
 #[macro_use]
 mod common;
 pub mod ast;
-pub mod bytecode;
+mod bytecode;
 mod expr_parser;
 pub mod stmt_parser;
 mod token;

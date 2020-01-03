@@ -51,7 +51,7 @@ impl<'a> Vm<'a> {
         let closure = gc::manage(Closure { upvalues: vec![], function: function.as_gc() });
         self.push(Value::Object(Object::Closure(closure.as_gc())));
 
-        self.frames.push(CallFrame { //Use begin/end_chunk because it needs to do cleanup of the stack
+        self.frames.push(CallFrame { //TODO Use begin/end_frame because it needs to do cleanup of the stack
             program_counter: 0,
             base_counter: 0,
             chunk: self.module.chunk(0),
@@ -59,6 +59,9 @@ impl<'a> Vm<'a> {
         });
 
         while self.interpret_next()? == InterpretResult::More {};
+
+        //TODO properly end the frame, close upvalues and clean the stack
+        //     this is required if we later want to be able to re-use a 'VmModule' in another vm.
 
         Ok(())
     }
@@ -145,9 +148,9 @@ impl<'a> Vm<'a> {
                     Value::Object(ref obj) => {
                         match obj {
                             Object::String(string) => println!("{}", string),
-                            // Object::Function(function) => println!("fn<{}({}) @ {}>", function.name, function.arity, function.chunk_index),
-                            Object::NativeFunction(function) => println!("nativeFn<{}>", function.name),
-                            Object::Closure(closure) => println!("fn<{}({}) @ {}>", closure.function.name, closure.function.arity, closure.function.chunk_index),
+                            // Object::Function(function) => println!("fun<{}({}) @ {}>", function.name, function.arity, function.chunk_index),
+                            Object::NativeFunction(function) => println!("<native fun {}>", function.name),
+                            Object::Closure(closure) => println!("<fun {}({}) @ {}>", closure.function.name, closure.function.arity, closure.function.chunk_index),
                         }
                     },
                 }
