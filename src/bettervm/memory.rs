@@ -85,7 +85,8 @@ impl Trace for Object {
     }
 }
 
-#[derive(Debug, Copy, Clone)] //TODO Double check we want Copy
+//TODO Possibly merge True and False
+#[derive(Debug, Copy, Clone)]
 pub enum Value {
     Number(f64),
     Object(Object),
