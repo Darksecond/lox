@@ -284,9 +284,12 @@ fn compile_binary(compiler: &mut Compiler, operator: BinaryOperator, left: &Expr
         BinaryOperator::Plus => compiler.add_instruction(Instruction::Add)?,
         BinaryOperator::Minus => compiler.add_instruction(Instruction::Subtract)?,
         BinaryOperator::Less => compiler.add_instruction(Instruction::Less)?,
+        BinaryOperator::LessEqual => { compiler.add_instruction(Instruction::Greater)?; compiler.add_instruction(Instruction::Not)? },
         BinaryOperator::Star => compiler.add_instruction(Instruction::Multiply)?,
         BinaryOperator::EqualEqual => compiler.add_instruction(Instruction::Equal)?,
         BinaryOperator::BangEqual => { compiler.add_instruction(Instruction::Equal)?; compiler.add_instruction(Instruction::Not)? },
+        BinaryOperator::Greater => compiler.add_instruction(Instruction::Greater)?,
+        BinaryOperator::GreaterEqual => { compiler.add_instruction(Instruction::Less)?; compiler.add_instruction(Instruction::Not)? },
         _ => unimplemented!(),
     };
     Ok(())

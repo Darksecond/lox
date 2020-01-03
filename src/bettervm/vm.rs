@@ -247,6 +247,12 @@ impl<'a> Vm<'a> {
                     (b, a) => unimplemented!("{:?} < {:?}", a, b),
                 }
             },
+            Instruction::Greater => {
+                match (self.pop()?, self.pop()?) {
+                    (Value::Number(b), Value::Number(a)) => self.push((a > b).into()),
+                    (b, a) => unimplemented!("{:?} > {:?}", a, b),
+                }
+            },
             Instruction::Equal => {
                 let b = self.pop()?;
                 let a = self.pop()?;
