@@ -72,8 +72,10 @@ impl<'a> Vm<'a> {
         
         self.current_frame_mut()?.program_counter += 1;
 
-        let frame = self.current_frame()?;
-        let instr = &frame.chunk.instructions()[frame.program_counter-1];
+        let instr = {
+            let frame = self.current_frame()?;
+            frame.chunk.instructions()[frame.program_counter-1]
+        };
 
         if false {
             println!("stack: {:?}", self.stack); // DEBUG
@@ -85,7 +87,7 @@ impl<'a> Vm<'a> {
 
         match instr {
             Instruction::Constant(index) => {
-                match self.module.constant(*index) {
+                match self.module.constant(index) {
                     Constant::Number(n) => self.push(Value::Number(*n)),
                     Constant::String(string) => self.push_string(string),
                     // Constant::Function(function) => {
@@ -198,7 +200,7 @@ impl<'a> Vm<'a> {
                 self.pop()?;
             },
             Instruction::DefineGlobal(index) => {
-                if let Constant::String(identifier) = self.module.constant(*index) {
+                if let Constant::String(identifier) = self.module.constant(index) {
                     let value = self.pop()?;
                     self.globals.insert(identifier.to_string(), value);
                 } else {
@@ -206,7 +208,7 @@ impl<'a> Vm<'a> {
                 }
             },
             Instruction::GetGlobal(index) => {
-                if let Constant::String(identifier) = self.module.constant(*index) {
+                if let Constant::String(identifier) = self.module.constant(index) {
                     let value = self.globals.get(identifier).cloned();
                     if let Some(value) = value {
                         self.push(value);
@@ -218,7 +220,7 @@ impl<'a> Vm<'a> {
                 }
             },
             Instruction::SetGlobal(index) => {
-                if let Constant::String(identifier) = self.module.constant(*index) {
+                if let Constant::String(identifier) = self.module.constant(index) {
                     let value = *self.peek()?;
                     if self.globals.contains_key(identifier) { 
                         self.globals.insert(identifier.to_string(), value);
@@ -230,11 +232,11 @@ impl<'a> Vm<'a> {
                 }
             },
             Instruction::GetLocal(index) => {
-                let index = frame.base_counter+index;
+                let index = self.current_frame()?.base_counter+index;
                 self.push(self.stack[index]);
             },
             Instruction::SetLocal(index) => {
-                let index = frame.base_counter+index;
+                let index = self.current_frame()?.base_counter+index;
                 let value = *self.peek()?;
                 self.stack[index] = value;
             },
@@ -246,11 +248,11 @@ impl<'a> Vm<'a> {
             },
             Instruction::JumpIfFalse(to) => {
                 if self.peek()?.is_falsey() {
-                    self.current_frame_mut()?.program_counter = *to;
+                    self.current_frame_mut()?.program_counter = to;
                 }
             },
             Instruction::Jump(to) => {
-                self.current_frame_mut()?.program_counter = *to;
+                self.current_frame_mut()?.program_counter = to;
             },
             Instruction::Less => {
                 match (self.pop()?, self.pop()?) {
@@ -259,7 +261,7 @@ impl<'a> Vm<'a> {
                 }
             },
             Instruction::Call(arity) => {
-                let arity = *arity;
+                let arity = arity;
                 self.call(arity)?;
             },
             Instruction::Negate => {
@@ -273,8 +275,13 @@ impl<'a> Vm<'a> {
                 self.push(is_falsey.into());
             },
             Instruction::GetUpvalue(index) => {
-                let upvalue = self.current_frame()?.closure.upvalues[*index];
+                let upvalue = self.current_frame()?.closure.upvalues[index];
                 self.push(self.resolve_upvalue_into_value(&*upvalue.borrow()));
+            },
+            Instruction::SetUpvalue(index) => {
+                let value = *self.peek()?;
+                let upvalue = self.current_frame()?.closure.upvalues[index];
+                self.set_upvalue(&mut *upvalue.borrow_mut(), value);
             },
             Instruction::CloseUpvalue => {
                 let index = self.stack.len() - 1;
@@ -324,6 +331,14 @@ impl<'a> Vm<'a> {
             Upvalue::Closed(value) => *value,
             Upvalue::Upvalue(upvalue) => self.resolve_upvalue_into_value(&*upvalue.borrow()),
             Upvalue::Open(index) => self.stack[*index],
+        }
+    }
+
+    fn set_upvalue(&mut self, upvalue: &mut Upvalue, new_value: Value) {
+        match upvalue {
+            Upvalue::Closed(value) => *value = new_value,
+            Upvalue::Upvalue(upvalue) => self.set_upvalue(&mut *upvalue.borrow_mut(), new_value),
+            Upvalue::Open(index) => self.stack[*index] = new_value,
         }
     }
 

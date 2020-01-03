@@ -46,8 +46,26 @@ fn main() {
     // closures
     // let data = "{ var a = 3; fun first() { print a; } first(); }";
     // let data = "fun outer() {var x = 3; fun inner() { print x; } return inner; } var closure = outer(); closure();";
-    let data = "var global; fun main() { { var a = 3; fun one() { print a; } global = one; } } main(); global();";
+    // let data = "var global; fun main() { { var a = 3; fun one() { print a; } global = one; } } main(); global();";
     // let data = "{ var a = 3; fun first() { print a; } fun second() { print a; } }";
+    let data = "
+    var globalSet;
+    var globalGet;
+    
+    fun main() {
+      var a = \"initial\";
+    
+      fun set() { a = \"updated\"; }
+      fun get() { print a; }
+    
+      globalSet = set;
+      globalGet = get;
+    }
+    
+    main();
+    globalSet();
+    globalGet();
+    ";
 
     let ast = parse_stmt(data).unwrap();
     println!();

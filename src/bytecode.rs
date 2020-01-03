@@ -5,7 +5,7 @@ pub type ChunkIndex = usize;
 pub type ArgumentCount = usize;
 pub type UpvalueIndex = usize;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Copy, Clone)]
 pub enum Instruction {
     Constant(ConstantIndex),
     True,
