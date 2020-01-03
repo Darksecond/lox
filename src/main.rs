@@ -48,34 +48,36 @@ fn main() {
     // let data = "fun outer() {var x = 3; fun inner() { print x; } return inner; } var closure = outer(); closure();";
     // let data = "var global; fun main() { { var a = 3; fun one() { print a; } global = one; } } main(); global();";
     // let data = "{ var a = 3; fun first() { print a; } fun second() { print a; } }";
-    let data = "
-    var globalSet;
-    var globalGet;
+    // let data = "
+    // var globalSet;
+    // var globalGet;
     
-    fun main() {
-      var a = \"initial\";
+    // fun main() {
+    //   var a = \"initial\";
     
-      fun set() { a = \"updated\"; }
-      fun get() { print a; }
+    //   fun set() { a = \"updated\"; }
+    //   fun get() { print a; }
     
-      globalSet = set;
-      globalGet = get;
-    }
+    //   globalSet = set;
+    //   globalGet = get;
+    // }
     
-    main();
-    globalSet();
-    globalGet();
-    ";
+    // main();
+    // globalSet();
+    // globalGet();
+    // ";
 
-    let ast = parse_stmt(data).unwrap();
+    let data = std::fs::read_to_string("test.lox").unwrap();
+
+    let ast = parse_stmt(&data).unwrap();
     println!();
 
     let module = lox::bettercompiler::compile(&ast).unwrap();
 
     println!("constants: {:?}", module.constants());
-    println!("chunk 0: {:?}", module.chunk(0).instructions());
-    // println!("chunk 1: {:?}", module.chunk(1).instructions());
-    // println!("chunk 2: {:?}", module.chunk(2).instructions());
+    for chunk in module.chunks() {
+        println!("chunk: {:?}", chunk.instructions());
+    }
 
     println!();
 

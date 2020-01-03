@@ -97,9 +97,8 @@ impl Trace for Object {
 pub enum Value {
     Number(f64),
     Object(Object),
+    Boolean(bool),
     Nil,
-    True,
-    False,
 }
 
 impl Trace for Value {
@@ -114,8 +113,18 @@ impl Trace for Value {
 impl Value {
     pub fn is_falsey(&self) -> bool {
         match self {
-            Value::False => true,
+            Value::Boolean(boolean) => !boolean,
             Value::Nil => true,
+            _ => false,
+        }
+    }
+
+    pub fn is_same_type(a: &Value, b: &Value) -> bool {
+        match (b,a) {
+            (Value::Number(_), Value::Number(_)) => true,
+            (Value::Boolean(_), Value::Boolean(_)) => true,
+            (Value::Object(_), Value::Object(_)) => true,
+            (Value::Nil, Value::Nil) => true,
             _ => false,
         }
     }
@@ -124,9 +133,9 @@ impl Value {
 impl From<bool> for Value {
     fn from(value: bool) -> Self {
         if value {
-            Value::True
+            Value::Boolean(true)
         } else {
-            Value::False
+            Value::Boolean(false)
         }
     }
 }

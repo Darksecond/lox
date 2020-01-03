@@ -77,11 +77,11 @@ impl<'a> Vm<'a> {
             frame.chunk.instructions()[frame.program_counter-1]
         };
 
-        if false {
-            println!("stack: {:?}", self.stack); // DEBUG
+        if false { // DEBUG
+            println!("stack: {:?}", self.stack);
             println!("");
-            println!("globals: {:?}", self.globals); // DEBUG
-            println!("{:?}", instr); // DEBUG
+            println!("globals: {:?}", self.globals);
+            println!("{:?}", instr);
             println!("");
         }
 
@@ -134,8 +134,7 @@ impl<'a> Vm<'a> {
                 match self.pop()? {
                     Value::Number(n) => println!("{}", n),
                     Value::Nil => println!("nil"),
-                    Value::True => println!("true"),
-                    Value::False => println!("false"),
+                    Value::Boolean(boolean) => println!("{}", boolean),
                     Value::Object(ref obj) => {
                         match obj {
                             Object::String(string) => println!("{}", string),
@@ -151,10 +150,10 @@ impl<'a> Vm<'a> {
             Instruction::Return => {
                 let result = self.pop()?;
                 let frame = self.frames.pop().ok_or(VmError::FrameEmpty)?;
-                if self.frames.len() == 0 { return Ok(InterpretResult::Done); } // We are done interpreting //TODO Move this down
+                if self.frames.len() == 0 { return Ok(InterpretResult::Done); } // We are done interpreting //TODO Move this down?
 
                 for i in frame.base_counter..self.stack.len() {
-                    self.close_upvalues(i)?;
+                    self.close_upvalues(i);
                 }
                 
                 self.stack.split_off(frame.base_counter);
@@ -229,10 +228,10 @@ impl<'a> Vm<'a> {
                 self.stack[index] = value;
             },
             Instruction::True => {
-                self.push(Value::True)
+                self.push(Value::Boolean(true))
             },
             Instruction::False => {
-                self.push(Value::False)
+                self.push(Value::Boolean(false))
             },
             Instruction::JumpIfFalse(to) => {
                 if self.peek()?.is_falsey() {
@@ -248,8 +247,23 @@ impl<'a> Vm<'a> {
                     (b, a) => unimplemented!("{:?} < {:?}", a, b),
                 }
             },
+            Instruction::Equal => {
+                let b = self.pop()?;
+                let a = self.pop()?;
+
+                if Value::is_same_type(&a, &b) {
+                    match (b,a) {
+                        (Value::Number(b), Value::Number(a)) => self.push((a == b).into()),
+                        (Value::Boolean(b), Value::Boolean(a)) => self.push((a == b).into()),
+                        (Value::Object(Object::String(b)), Value::Object(Object::String(a))) => self.push((*a == *b).into()),
+                        (Value::Nil, Value::Nil) => self.push(true.into()),
+                        _ => (),
+                    };
+                } else {
+                    self.push(false.into())
+                }
+            },
             Instruction::Call(arity) => {
-                let arity = arity;
                 self.call(arity)?;
             },
             Instruction::Negate => {
@@ -273,7 +287,7 @@ impl<'a> Vm<'a> {
             },
             Instruction::CloseUpvalue => {
                 let index = self.stack.len() - 1;
-                self.close_upvalues(index)?;
+                self.close_upvalues(index);
                 self.stack.pop().ok_or(VmError::StackEmpty)?;
             },
             _ => unimplemented!("{:?}", instr),
@@ -282,7 +296,7 @@ impl<'a> Vm<'a> {
         Ok(InterpretResult::More)
     }
 
-    fn close_upvalues(&mut self, index: usize) -> Result<(), VmError> {
+    fn close_upvalues(&mut self, index: usize) {
         let value = self.stack[index]; //TODO Result
         for upvalue in &self.upvalues {
             if let Some(root) = gc::upgrade(upvalue) {
@@ -291,12 +305,10 @@ impl<'a> Vm<'a> {
                 }
             }
         }
-
-        Ok(())
     }
 
     fn find_upvalue_by_index(&self, index: usize) -> Gc<RefCell<Upvalue>> {
-        let frame = &self.frames[self.frames.len()-2]; //TODO Result
+        let frame = &self.frames[self.frames.len()-1]; //TODO Result
         frame.closure.upvalues[index]
     }
 

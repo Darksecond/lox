@@ -118,6 +118,10 @@ impl Module {
     pub fn constant(&self, index: ConstantIndex) -> &Constant {
         &self.constants[index]
     }
+
+    pub fn chunks(&self) -> &[Chunk] {
+        &self.chunks
+    }
 }
 
 impl Chunk {
