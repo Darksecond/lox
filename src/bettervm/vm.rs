@@ -49,7 +49,7 @@ impl<'a> Vm<'a> {
     pub fn interpret(&mut self) -> Result<(), VmError> {
         let function = gc::manage(Function{ arity: 0, chunk_index: 0, name: "top".into() });
         let closure = gc::manage(Closure { upvalues: vec![], function: function.as_gc() });
-        self.push(Value::Object(Object::Closure(closure.as_gc())));
+        self.push(Value::Closure(closure.as_gc()));
 
         self.frames.push(CallFrame { //TODO Use begin/end_frame because it needs to do cleanup of the stack
             program_counter: 0,
@@ -125,8 +125,7 @@ impl<'a> Vm<'a> {
                             function: function_root.as_gc(),
                             upvalues: upvalue_roots.iter().map(|r| r.as_gc()).collect(),
                         });
-                        let object = Object::Closure(closure_root.as_gc());
-                        self.push(Value::Object(object));
+                        self.push(Value::Closure(closure_root.as_gc()));
                     },
                 }
             },
@@ -135,13 +134,9 @@ impl<'a> Vm<'a> {
                     Value::Number(n) => println!("{}", n),
                     Value::Nil => println!("nil"),
                     Value::Boolean(boolean) => println!("{}", boolean),
-                    Value::Object(ref obj) => {
-                        match obj {
-                            Object::String(string) => println!("{}", string),
-                            Object::NativeFunction(function) => println!("<native fun {}>", function.name),
-                            Object::Closure(closure) => println!("<fun {}({}) @ {}>", closure.function.name, closure.function.arity, closure.function.chunk_index),
-                        }
-                    },
+                    Value::String(string) => println!("{}", string),
+                    Value::NativeFunction(function) => println!("<native fun {}>", function.name),
+                    Value::Closure(closure) => println!("<fun {}({}) @ {}>", closure.function.name, closure.function.arity, closure.function.chunk_index),
                 }
             },
             Instruction::Nil => {
@@ -162,12 +157,7 @@ impl<'a> Vm<'a> {
             Instruction::Add => {
                 match (self.pop()?, self.pop()?) {
                     (Value::Number(b), Value::Number(a)) => self.push(Value::Number(a+b)),
-                    (Value::Object(ref b), Value::Object(ref a)) => {
-                        match (b, a) {
-                            (Object::String(b), Object::String(a)) => self.push_string(&format!("{}{}", a, b)),
-                            (b, a) => unimplemented!("{:?} + {:?}", a, b),
-                        }
-                    },
+                    (Value::String(b), Value::String(a)) => self.push_string(&format!("{}{}", a, b)),
                     (b, a) => unimplemented!("{:?} + {:?}", a, b),
                 }
             },
@@ -261,7 +251,9 @@ impl<'a> Vm<'a> {
                     match (b,a) {
                         (Value::Number(b), Value::Number(a)) => self.push((a == b).into()),
                         (Value::Boolean(b), Value::Boolean(a)) => self.push((a == b).into()),
-                        (Value::Object(Object::String(b)), Value::Object(Object::String(a))) => self.push((*a == *b).into()),
+                        (Value::String(b), Value::String(a)) => self.push((*a == *b).into()),
+                        (Value::Closure(_), Value::Closure(_)) => unimplemented!(),
+                        (Value::NativeFunction(_), Value::NativeFunction(_)) => unimplemented!(),
                         (Value::Nil, Value::Nil) => self.push(true.into()),
                         _ => (),
                     };
@@ -334,23 +326,19 @@ impl<'a> Vm<'a> {
 
     fn call(&mut self, arity: usize) -> Result<(), VmError> {
         let callee = *self.peek_n(arity)?;
-        if let Value::Object(ref callee) = callee {
-            match callee {
-                Object::Closure(callee) => {
-                    if callee.function.arity != arity { return Err(VmError::IncorrectArity); }
-                    self.begin_frame(*callee);
-                },
-                Object::NativeFunction(callee) => {
-                    let mut args = self.pop_n(arity)?;
-                    args.reverse();
-                    self.pop()?; // discard callee
-                    let result = (callee.code)(&args);
-                    self.push(result);
-                },
-                _ => return Err(VmError::InvalidCallee),
-            }
-        } else {
-            return Err(VmError::InvalidCallee);
+        match callee {
+            Value::Closure(callee) => {
+                if callee.function.arity != arity { return Err(VmError::IncorrectArity); }
+                self.begin_frame(callee);
+            },
+            Value::NativeFunction(callee) => {
+                let mut args = self.pop_n(arity)?;
+                args.reverse();
+                self.pop()?; // discard callee
+                let result = (callee.code)(&args);
+                self.push(result);
+            },
+            _ => return Err(VmError::InvalidCallee),
         }
 
         Ok(())
@@ -370,8 +358,7 @@ impl<'a> Vm<'a> {
 
     fn push_string(&mut self, string: &str) {
         let root = gc::manage(string.to_string());
-        let object = Object::String(root.as_gc());
-        self.push(Value::Object(object));
+        self.push(Value::String(root.as_gc()));
     }
 
     fn pop(&mut self) -> Result<Value, VmError> {
@@ -411,7 +398,6 @@ impl<'a> Vm<'a> {
         };
 
         let root = gc::manage(native_function);
-        let object = Object::NativeFunction(root.as_gc());
-        self.globals.insert(identifier.to_string(), Value::Object(object));
+        self.globals.insert(identifier.to_string(), Value::NativeFunction(root.as_gc()));
     }
 }

@@ -73,30 +73,12 @@ impl From<&crate::bytecode::Function> for Function {
     }
 }
 
-//TODO Think about merging this into Value
-//     It's no longer stringly required as a seperate thing.
-#[derive(Debug, Copy, Clone)]
-pub enum Object {
-    String(Gc<String>),
-    Closure(Gc<Closure>),
-    NativeFunction(Gc<NativeFunction>),
-}
-
-impl Trace for Object {
-    fn trace(&self) {
-        match self {
-            Object::String(string) => string.trace(),
-            Object::NativeFunction(function) => function.trace(),
-            Object::Closure(closure) => closure.trace(),
-        }
-    }
-}
-
-//TODO Possibly merge True and False
 #[derive(Debug, Copy, Clone)]
 pub enum Value {
     Number(f64),
-    Object(Object),
+    String(Gc<String>),
+    Closure(Gc<Closure>),
+    NativeFunction(Gc<NativeFunction>),
     Boolean(bool),
     Nil,
 }
@@ -104,7 +86,9 @@ pub enum Value {
 impl Trace for Value {
     fn trace(&self) {
         match self {
-            Value::Object(obj) => obj.trace(),
+            Value::String(string) => string.trace(),
+            Value::NativeFunction(function) => function.trace(),
+            Value::Closure(closure) => closure.trace(),
             _ => (),
         }
     }
@@ -123,7 +107,9 @@ impl Value {
         match (b,a) {
             (Value::Number(_), Value::Number(_)) => true,
             (Value::Boolean(_), Value::Boolean(_)) => true,
-            (Value::Object(_), Value::Object(_)) => true,
+            (Value::String(_), Value::String(_)) => true,
+            (Value::NativeFunction(_), Value::NativeFunction(_)) => true,
+            (Value::Closure(_), Value::Closure(_)) => true,
             (Value::Nil, Value::Nil) => true,
             _ => false,
         }
