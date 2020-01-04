@@ -55,6 +55,7 @@ pub enum Upvalue {
     Upvalue(UpvalueIndex),
 }
 
+//TODO Merge this into Closure, we'll wait until methods are implemented though
 #[derive(Debug, PartialEq)]
 pub struct Function {
     pub name: String,
@@ -66,7 +67,6 @@ pub struct Function {
 pub enum Constant {
     Number(f64),
     String(String),
-    // Function(Function),
     Closure(Closure),
 }
 
