@@ -1,6 +1,7 @@
 use crate::bettergc::{Trace, Gc};
 use crate::bytecode::ChunkIndex;
 use std::cell::RefCell;
+use std::collections::HashMap;
 
 #[derive(Debug, Copy, Clone)]
 pub enum Upvalue {
@@ -32,6 +33,29 @@ impl Trace for Upvalue {
             Upvalue::Closed(value) => value.trace(),
             Upvalue::Open(_) => (),
         }
+    }
+}
+
+#[derive(Debug)]
+pub struct Instance {
+    pub class: Gc<RefCell<Class>>,
+    pub fields: HashMap<String, Value>,
+}
+
+impl Trace for Instance {
+    fn trace(&self) {
+        self.class.trace();
+        self.fields.trace();
+    }
+}
+
+#[derive(Debug)]
+pub struct Class {
+    pub name: String,
+}
+
+impl Trace for Class {
+    fn trace(&self) {
     }
 }
 
@@ -89,6 +113,8 @@ pub enum Value {
     Closure(Gc<Closure>),
     NativeFunction(Gc<NativeFunction>),
     Boolean(bool),
+    Class(Gc<RefCell<Class>>),
+    Instance(Gc<RefCell<Instance>>),
     Nil,
 }
 
@@ -98,7 +124,11 @@ impl Trace for Value {
             Value::String(string) => string.trace(),
             Value::NativeFunction(function) => function.trace(),
             Value::Closure(closure) => closure.trace(),
-            _ => (),
+            Value::Class(class) => class.trace(),
+            Value::Instance(instance) => instance.trace(),
+            Value::Number(_) => (),
+            Value::Nil => (),
+            Value::Boolean(_) => (),
         }
     }
 }

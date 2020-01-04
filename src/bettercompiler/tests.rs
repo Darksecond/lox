@@ -226,7 +226,7 @@ fn test_simple_function() {
 
     let module = compile_code("fun first() { print 3; } first();");
 
-    assert_instructions(module.chunk(0), vec![Constant(1), DefineGlobal(2), GetGlobal(3), Call(0), Pop, Instruction::Nil, Instruction::Return]);
+    assert_instructions(module.chunk(0), vec![Closure(1), DefineGlobal(2), GetGlobal(3), Call(0), Pop, Instruction::Nil, Instruction::Return]);
     assert_instructions(module.chunk(1), vec![Constant(0), Print, Nil, Return]);
 
     assert_constants(&module, vec![
@@ -243,7 +243,7 @@ fn test_function_with_one_argument() {
 
     let module = compile_code("fun first(a) { print a; } first(3);");
 
-    assert_instructions(module.chunk(0), vec![Constant(0), DefineGlobal(1), GetGlobal(2), Constant(3), Call(1), Pop, Instruction::Nil, Instruction::Return]);
+    assert_instructions(module.chunk(0), vec![Closure(0), DefineGlobal(1), GetGlobal(2), Constant(3), Call(1), Pop, Instruction::Nil, Instruction::Return]);
     assert_instructions(module.chunk(1), vec![GetLocal(1), Print, Nil, Return]);
 
     assert_constants(&module, vec![
@@ -260,7 +260,7 @@ fn test_recursive_function_with_one_argument() {
 
     let module = compile_code("fun first(a) { print first(a+1); } first(3);");
 
-    assert_instructions(module.chunk(0), vec![Constant(2), DefineGlobal(3), GetGlobal(4), Constant(5), Call(1), Pop, Nil, Return]);
+    assert_instructions(module.chunk(0), vec![Closure(2), DefineGlobal(3), GetGlobal(4), Constant(5), Call(1), Pop, Nil, Return]);
     assert_instructions(module.chunk(1), vec![GetGlobal(0), GetLocal(1), Constant(1), Add, Call(1), Print, Nil, Return]);
 
     assert_constants(&module, vec![
@@ -279,7 +279,7 @@ fn test_functions_calling_functions() {
 
     let module = compile_code("fun first() { second(); } fun second() { print 3; } first();");
 
-    assert_instructions(module.chunk(0), vec![Constant(1), DefineGlobal(2), Constant(4), DefineGlobal(5), GetGlobal(6), Call(0), Pop, Instruction::Nil, Instruction::Return]);
+    assert_instructions(module.chunk(0), vec![Closure(1), DefineGlobal(2), Closure(4), DefineGlobal(5), GetGlobal(6), Call(0), Pop, Instruction::Nil, Instruction::Return]);
     assert_instructions(module.chunk(1), vec![GetGlobal(0), Call(0), Pop, Nil, Return]);
     assert_instructions(module.chunk(2), vec![Constant(3), Print, Nil, Return]);
 
@@ -300,7 +300,7 @@ fn test_simple_scoped_function() {
 
     let module = compile_code("{ fun first() { print 3; } first(); }");
 
-    assert_instructions(module.chunk(0), vec![Constant(1), GetLocal(1), Call(0), Pop, Pop, Instruction::Nil, Instruction::Return]);
+    assert_instructions(module.chunk(0), vec![Closure(1), GetLocal(1), Call(0), Pop, Pop, Instruction::Nil, Instruction::Return]);
     assert_instructions(module.chunk(1), vec![Constant(0), Print, Nil, Return]);
 
     assert_constants(&module, vec![
@@ -315,7 +315,7 @@ fn test_function_with_return() {
 
     let module = compile_code("fun first() { return 3; }");
 
-    assert_instructions(module.chunk(0), vec![Constant(1), DefineGlobal(2), Instruction::Nil, Instruction::Return]);
+    assert_instructions(module.chunk(0), vec![Closure(1), DefineGlobal(2), Instruction::Nil, Instruction::Return]);
     assert_instructions(module.chunk(1), vec![Constant(0), Return, Nil, Return]);
 
     assert_constants(&module, vec![
@@ -331,7 +331,7 @@ fn test_upvalue() {
 
     let module = compile_code("{var a = 3; fun f() { print a; }}");
 
-    assert_instructions(module.chunk(0), vec![Constant(0), Constant(1), Pop, CloseUpvalue, Nil, Return]);
+    assert_instructions(module.chunk(0), vec![Constant(0), Closure(1), Pop, CloseUpvalue, Nil, Return]);
     assert_instructions(module.chunk(1), vec![GetUpvalue(0), Print, Nil, Return]);
 
     assert_constants(&module, vec![
@@ -346,8 +346,8 @@ fn test_double_upvalue() {
 
     let module = compile_code("{var a = 3; fun f() { fun g() { print a; } }}");
 
-    assert_instructions(module.chunk(0), vec![Constant(0), Constant(2), Pop, CloseUpvalue, Nil, Return]);
-    assert_instructions(module.chunk(1), vec![Constant(1), Pop, Nil, Return]);
+    assert_instructions(module.chunk(0), vec![Constant(0), Closure(2), Pop, CloseUpvalue, Nil, Return]);
+    assert_instructions(module.chunk(1), vec![Closure(1), Pop, Nil, Return]);
     assert_instructions(module.chunk(2), vec![GetUpvalue(0), Print, Nil, Return]);
 
     assert_constants(&module, vec![
@@ -363,7 +363,7 @@ fn test_multiple_upvalue() {
 
     let module = compile_code("{var a = 3; var b = 4; fun f() {print b; print a; }}");
 
-    assert_instructions(module.chunk(0), vec![Constant(0), Constant(1), Constant(2), Pop, CloseUpvalue, CloseUpvalue, Nil, Return]);
+    assert_instructions(module.chunk(0), vec![Constant(0), Constant(1), Closure(2), Pop, CloseUpvalue, CloseUpvalue, Nil, Return]);
     assert_instructions(module.chunk(1), vec![GetUpvalue(0), Print, GetUpvalue(1), Print, Nil, Return]);
 
     assert_constants(&module, vec![
@@ -379,8 +379,8 @@ fn test_multiple_double_upvalue() {
 
     let module = compile_code("{var a = 3; var b = 4; fun f() { fun g() { print a; print b; }}}");
 
-    assert_instructions(module.chunk(0), vec![Constant(0), Constant(1), Constant(3), Pop, CloseUpvalue, CloseUpvalue, Nil, Return]);
-    assert_instructions(module.chunk(1), vec![Constant(2), Pop, Nil, Return]);
+    assert_instructions(module.chunk(0), vec![Constant(0), Constant(1), Closure(3), Pop, CloseUpvalue, CloseUpvalue, Nil, Return]);
+    assert_instructions(module.chunk(1), vec![Closure(2), Pop, Nil, Return]);
     assert_instructions(module.chunk(2), vec![GetUpvalue(0), Print, GetUpvalue(1), Print, Nil, Return]);
 
     assert_constants(&module, vec![
@@ -397,8 +397,8 @@ fn test_scoped_upvalue() {
 
     let module = compile_code("var global; fun main() { { var a = 3; fun one() { print a; } global = one; } } main();");
 
-    assert_instructions(module.chunk(0), vec![Nil, DefineGlobal(0), Constant(4), DefineGlobal(5), GetGlobal(6), Call(0), Pop, Instruction::Nil, Instruction::Return]);
-    assert_instructions(module.chunk(1), vec![Constant(1), Constant(2), GetLocal(2), SetGlobal(3), Pop, Pop, CloseUpvalue, Nil, Return]);
+    assert_instructions(module.chunk(0), vec![Nil, DefineGlobal(0), Closure(4), DefineGlobal(5), GetGlobal(6), Call(0), Pop, Instruction::Nil, Instruction::Return]);
+    assert_instructions(module.chunk(1), vec![Constant(1), Closure(2), GetLocal(2), SetGlobal(3), Pop, Pop, CloseUpvalue, Nil, Return]);
     assert_instructions(module.chunk(2), vec![GetUpvalue(0), Print, Nil, Return]);
 
     assert_constants(&module, vec![
@@ -412,6 +412,62 @@ fn test_scoped_upvalue() {
     ]);
 }
 
+#[test]
+fn test_empty_class_global() {
+    use crate::bytecode::Instruction::*;
+
+    let module = compile_code("class Foo {}");
+
+    assert_instructions(module.chunk(0), vec![Class(0), DefineGlobal(1), Nil, Return]);
+
+    assert_constants(&module, vec![
+        make_class("Foo"),
+        "Foo".into(),
+    ]);
+}
+
+#[test]
+fn test_empty_class_local() {
+    use crate::bytecode::Instruction::*;
+
+    let module = compile_code("{class Foo {}}");
+
+    assert_instructions(module.chunk(0), vec![Class(0), Pop, Nil, Return]);
+
+    assert_constants(&module, vec![
+        make_class("Foo"),
+    ]);
+}
+
+#[test]
+fn test_set_property() {
+    use crate::bytecode::Instruction::*;
+
+    let module = compile_code("x.test = 3;");
+
+    assert_instructions(module.chunk(0), vec![GetGlobal(0), Constant(1), SetProperty(2), Pop, Nil, Return]);
+
+    assert_constants(&module, vec![
+        "x".into(),
+        3.0.into(),
+        "test".into(),
+    ]);
+}
+
+#[test]
+fn test_get_property() {
+    use crate::bytecode::Instruction::*;
+
+    let module = compile_code("x.test;");
+
+    assert_instructions(module.chunk(0), vec![GetGlobal(0), GetProperty(1), Pop, Nil, Return]);
+
+    assert_constants(&module, vec![
+        "x".into(),
+        "test".into(),
+    ]);
+}
+
 fn make_fun(name: &str, index: usize, arity: usize) -> Constant {
     crate::bytecode::Function{name: name.into(), chunk_index: index, arity: arity}.into()
 }
@@ -420,4 +476,8 @@ fn make_closure(name: &str, index: usize, arity: usize, upvalues: Vec<Upvalue>) 
     let function = crate::bytecode::Function{name: name.into(), chunk_index: index, arity: arity};
     let closure = crate::bytecode::Closure{function, upvalues};
     Constant::Closure(closure)
+}
+
+fn make_class(name: &str) -> Constant {
+    Constant::Class(Class{ name: name.to_string() })
 }

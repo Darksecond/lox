@@ -22,8 +22,38 @@ fn compile_stmt(compiler: &mut Compiler, stmt: &Stmt) -> Result<(), CompilerErro
         Stmt::While(ref expr, ref stmt) => compile_while(compiler, expr, stmt),
         Stmt::Function(ref identifier, ref args, ref stmts) => compile_function(compiler, identifier, args, stmts),
         Stmt::Return(ref expr) => compile_return(compiler, expr.as_ref()),
-        _ => unimplemented!(),
+        Stmt::Class(ref identifier, ref extends, ref stmts) => compile_class(compiler, identifier, extends.as_deref(), stmts),
     }
+}
+
+fn declare_variable(compiler: &mut Compiler, identifier: &str) -> Result<(), CompilerError> {
+    if compiler.is_scoped() {
+        compiler.add_local(identifier)?;
+    }
+    Ok(())
+}
+
+fn define_variable(compiler: &mut Compiler, identifier: &str) -> Result<(), CompilerError> {
+    if compiler.is_scoped() {
+        compiler.mark_local_initialized()?;
+    } else {
+        let constant = compiler.add_constant(identifier);
+        compiler.add_instruction(Instruction::DefineGlobal(constant))?;
+    }
+    Ok(())
+}
+
+fn compile_class(compiler: &mut Compiler, identifier: &str, _extends: Option<&str>, _stmts: &[Stmt]) -> Result<(), CompilerError> {
+
+    declare_variable(compiler, identifier)?;
+    let constant = compiler.add_constant(Constant::Class(Class{ name: identifier.to_string() }));
+    compiler.add_instruction(Instruction::Class(constant))?;
+    define_variable(compiler, identifier)?;
+
+    //TODO Extends
+    //TODO Methods
+
+    Ok(())
 }
 
 fn compile_return<E: AsRef<Expr>>(compiler: &mut Compiler, expr: Option<E>) -> Result<(), CompilerError> {
@@ -69,7 +99,7 @@ fn compile_function(compiler: &mut Compiler, identifier: &str, args: &Vec<Identi
     };
 
     let constant = compiler.add_constant(Constant::Closure(closure));
-    compiler.add_instruction(Instruction::Constant(constant))?;
+    compiler.add_instruction(Instruction::Closure(constant))?;
 
     //define
     if !compiler.is_scoped() {
@@ -168,8 +198,25 @@ fn compile_expr(compiler: &mut Compiler, expr: &Expr) -> Result<(), CompilerErro
         Expr::Call(ref identifier, ref args) => compile_call(compiler, identifier, args),
         Expr::Grouping(ref expr) => compile_expr(compiler, expr),
         Expr::Unary(operator, ref expr) => compile_unary(compiler, operator, expr),
-        _ => unimplemented!(),
+        Expr::Set(ref expr, ref identifier, ref value) => compiler_set(compiler, expr, identifier, value),
+        Expr::Get(ref expr, ref identifier) => compiler_get(compiler, expr, identifier),
+        ref expr => unimplemented!("{:?}", expr),
     }
+}
+
+fn compiler_get(compiler: &mut Compiler, expr: &Expr, identifier: &str) -> Result<(), CompilerError> {
+    compile_expr(compiler, expr)?;
+    let constant = compiler.add_constant(identifier);
+    compiler.add_instruction(Instruction::GetProperty(constant))?;
+    Ok(())
+}
+
+fn compiler_set(compiler: &mut Compiler, expr: &Expr, identifier: &str, value: &Expr) -> Result<(), CompilerError> {
+    compile_expr(compiler, expr)?;
+    compile_expr(compiler, value)?;
+    let constant = compiler.add_constant(identifier);
+    compiler.add_instruction(Instruction::SetProperty(constant))?;
+    Ok(())
 }
 
 fn compile_unary(compiler: &mut Compiler, operator: UnaryOperator, expr: &Expr) -> Result<(), CompilerError> {

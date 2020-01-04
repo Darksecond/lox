@@ -35,12 +35,22 @@ pub enum Instruction {
     SetLocal(StackIndex),
     GetUpvalue(StackIndex),
     SetUpvalue(StackIndex),
+    SetProperty(ConstantIndex),
+    GetProperty(ConstantIndex),
 
     Jump(InstructionIndex),
     JumpIfFalse(InstructionIndex),
     Call(ArgumentCount),
     CloseUpvalue,
+
+    Class(ConstantIndex),
+    Closure(ConstantIndex),
     // etc
+}
+
+#[derive(Debug, PartialEq)]
+pub struct Class {
+    pub name: String,
 }
 
 #[derive(Debug, PartialEq)]
@@ -68,6 +78,7 @@ pub enum Constant {
     Number(f64),
     String(String),
     Closure(Closure),
+    Class(Class),
 }
 
 impl From<f64> for Constant {

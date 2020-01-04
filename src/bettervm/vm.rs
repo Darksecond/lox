@@ -17,7 +17,11 @@ pub enum VmError {
     StringConstantExpected,
     GlobalNotDefined,
     InvalidCallee,
-    IncorrectArity
+    IncorrectArity,
+    UnexpectedConstant,
+    ClosureConstantExpected,
+    UnexpectedValue,
+    UndefinedProperty,
 }
 
 struct CallFrame<'a> {
@@ -100,33 +104,74 @@ impl<'a> Vm<'a> {
                 match self.module.constant(index) {
                     Constant::Number(n) => self.push(Value::Number(*n)),
                     Constant::String(string) => self.push_string(string),
-                    Constant::Closure(closure) => {
-                        let upvalues = closure.upvalues.iter().map(|u| {
-                            match u {
-                                crate::bytecode::Upvalue::Local(index) => {
-                                    let frame = &self.frames[self.frames.len()-1]; //TODO Result // Get the enclosing frame
-                                    let base = frame.base_counter;
-                                    let index = base + *index;
+                    Constant::Class(_) => unimplemented!(),
+                    Constant::Closure(_) => unimplemented!(),
+                }
+            },
+            Instruction::Closure(index) => {
+                if let Constant::Closure(closure) = self.module.constant(index) {
+                    let upvalues = closure.upvalues.iter().map(|u| {
+                        match u {
+                            crate::bytecode::Upvalue::Local(index) => {
+                                let frame = &self.frames[self.frames.len()-1]; //TODO Result // Get the enclosing frame
+                                let base = frame.base_counter;
+                                let index = base + *index;
 
-                                    if let Some(upvalue) = self.find_open_upvalue_with_index(index) {
-                                        upvalue
-                                    } else {
-                                        let root = gc::manage(RefCell::new(Upvalue::Open(index)));
-                                        self.upvalues.push(root.clone());
-                                        root.as_gc()
-                                    }
-                                },
-                                crate::bytecode::Upvalue::Upvalue(u) => self.find_upvalue_by_index(*u),
-                            }
-                        }).collect();
+                                if let Some(upvalue) = self.find_open_upvalue_with_index(index) {
+                                    upvalue
+                                } else {
+                                    let root = gc::manage(RefCell::new(Upvalue::Open(index)));
+                                    self.upvalues.push(root.clone());
+                                    root.as_gc()
+                                }
+                            },
+                            crate::bytecode::Upvalue::Upvalue(u) => self.find_upvalue_by_index(*u),
+                        }
+                    }).collect();
 
-                        let function_root = gc::manage(Function::from(&closure.function));
-                        let closure_root = gc::manage(Closure {
-                            function: function_root.as_gc(),
-                            upvalues: upvalues,
-                        });
-                        self.push(Value::Closure(closure_root.as_gc()));
-                    },
+                    let function_root = gc::manage(Function::from(&closure.function));
+                    let closure_root = gc::manage(Closure {
+                        function: function_root.as_gc(),
+                        upvalues: upvalues,
+                    });
+                    self.push(Value::Closure(closure_root.as_gc()));
+                } else {
+                    return Err(VmError::ClosureConstantExpected);
+                }
+            },
+            Instruction::Class(index) => {
+                if let Constant::Class(class) = self.module.constant(index) {
+                    let class = gc::manage(RefCell::new(Class { name: class.name.clone() }));
+                    self.push(Value::Class(class.as_gc()));
+                } else {
+                    return Err(VmError::UnexpectedConstant);
+                }
+            },
+            Instruction::SetProperty(index) => {
+                if let Constant::String(property) = self.module.constant(index) {
+                    if let Value::Instance(instance) = self.peek_n(1)? {
+                        instance.borrow_mut().fields.insert(property.clone(), *self.peek()?);
+
+                        let value = self.pop()?;
+                        self.pop()?;
+                        self.push(value);
+                    } else {
+                        return Err(VmError::UnexpectedValue);
+                    }
+                } else {
+                    return Err(VmError::UnexpectedConstant);
+                }
+            },
+            Instruction::GetProperty(index) => {
+                if let Constant::String(property) = self.module.constant(index) {
+                    if let Value::Instance(instance) = self.pop()? {
+                        let instance = gc::root(instance);
+                        if let Some(value) = instance.borrow().fields.get(property) {
+                            self.push(*value);
+                        } else {
+                            return Err(VmError::UndefinedProperty);
+                        };
+                    }
                 }
             },
             Instruction::Print => {
@@ -137,6 +182,8 @@ impl<'a> Vm<'a> {
                     Value::String(string) => println!("{}", string),
                     Value::NativeFunction(function) => println!("<native fun {}>", function.name),
                     Value::Closure(closure) => println!("<fun {}({}) @ {}>", closure.function.name, closure.function.arity, closure.function.chunk_index),
+                    Value::Class(class) => println!("{}", class.borrow().name),
+                    Value::Instance(instance) => println!("{} instance", instance.borrow().class.borrow().name),
                 }
             },
             Instruction::Nil => {
@@ -347,6 +394,13 @@ impl<'a> Vm<'a> {
                 self.pop()?; // discard callee
                 let result = (callee.code)(&args);
                 self.push(result);
+            },
+            Value::Class(class) => {
+                if arity > 0 { unimplemented!("Calling a class with arguments is not yet supported"); }
+                self.pop()?; //TODO Temporary, remove when arguments are supported
+
+                let instance = gc::manage(RefCell::new(Instance{ class, fields: HashMap::new()}));
+                self.push(Value::Instance(instance.as_gc()));
             },
             _ => return Err(VmError::InvalidCallee),
         }
