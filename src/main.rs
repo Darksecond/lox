@@ -1,13 +1,4 @@
 use lox;
-use lox::tokenizer::*;
-use lox::ast::*;
-
-fn parse_stmt(data: &str) -> Result<Vec<Stmt>, String> {
-    let tokens = tokenize_with_context(data);
-    // println!("Tokens: {:?}", tokens);
-    let mut it = tokens.as_slice().into_iter().map(|tc| &tc.token).peekable();
-    lox::stmt_parser::parse(&mut it)
-}
 
 fn main() {
     // let data = "print 3;";
@@ -69,10 +60,7 @@ fn main() {
 
     let data = std::fs::read_to_string("test.lox").unwrap();
 
-    let ast = parse_stmt(&data).unwrap();
-    println!();
-
-    let module = lox::bettercompiler::compile(&ast).unwrap();
+    let module = lox::compile(&data).unwrap();
 
     println!("constants: {:?}", module.constants());
     for chunk in module.chunks() {
