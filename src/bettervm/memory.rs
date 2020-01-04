@@ -61,6 +61,8 @@ impl std::fmt::Debug for NativeFunction {
 
 impl Trace for NativeFunction { fn trace(&self) {} }
 
+//TODO Drop this entirely and merge this into Closure
+//     We'll wait and see how methods will be implemented before we do this though
 #[derive(Debug)]
 pub struct Function {
     pub name: String,
