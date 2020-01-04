@@ -17,6 +17,13 @@ impl Upvalue {
             Self::Closed(_) => false,
         }
     }
+
+    pub fn is_open(&self) -> bool {
+        match self {
+            Self::Open(_) => true,
+            Self::Closed(_) => false,
+        }
+    }
 }
 
 impl Trace for Upvalue {

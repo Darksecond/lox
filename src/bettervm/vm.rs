@@ -1,7 +1,7 @@
 use super::memory::*;
 use std::collections::HashMap;
 use crate::bytecode::{Module, Chunk};
-use crate::bettergc::{UniqueRoot, Gc, Weak, Root, gc};
+use crate::bettergc::{UniqueRoot, Gc, Root, gc};
 use std::cell::RefCell;
 
 #[derive(PartialEq)]
@@ -32,7 +32,7 @@ pub struct Vm<'a> {
     frames: Vec<CallFrame<'a>>,
     stack: UniqueRoot<Vec<Value>>,
     globals: UniqueRoot<HashMap<String, Value>>,
-    upvalues: Vec<Weak<RefCell<Upvalue>>>, //TODO Replace this with a list of *just* open upvalues, then we don't care about it being weak.
+    upvalues: Vec<Root<RefCell<Upvalue>>>,
 }
 
 impl<'a> Vm<'a> {
@@ -64,6 +64,16 @@ impl<'a> Vm<'a> {
         //     this is required if we later want to be able to re-use a 'VmModule' in another vm.
 
         Ok(())
+    }
+
+    pub fn set_native_fn(&mut self, identifier: &str, code: fn(&[Value]) -> Value) {
+        let native_function = NativeFunction {
+            name: identifier.to_string(),
+            code: code,
+        };
+
+        let root = gc::manage(native_function);
+        self.globals.insert(identifier.to_string(), Value::NativeFunction(root.as_gc()));
     }
 
     fn interpret_next(&mut self) -> Result<InterpretResult, VmError> {
@@ -98,32 +108,22 @@ impl<'a> Vm<'a> {
                                     let base = frame.base_counter;
                                     let index = base + *index;
 
-                                    //TODO Write a test for this
-                                    // Try to find an existing upvalue that matches ours
-                                    for upvalue in self.upvalues.iter().rev() {
-                                        if let Some(root) = gc::upgrade(upvalue) {
-                                            if root.borrow().is_open_with_index(index) { return root; }
-                                        }
+                                    if let Some(upvalue) = self.find_open_upvalue_with_index(index) {
+                                        upvalue
+                                    } else {
+                                        let root = gc::manage(RefCell::new(Upvalue::Open(index)));
+                                        self.upvalues.push(root.clone());
+                                        root.as_gc()
                                     }
-
-                                    gc::manage(RefCell::new(Upvalue::Open(index)))
                                 },
-                                crate::bytecode::Upvalue::Upvalue(u) => gc::root(self.find_upvalue_by_index(*u)),
+                                crate::bytecode::Upvalue::Upvalue(u) => self.find_upvalue_by_index(*u),
                             }
-                        });
-                        let upvalue_roots: Vec<Root<RefCell<Upvalue>>> = upvalues.collect();
-
-                        // Put all upvalues into a big list so we can iterate through them.
-                        //TODO In the future only push open upvalues, and only if they are not in the list already
-                        //     We should consider making it a Set
-                        for upvalue in &upvalue_roots {
-                            self.upvalues.push(gc::downgrade(upvalue.as_gc()));
-                        }
+                        }).collect();
 
                         let function_root = gc::manage(Function::from(&closure.function));
                         let closure_root = gc::manage(Closure {
                             function: function_root.as_gc(),
-                            upvalues: upvalue_roots.iter().map(|r| r.as_gc()).collect(),
+                            upvalues: upvalues,
                         });
                         self.push(Value::Closure(closure_root.as_gc()));
                     },
@@ -296,18 +296,28 @@ impl<'a> Vm<'a> {
 
     fn close_upvalues(&mut self, index: usize) {
         let value = self.stack[index]; //TODO Result
-        for upvalue in &self.upvalues {
-            if let Some(root) = gc::upgrade(upvalue) {
-                if root.borrow().is_open_with_index(index) {
-                    root.replace(Upvalue::Closed(value));
-                }
+        for root in &self.upvalues {
+            if root.borrow().is_open_with_index(index) {
+                root.replace(Upvalue::Closed(value));
             }
         }
+
+        self.upvalues.retain(|u| u.borrow().is_open());
     }
 
     fn find_upvalue_by_index(&self, index: usize) -> Gc<RefCell<Upvalue>> {
         let frame = &self.frames[self.frames.len()-1]; //TODO Result
         frame.closure.upvalues[index]
+    }
+
+    fn find_open_upvalue_with_index(&self, index: usize) -> Option<Gc<RefCell<Upvalue>>> {
+        for root in self.upvalues.iter().rev() {
+            if root.borrow().is_open_with_index(index) {
+                return Some(root.as_gc());
+            }
+        }
+
+        None
     }
 
     fn resolve_upvalue_into_value(&self, upvalue: &Upvalue) -> Value {
@@ -389,15 +399,5 @@ impl<'a> Vm<'a> {
             chunk: self.module.chunk(closure.function.chunk_index),
             closure: gc::root(closure),
         });
-    }
-
-    pub fn set_native_fn(&mut self, identifier: &str, code: fn(&[Value]) -> Value) {
-        let native_function = NativeFunction {
-            name: identifier.to_string(),
-            code: code,
-        };
-
-        let root = gc::manage(native_function);
-        self.globals.insert(identifier.to_string(), Value::NativeFunction(root.as_gc()));
     }
 }

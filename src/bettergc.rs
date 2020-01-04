@@ -20,7 +20,6 @@ impl fmt::Debug for dyn Trace {
 struct Header {
     roots: AtomicUsize,
     marked: Cell<bool>,
-    weak_marker: std::rc::Rc<()>,
 }
 
 #[derive(Debug)]
@@ -44,11 +43,6 @@ pub struct Root<T: 'static + Trace + ?Sized> {
 
 pub struct UniqueRoot<T: 'static + Trace + ?Sized> {
     ptr: NonNull<Allocation<T>>,
-}
-
-pub struct Weak<T: 'static + Trace + ?Sized> {
-    ptr: NonNull<Allocation<T>>,
-    weak_marker: std::rc::Weak<()>,
 }
 
 impl<T: 'static + Trace + ?Sized> Allocation<T> {
@@ -76,7 +70,6 @@ impl Default for Header {
         Header {
             roots: AtomicUsize::new(0),
             marked: Cell::new(false),
-            weak_marker: std::rc::Rc::new(()),
         }
     }
 }
@@ -95,23 +88,6 @@ impl Heap {
         ptr
     }
 
-    pub fn downgrade<T: 'static + Trace + ?Sized>(&self, obj: Gc<T>) -> Weak<T> {
-        Weak{ptr: obj.ptr, weak_marker: std::rc::Rc::downgrade(&obj.allocation().header.weak_marker) }
-    }
-
-    pub fn upgrade<T: 'static + Trace + ?Sized>(&mut self, obj: &Weak<T>) -> Option<Root<T>> {
-        if let Some(_marker) = obj.weak_marker.upgrade() {
-            obj.allocation().root();
-            Some(Root{ ptr: obj.ptr })
-        } else {
-            None
-        }
-    }
-
-    pub fn manage<T: 'static + Trace>(&mut self, data: T) -> Gc<T> {
-        Gc{ptr: self.allocate(data) }
-    }
-
     /// Create a UniqueRoot, it cannot be Copied or Cloned, but it is mutably dereferencing.
     /// Which means it's ideal for Root containers and such.
     pub fn unique<T: 'static + Trace>(&mut self, data: T) -> UniqueRoot<T> {
@@ -125,7 +101,7 @@ impl Heap {
         Root{ ptr: obj.ptr }
     }
 
-    pub fn manage_root<T: 'static + Trace>(&mut self, data: T) -> Root<T> {
+    pub fn manage<T: 'static + Trace>(&mut self, data: T) -> Root<T> {
         let root = Root{ ptr: self.allocate(data) };
         root.allocation().root();
         root
@@ -155,12 +131,6 @@ impl Heap {
             }
         }
         bytes
-    }
-}
-
-impl<T: 'static + Trace + ?Sized> Weak<T> {
-    fn allocation(&self) -> &Allocation<T> {
-        unsafe { &self.ptr.as_ref() }
     }
 }
 

@@ -16,7 +16,7 @@ thread_local!(static HEAP: RefCell<Heap> = RefCell::new(Heap::new()));
 pub fn manage<T: 'static + Trace>(data: T) -> Root<T> {
     collect_if_needed();
     add_bytes::<T>();
-    HEAP.with(|heap| heap.borrow_mut().manage_root(data))
+    HEAP.with(|heap| heap.borrow_mut().manage(data))
 }
 
 pub fn unique<T: 'static + Trace>(data: T) -> UniqueRoot<T> {
@@ -27,14 +27,6 @@ pub fn unique<T: 'static + Trace>(data: T) -> UniqueRoot<T> {
 
 pub fn root<T: 'static + Trace + ?Sized>(obj: Gc<T>) -> Root<T> {
     HEAP.with(|heap| heap.borrow_mut().root(obj))
-}
-
-pub fn downgrade<T: 'static + Trace + ?Sized>(obj: Gc<T>) -> Weak<T> {
-    HEAP.with(|heap| heap.borrow_mut().downgrade(obj))
-}
-
-pub fn upgrade<T: 'static + Trace + ?Sized>(obj: &Weak<T>) -> Option<Root<T>> {
-    HEAP.with(|heap| heap.borrow_mut().upgrade(obj))
 }
 
 pub fn force_collect() {

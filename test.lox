@@ -1,8 +1,25 @@
-fun fib(n) {
-  if (n < 2) return n;
-  return fib(n - 2) + fib(n - 1);
-}
+var f;
 
-var start = clock();
-print fib(30) == 832040;
-print clock() - start;
+fun f1() {
+  var a = "a";
+  fun f2() {
+    var b = "b";
+    fun f3() {
+      var c = "c";
+      fun f4() {
+        print a;
+        print b;
+        print c;
+      }
+      f = f4;
+    }
+    f3();
+  }
+  f2();
+}
+f1();
+
+f();
+// expect: a
+// expect: b
+// expect: c
