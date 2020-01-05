@@ -3,3 +3,4 @@ var x = Foo();
 fun y() { print "Hi!"; }
 x.test = y;
 x.test();
+();

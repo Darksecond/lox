@@ -13,12 +13,12 @@ pub mod bettervm;
 
 //TODO Better errors
 
-pub use crate::{bettercompiler::CompilerError, bettervm::VmError};
+pub use crate::{bettercompiler::CompilerError, bettervm::VmError, common::ParseError};
 
 #[derive(Debug)]
 pub enum Error {
     CompileError(CompilerError),
-    ParseError(String),
+    ParseError(ParseError),
     //TODO RuntimeError(VmError),
 }
 

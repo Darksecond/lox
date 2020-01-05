@@ -4,7 +4,7 @@ use super::token::*;
 use super::tokenizer::TokenWithContext;
 use std::iter::{Iterator, Peekable};
 
-fn parse_program<'a, It>(it: &mut Peekable<It>) -> Result<Vec<Stmt>, String>
+fn parse_program<'a, It>(it: &mut Peekable<It>) -> Result<Vec<Stmt>, ParseError>
 where
     It: Iterator<Item = &'a TokenWithContext>,
 {
@@ -13,12 +13,12 @@ where
         statements.push(parse_declaration(it)?);
     }
     match it.next() {
-        Some(t) => Err(format!("Expected None got {:?}", t)),
+        Some(t) => Err(format!("Expected None got {:?}", t).into()),
         None => Ok(statements),
     }
 }
 
-fn parse_declaration<'a, It>(it: &mut Peekable<It>) -> Result<Stmt, String>
+fn parse_declaration<'a, It>(it: &mut Peekable<It>) -> Result<Stmt, ParseError>
 where
     It: Iterator<Item = &'a TokenWithContext>,
 {
@@ -30,7 +30,7 @@ where
     }
 }
 
-fn parse_statement<'a, It>(it: &mut Peekable<It>) -> Result<Stmt, String>
+fn parse_statement<'a, It>(it: &mut Peekable<It>) -> Result<Stmt, ParseError>
 where
     It: Iterator<Item = &'a TokenWithContext>,
 {
@@ -45,7 +45,7 @@ where
     }
 }
 
-fn parse_class_declaration<'a, It>(it: &mut Peekable<It>) -> Result<Stmt, String>
+fn parse_class_declaration<'a, It>(it: &mut Peekable<It>) -> Result<Stmt, ParseError>
 where
     It: Iterator<Item = &'a TokenWithContext>,
 {
@@ -67,7 +67,7 @@ where
     Ok(Stmt::Class(name.clone(), superclass, functions))
 }
 
-fn parse_function_declaration<'a, It>(it: &mut Peekable<It>) -> Result<Stmt, String>
+fn parse_function_declaration<'a, It>(it: &mut Peekable<It>) -> Result<Stmt, ParseError>
 where
     It: Iterator<Item = &'a TokenWithContext>,
 {
@@ -75,7 +75,7 @@ where
     parse_function(it)
 }
 
-fn parse_function<'a, It>(it: &mut Peekable<It>) -> Result<Stmt, String>
+fn parse_function<'a, It>(it: &mut Peekable<It>) -> Result<Stmt, ParseError>
 where
     It: Iterator<Item = &'a TokenWithContext>,
 {
@@ -96,7 +96,7 @@ where
     Ok(Stmt::Function(name.clone(), params, body))
 }
 
-fn parse_params<'a, It>(it: &mut Peekable<It>) -> Result<Vec<Identifier>, String>
+fn parse_params<'a, It>(it: &mut Peekable<It>) -> Result<Vec<Identifier>, ParseError>
 where
     It: Iterator<Item = &'a TokenWithContext>,
 {
@@ -109,7 +109,7 @@ where
     Ok(params)
 }
 
-fn parse_var_declaration<'a, It>(it: &mut Peekable<It>) -> Result<Stmt, String>
+fn parse_var_declaration<'a, It>(it: &mut Peekable<It>) -> Result<Stmt, ParseError>
 where
     It: Iterator<Item = &'a TokenWithContext>,
 {
@@ -126,14 +126,14 @@ where
     Ok(Stmt::Var(name.clone(), initializer.map(Box::new)))
 }
 
-fn parse_expr<'a, It>(it: &mut Peekable<It>) -> Result<Expr, String>
+fn parse_expr<'a, It>(it: &mut Peekable<It>) -> Result<Expr, ParseError>
 where
     It: Iterator<Item = &'a TokenWithContext>,
 {
-    super::expr_parser::parse(it)
+    super::expr_parser::parse(it).map_err(|e| e.into())
 }
 
-fn parse_for_statement<'a, It>(it: &mut Peekable<It>) -> Result<Stmt, String>
+fn parse_for_statement<'a, It>(it: &mut Peekable<It>) -> Result<Stmt, ParseError>
 where
     It: Iterator<Item = &'a TokenWithContext>,
 {
@@ -174,7 +174,7 @@ where
     Ok(body)
 }
 
-fn parse_return_statement<'a, It>(it: &mut Peekable<It>) -> Result<Stmt, String>
+fn parse_return_statement<'a, It>(it: &mut Peekable<It>) -> Result<Stmt, ParseError>
 where
     It: Iterator<Item = &'a TokenWithContext>,
 {
@@ -187,7 +187,7 @@ where
     Ok(Stmt::Return(expr.map(Box::new)))
 }
 
-fn parse_expr_statement<'a, It>(it: &mut Peekable<It>) -> Result<Stmt, String>
+fn parse_expr_statement<'a, It>(it: &mut Peekable<It>) -> Result<Stmt, ParseError>
 where
     It: Iterator<Item = &'a TokenWithContext>,
 {
@@ -197,7 +197,7 @@ where
     Ok(Stmt::Expression(Box::new(expr)))
 }
 
-fn parse_block_statement<'a, It>(it: &mut Peekable<It>) -> Result<Stmt, String>
+fn parse_block_statement<'a, It>(it: &mut Peekable<It>) -> Result<Stmt, ParseError>
 where
     It: Iterator<Item = &'a TokenWithContext>,
 {
@@ -210,7 +210,7 @@ where
     Ok(Stmt::Block(statements))
 }
 
-fn parse_while_statement<'a, It>(it: &mut Peekable<It>) -> Result<Stmt, String>
+fn parse_while_statement<'a, It>(it: &mut Peekable<It>) -> Result<Stmt, ParseError>
 where
     It: Iterator<Item = &'a TokenWithContext>,
 {
@@ -222,7 +222,7 @@ where
     Ok(Stmt::While(Box::new(condition), Box::new(statement)))
 }
 
-fn parse_if_statement<'a, It>(it: &mut Peekable<It>) -> Result<Stmt, String>
+fn parse_if_statement<'a, It>(it: &mut Peekable<It>) -> Result<Stmt, ParseError>
 where
     It: Iterator<Item = &'a TokenWithContext>,
 {
@@ -244,7 +244,7 @@ where
     ))
 }
 
-fn parse_print_statement<'a, It>(it: &mut Peekable<It>) -> Result<Stmt, String>
+fn parse_print_statement<'a, It>(it: &mut Peekable<It>) -> Result<Stmt, ParseError>
 where
     It: Iterator<Item = &'a TokenWithContext>,
 {
@@ -254,7 +254,7 @@ where
     Ok(Stmt::Print(Box::new(expr)))
 }
 
-pub fn parse<'a, It>(it: &mut Peekable<It>) -> Result<Vec<Stmt>, String>
+pub fn parse<'a, It>(it: &mut Peekable<It>) -> Result<Vec<Stmt>, ParseError>
 where
     It: Iterator<Item = &'a TokenWithContext>,
 {
@@ -268,7 +268,7 @@ mod tests {
     fn parse_str(data: &str) -> Result<Vec<Stmt>, String> {
         let tokens = tokenize_with_context(data);
         let mut it = tokens.as_slice().into_iter().peekable();
-        parse(&mut it)
+        parse(&mut it).map_err(|e| e.error) //TODO
     }
 
     #[test]

@@ -40,7 +40,7 @@ impl<'a> From<&'a Token> for Precedence {
     }
 }
 
-fn parse_expr<'a, It>(it: &mut Peekable<It>, precedence: Precedence) -> Result<Expr, String>
+fn parse_expr<'a, It>(it: &mut Peekable<It>, precedence: Precedence) -> Result<Expr, ParseError>
 where
     It: Iterator<Item = &'a TokenWithContext>,
 {
@@ -55,7 +55,7 @@ where
     Ok(expr)
 }
 
-fn parse_infix<'a, It>(it: &mut Peekable<It>, left: Expr) -> Result<Expr, String>
+fn parse_infix<'a, It>(it: &mut Peekable<It>, left: Expr) -> Result<Expr, ParseError>
 where
     It: Iterator<Item = &'a TokenWithContext>,
 {
@@ -74,11 +74,11 @@ where
         &Token::Equal => parse_assign(it, left),
         &Token::LeftParen => parse_call(it, left),
         &Token::Dot => parse_get(it, left),
-        t => Err(format!("unexpected token: {:?}", t)),
+        t => Err(error(it, format!("unexpected token: {:?}", t)))
     }
 }
 
-fn parse_prefix<'a, It>(it: &mut Peekable<It>) -> Result<Expr, String>
+fn parse_prefix<'a, It>(it: &mut Peekable<It>) -> Result<Expr, ParseError>
 where
     It: Iterator<Item = &'a TokenWithContext>,
 {
@@ -95,22 +95,22 @@ where
         &Token::Bang | &Token::Minus => parse_unary(it),
 
         &Token::LeftParen => parse_grouping(it),
-        t => Err(format!("unexpected token: {:?}", t)),
+        t => Err(error(it, format!("unexpected token: {:?}", t)))
     }
 }
 
-fn parse_get<'a, It>(it: &mut Peekable<It>, left: Expr) -> Result<Expr, String>
+fn parse_get<'a, It>(it: &mut Peekable<It>, left: Expr) -> Result<Expr, ParseError>
 where
     It: Iterator<Item = &'a TokenWithContext>,
 {
     expect(it, &Token::Dot)?;
     match next(it)? {
         &Token::Identifier(ref i) => Ok(Expr::Get(Box::new(left), i.clone())),
-        t => Err(format!("unexpected token expected identifier: {:?}", t)),
+        t => Err(format!("unexpected token expected identifier: {:?}", t).into()),
     }
 }
 
-fn parse_call<'a, It>(it: &mut Peekable<It>, left: Expr) -> Result<Expr, String>
+fn parse_call<'a, It>(it: &mut Peekable<It>, left: Expr) -> Result<Expr, ParseError>
 where
     It: Iterator<Item = &'a TokenWithContext>,
 {
@@ -120,7 +120,7 @@ where
     Ok(Expr::Call(Box::new(left), args))
 }
 
-fn parse_arguments<'a, It>(it: &mut Peekable<It>) -> Result<Vec<Expr>, String>
+fn parse_arguments<'a, It>(it: &mut Peekable<It>) -> Result<Vec<Expr>, ParseError>
 where
     It: Iterator<Item = &'a TokenWithContext>,
 {
@@ -135,7 +135,7 @@ where
     Ok(args)
 }
 
-fn parse_assign<'a, It>(it: &mut Peekable<It>, left: Expr) -> Result<Expr, String>
+fn parse_assign<'a, It>(it: &mut Peekable<It>, left: Expr) -> Result<Expr, ParseError>
 where
     It: Iterator<Item = &'a TokenWithContext>,
 {
@@ -144,11 +144,11 @@ where
     match left {
         Expr::Variable(i) => Ok(Expr::Assign(i, Box::new(right))),
         Expr::Get(l, i) => Ok(Expr::Set(l, i, Box::new(right))),
-        e => Err(format!("invalid l-value: {:?}", e)),
+        e => Err(format!("invalid l-value: {:?}", e).into()),
     }
 }
 
-fn parse_logical<'a, It>(it: &mut Peekable<It>, left: Expr) -> Result<Expr, String>
+fn parse_logical<'a, It>(it: &mut Peekable<It>, left: Expr) -> Result<Expr, ParseError>
 where
     It: Iterator<Item = &'a TokenWithContext>,
 {
@@ -158,7 +158,7 @@ where
     Ok(Expr::Logical(Box::new(left), operator, Box::new(right)))
 }
 
-fn parse_grouping<'a, It>(it: &mut Peekable<It>) -> Result<Expr, String>
+fn parse_grouping<'a, It>(it: &mut Peekable<It>) -> Result<Expr, ParseError>
 where
     It: Iterator<Item = &'a TokenWithContext>,
 {
@@ -168,7 +168,7 @@ where
     Ok(Expr::Grouping(Box::new(expr)))
 }
 
-fn parse_binary<'a, It>(it: &mut Peekable<It>, left: Expr) -> Result<Expr, String>
+fn parse_binary<'a, It>(it: &mut Peekable<It>, left: Expr) -> Result<Expr, ParseError>
 where
     It: Iterator<Item = &'a TokenWithContext>,
 {
@@ -178,7 +178,7 @@ where
     Ok(Expr::Binary(Box::new(left), operator, Box::new(right)))
 }
 
-fn parse_unary<'a, It>(it: &mut Peekable<It>) -> Result<Expr, String>
+fn parse_unary<'a, It>(it: &mut Peekable<It>) -> Result<Expr, ParseError>
 where
     It: Iterator<Item = &'a TokenWithContext>,
 {
@@ -187,29 +187,29 @@ where
     Ok(Expr::Unary(operator, Box::new(right)))
 }
 
-fn parse_logical_op<'a, It>(it: &mut Peekable<It>) -> Result<LogicalOperator, String>
+fn parse_logical_op<'a, It>(it: &mut Peekable<It>) -> Result<LogicalOperator, ParseError>
 where
     It: Iterator<Item = &'a TokenWithContext>,
 {
     match next(it)? {
         &Token::And => Ok(LogicalOperator::And),
         &Token::Or => Ok(LogicalOperator::Or),
-        t => Err(format!("expected unary op got {:?}", t)),
+        t => Err(format!("expected unary op got {:?}", t).into()),
     }
 }
 
-fn parse_unary_op<'a, It>(it: &mut Peekable<It>) -> Result<UnaryOperator, String>
+fn parse_unary_op<'a, It>(it: &mut Peekable<It>) -> Result<UnaryOperator, ParseError>
 where
     It: Iterator<Item = &'a TokenWithContext>,
 {
     match next(it)? {
         &Token::Bang => Ok(UnaryOperator::Bang),
         &Token::Minus => Ok(UnaryOperator::Minus),
-        t => Err(format!("expected unary op got {:?}", t)),
+        t => Err(format!("expected unary op got {:?}", t).into()),
     }
 }
 
-fn parse_binary_op<'a, It>(it: &mut Peekable<It>) -> Result<BinaryOperator, String>
+fn parse_binary_op<'a, It>(it: &mut Peekable<It>) -> Result<BinaryOperator, ParseError>
 where
     It: Iterator<Item = &'a TokenWithContext>,
 {
@@ -224,11 +224,11 @@ where
         &Token::Minus => Ok(BinaryOperator::Minus),
         &Token::Star => Ok(BinaryOperator::Star),
         &Token::Slash => Ok(BinaryOperator::Slash),
-        t => Err(format!("expected binary op got {:?}", t)),
+        t => Err(format!("expected binary op got {:?}", t).into()),
     }
 }
 
-fn parse_primary<'a, It>(it: &mut Peekable<It>) -> Result<Expr, String>
+fn parse_primary<'a, It>(it: &mut Peekable<It>) -> Result<Expr, ParseError>
 where
     It: Iterator<Item = &'a TokenWithContext>,
 {
@@ -241,22 +241,22 @@ where
         &Token::String(ref s) => Ok(Expr::String(s.clone())),
         &Token::Identifier(ref s) => Ok(Expr::Variable(s.clone())),
         &Token::Super => parse_super(it),
-        t => Err(format!("expected primary got {:?}", t)),
+        t => Err(format!("expected primary got {:?}", t).into()),
     }
 }
 
-fn parse_super<'a, It>(it: &mut Peekable<It>) -> Result<Expr, String>
+fn parse_super<'a, It>(it: &mut Peekable<It>) -> Result<Expr, ParseError>
 where
     It: Iterator<Item = &'a TokenWithContext>,
 {
     expect(it, &Token::Dot)?;
     match next(it)? {
         &Token::Identifier(ref i) => Ok(Expr::Super(i.clone())),
-        t => Err(format!("expected identifier got {:?}", t)),
+        t => Err(format!("expected identifier got {:?}", t).into()),
     }
 }
 
-pub fn parse<'a, It>(it: &mut Peekable<It>) -> Result<Expr, String>
+pub fn parse<'a, It>(it: &mut Peekable<It>) -> Result<Expr, ParseError>
 where
     It: Iterator<Item = &'a TokenWithContext>,
 {
@@ -270,7 +270,7 @@ mod tests {
     fn parse_str(data: &str) -> Result<Expr, String> {
         let tokens = tokenize_with_context(data);
         let mut it = tokens.as_slice().into_iter().peekable();
-        parse(&mut it)
+        parse(&mut it).map_err(|e| e.error)
     }
 
     mod make {

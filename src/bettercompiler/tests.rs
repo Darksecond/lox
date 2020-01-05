@@ -1,7 +1,8 @@
 use crate::bytecode::*;
 use crate::ast::*;
+use crate::common::ParseError;
 
-fn parse_stmt(data: &str) -> Result<Vec<Stmt>, String> {
+fn parse_stmt(data: &str) -> Result<Vec<Stmt>, ParseError> {
     use crate::tokenizer::tokenize_with_context;
     let tokens = tokenize_with_context(data);
     // println!("Tokens: {:?}", tokens);
