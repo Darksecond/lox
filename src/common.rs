@@ -1,19 +1,20 @@
 use super::token::Token;
 use super::tokenizer::TokenWithContext;
 use std::iter::{Iterator, Peekable};
-use super::tokenizer::Position;
+use crate::position::Span;
 
+//TODO Replace with WithSpan<String>
 #[derive(Debug)]
 pub struct ParseError {
     pub error: String,
-    pub position: Option<Position>,
+    pub span: Option<Span>,
 }
 
 impl From<&str> for ParseError {
     fn from(error: &str) -> ParseError {
         ParseError {
             error: error.to_string(),
-            position: None,
+            span: None,
         }
     }
 }
@@ -21,7 +22,7 @@ impl From<&String> for ParseError {
     fn from(error: &String) -> ParseError {
         ParseError {
             error: error.to_string(),
-            position: None,
+            span: None,
         }
     }
 }
@@ -29,7 +30,7 @@ impl From<String> for ParseError {
     fn from(error: String) -> ParseError {
         ParseError {
             error: error,
-            position: None,
+            span: None,
         }
     }
 }
@@ -39,7 +40,7 @@ where
     It: Iterator<Item = &'a TokenWithContext>,
 {
     if let Some(token) = it.peek() {
-        ParseError { error: error.as_ref().to_string(), position: Some(token.position) }
+        ParseError { error: error.as_ref().to_string(), span: Some(token.span) }
     } else {
         "No more tokens".into()
     }
@@ -51,17 +52,6 @@ where
 {
     match it.peek() {
         Some(&t) => Ok(&t.token),
-        None => Err(String::from("No more tokens")),
-    }
-}
-
-//TODO Merge with next_with_context
-pub fn next<'a, It>(it: &mut Peekable<It>) -> Result<&'a Token, String>
-where
-    It: Iterator<Item = &'a TokenWithContext>,
-{
-    match it.next() {
-        Some(t) => Ok(&t.token),
         None => Err(String::from("No more tokens")),
     }
 }
@@ -84,7 +74,7 @@ where
     if &token.token == expected {
         Ok(&token.token)
     } else {
-        Err(ParseError { error: format!("Expected {:?} got {:?}", expected, &token.token).into(), position: Some(token.position) })
+        Err(ParseError { error: format!("Expected {:?} got {:?}", expected, &token.token).into(), span: Some(token.span) })
     }
 }
 
@@ -110,14 +100,14 @@ macro_rules! expect {
         let tc = next_with_context($x)?;
         match &tc.token {
             $y => Ok(&t.token),
-            t => Err(ParseError { error: format!("Unexpected {:?}", t).into(), position: Some(tc.position) }),
+            t => Err(ParseError { error: format!("Unexpected {:?}", t).into(), span: Some(tc.span) }),
         }
     }};
     ($x:expr, $y:pat => $z:expr) => {{
         let tc = next_with_context($x)?;
         match &tc.token {
             $y => Ok($z),
-            t => Err(ParseError { error: format!("Unexpected {:?}", t).into(), position: Some(tc.position) }),
+            t => Err(ParseError { error: format!("Unexpected {:?}", t).into(), span: Some(tc.span) }),
         }
     }};
 }

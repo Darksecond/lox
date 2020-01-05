@@ -8,7 +8,7 @@ mod stmt_parser;
 mod token;
 mod bettergc;
 mod bettercompiler;
-
+mod position;
 pub mod bettervm;
 
 //TODO Better errors

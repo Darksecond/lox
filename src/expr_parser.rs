@@ -104,9 +104,10 @@ where
     It: Iterator<Item = &'a TokenWithContext>,
 {
     expect(it, &Token::Dot)?;
-    match next(it)? {
+    let tc = next_with_context(it)?;
+    match &tc.token {
         &Token::Identifier(ref i) => Ok(Expr::Get(Box::new(left), i.clone())),
-        t => Err(format!("unexpected token expected identifier: {:?}", t).into()),
+        _ => Err(ParseError { error: format!("Expected identifier"), span: Some(tc.span) }),
     }
 }
 
@@ -191,10 +192,11 @@ fn parse_logical_op<'a, It>(it: &mut Peekable<It>) -> Result<LogicalOperator, Pa
 where
     It: Iterator<Item = &'a TokenWithContext>,
 {
-    match next(it)? {
+    let tc = next_with_context(it)?;
+    match &tc.token {
         &Token::And => Ok(LogicalOperator::And),
         &Token::Or => Ok(LogicalOperator::Or),
-        t => Err(format!("expected unary op got {:?}", t).into()),
+        _ => Err(ParseError { error: format!("expected unary op"), span: Some(tc.span) }),
     }
 }
 
@@ -202,10 +204,11 @@ fn parse_unary_op<'a, It>(it: &mut Peekable<It>) -> Result<UnaryOperator, ParseE
 where
     It: Iterator<Item = &'a TokenWithContext>,
 {
-    match next(it)? {
+    let tc = next_with_context(it)?;
+    match &tc.token {
         &Token::Bang => Ok(UnaryOperator::Bang),
         &Token::Minus => Ok(UnaryOperator::Minus),
-        t => Err(format!("expected unary op got {:?}", t).into()),
+        _ => Err(ParseError { error: format!("expected unary op"), span: Some(tc.span) }),
     }
 }
 
@@ -213,7 +216,8 @@ fn parse_binary_op<'a, It>(it: &mut Peekable<It>) -> Result<BinaryOperator, Pars
 where
     It: Iterator<Item = &'a TokenWithContext>,
 {
-    match next(it)? {
+    let tc = next_with_context(it)?;
+    match &tc.token {
         &Token::BangEqual => Ok(BinaryOperator::BangEqual),
         &Token::EqualEqual => Ok(BinaryOperator::EqualEqual),
         &Token::Less => Ok(BinaryOperator::Less),
@@ -224,7 +228,7 @@ where
         &Token::Minus => Ok(BinaryOperator::Minus),
         &Token::Star => Ok(BinaryOperator::Star),
         &Token::Slash => Ok(BinaryOperator::Slash),
-        t => Err(format!("expected binary op got {:?}", t).into()),
+        _ => Err(ParseError { error: format!("expected binary op"), span: Some(tc.span) }),
     }
 }
 
@@ -232,7 +236,8 @@ fn parse_primary<'a, It>(it: &mut Peekable<It>) -> Result<Expr, ParseError>
 where
     It: Iterator<Item = &'a TokenWithContext>,
 {
-    match next(it)? {
+    let tc = next_with_context(it)?;
+    match &tc.token {
         &Token::Nil => Ok(Expr::Nil),
         &Token::This => Ok(Expr::This),
         &Token::Number(n) => Ok(Expr::Number(n)),
@@ -241,7 +246,7 @@ where
         &Token::String(ref s) => Ok(Expr::String(s.clone())),
         &Token::Identifier(ref s) => Ok(Expr::Variable(s.clone())),
         &Token::Super => parse_super(it),
-        t => Err(format!("expected primary got {:?}", t).into()),
+        _ => Err(ParseError { error: format!("expected primary"), span: Some(tc.span) }),
     }
 }
 
@@ -250,9 +255,10 @@ where
     It: Iterator<Item = &'a TokenWithContext>,
 {
     expect(it, &Token::Dot)?;
-    match next(it)? {
+    let tc = next_with_context(it)?;
+    match &tc.token {
         &Token::Identifier(ref i) => Ok(Expr::Super(i.clone())),
-        t => Err(format!("expected identifier got {:?}", t).into()),
+        _ => Err(ParseError { error: format!("expected identifier"), span: Some(tc.span) }),
     }
 }
 

@@ -2,43 +2,18 @@ use super::token::Token;
 use std::iter::Peekable;
 use std::str;
 use std::str::Chars;
-
-#[derive(Debug, Clone, Copy)]
-pub struct Position {
-    pub line: usize,
-    pub column: usize,
-}
-
-impl Default for Position {
-    fn default() -> Self {
-        Position { line: 1, column: 1, }
-    }
-}
-
-impl Position {
-    fn increment_column(&mut self) {
-        self.column += 1;
-    }
-
-    fn increment_line(&mut self) {
-        self.column = 1;
-        self.line += 1;
-    }
-}
-
-pub type Lexeme = String;
+use crate::position::*;
 
 //TODO Move to token module
+ //TODO Make this WithSpan<Token> instead
 #[derive(Debug)]
 pub struct TokenWithContext {
     pub token: Token,
-    pub lexeme: Lexeme,
-    pub position: Position,
+    pub span: Span,
 }
 
 struct Scanner<'a> {
     current_position: Position,
-    current_lexeme: Lexeme,
     it: Peekable<Chars<'a>>,
 }
 
@@ -46,24 +21,14 @@ impl<'a> Scanner<'a> {
     fn new(buf: &str) -> Scanner {
         Scanner {
             current_position: Position::default(),
-            current_lexeme: "".into(),
             it: buf.chars().peekable(),
         }
-    }
-
-    fn clear_lexeme(&mut self) {
-        self.current_lexeme.clear();
     }
 
     fn next(&mut self) -> Option<char> {
         let next = self.it.next();
         if let Some(c) = next {
-            self.current_lexeme.push(c);
-            if c == '\n' {
-                self.current_position.increment_line();
-            } else {
-                self.current_position.increment_column();
-            }
+            self.current_position = self.current_position.shift(c);
         }
         next
     }
@@ -258,7 +223,6 @@ impl<'a> Lexer<'a> {
         let mut tokens: Vec<TokenWithContext> = Vec::new();
         loop {
             let initial_position = self.it.current_position;
-            self.it.clear_lexeme();
             let ch = match self.it.next() {
                 None => break,
                 Some(c) => c,
@@ -266,8 +230,7 @@ impl<'a> Lexer<'a> {
             if let Some(token) = self.match_token(ch) {
                 tokens.push(TokenWithContext {
                     token,
-                    lexeme: self.it.current_lexeme.clone(),
-                    position: initial_position,
+                    span: Span { start: initial_position, end: self.it.current_position.unshift() }
                 });
             }
         }

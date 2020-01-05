@@ -13,7 +13,7 @@ where
         statements.push(parse_declaration(it)?);
     }
     match it.next() {
-        Some(t) => Err(format!("Expected None got {:?}", t).into()),
+        Some(t) => Err(ParseError { error: "Expected None".into(), span: Some(t.span) }),
         None => Ok(statements),
     }
 }
