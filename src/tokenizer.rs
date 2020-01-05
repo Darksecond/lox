@@ -4,13 +4,7 @@ use std::str;
 use std::str::Chars;
 use crate::position::*;
 
-//TODO Move to token module
- //TODO Make this WithSpan<Token> instead
-#[derive(Debug)]
-pub struct TokenWithContext {
-    pub token: Token,
-    pub span: Span,
-}
+//TODO Make the tokenizer return proper errors instead of panic-ing
 
 struct Scanner<'a> {
     current_position: Position,
@@ -219,8 +213,8 @@ impl<'a> Lexer<'a> {
         Some(Token::Number(number.parse::<f64>().unwrap()))
     }
 
-    fn tokenize_with_context(&mut self) -> Vec<TokenWithContext> {
-        let mut tokens: Vec<TokenWithContext> = Vec::new();
+    fn tokenize_with_context(&mut self) -> Vec<WithSpan<Token>> {
+        let mut tokens: Vec<WithSpan<Token>> = Vec::new();
         loop {
             let initial_position = self.it.current_position;
             let ch = match self.it.next() {
@@ -228,17 +222,14 @@ impl<'a> Lexer<'a> {
                 Some(c) => c,
             };
             if let Some(token) = self.match_token(ch) {
-                tokens.push(TokenWithContext {
-                    token,
-                    span: Span { start: initial_position, end: self.it.current_position.unshift() }
-                });
+                tokens.push(WithSpan::new(token, Span { start: initial_position, end: self.it.current_position.unshift() }));
             }
         }
         tokens
     }
 }
 
-pub fn tokenize_with_context(buf: &str) -> Vec<TokenWithContext> {
+pub fn tokenize_with_context(buf: &str) -> Vec<WithSpan<Token>> {
     let mut t = Lexer::new(buf);
     t.tokenize_with_context()
 }
@@ -248,7 +239,7 @@ mod tests {
     use super::Token;
     fn tokenize(buf: &str) -> Vec<Token> {
         use super::tokenize_with_context;
-        tokenize_with_context(buf).iter().map(|tc| tc.token.clone()).collect()
+        tokenize_with_context(buf).iter().map(|tc| tc.value.clone()).collect()
     }
 
     #[test]

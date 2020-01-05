@@ -55,8 +55,8 @@ impl Span {
 
 #[derive(Debug)]
 pub struct WithSpan<T> {
-    value: T,
-    span: Span,
+    pub value: T,
+    pub span: Span,
 }
 
 impl<T> WithSpan<T> {

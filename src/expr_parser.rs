@@ -1,8 +1,8 @@
 use super::ast::*;
 use super::common::*;
 use super::token::*;
-use super::tokenizer::TokenWithContext;
 use std::iter::{Iterator, Peekable};
+use crate::position::WithSpan;
 
 #[allow(dead_code)]
 #[derive(PartialEq, PartialOrd, Copy, Clone)]
@@ -42,11 +42,11 @@ impl<'a> From<&'a Token> for Precedence {
 
 fn parse_expr<'a, It>(it: &mut Peekable<It>, precedence: Precedence) -> Result<Expr, ParseError>
 where
-    It: Iterator<Item = &'a TokenWithContext>,
+    It: Iterator<Item = &'a WithSpan<Token>>,
 {
     let mut expr = parse_prefix(it)?;
     while let Some(&token) = it.peek() {
-        let next_precedence = Precedence::from(&token.token);
+        let next_precedence = Precedence::from(&token.value);
         if precedence >= next_precedence {
             break;
         }
@@ -57,7 +57,7 @@ where
 
 fn parse_infix<'a, It>(it: &mut Peekable<It>, left: Expr) -> Result<Expr, ParseError>
 where
-    It: Iterator<Item = &'a TokenWithContext>,
+    It: Iterator<Item = &'a WithSpan<Token>>,
 {
     match peek(it)? {
         &Token::BangEqual
@@ -80,7 +80,7 @@ where
 
 fn parse_prefix<'a, It>(it: &mut Peekable<It>) -> Result<Expr, ParseError>
 where
-    It: Iterator<Item = &'a TokenWithContext>,
+    It: Iterator<Item = &'a WithSpan<Token>>,
 {
     match peek(it)? {
         &Token::Number(_)
@@ -101,11 +101,11 @@ where
 
 fn parse_get<'a, It>(it: &mut Peekable<It>, left: Expr) -> Result<Expr, ParseError>
 where
-    It: Iterator<Item = &'a TokenWithContext>,
+    It: Iterator<Item = &'a WithSpan<Token>>,
 {
     expect(it, &Token::Dot)?;
     let tc = next_with_context(it)?;
-    match &tc.token {
+    match &tc.value {
         &Token::Identifier(ref i) => Ok(Expr::Get(Box::new(left), i.clone())),
         _ => Err(ParseError { error: format!("Expected identifier"), span: Some(tc.span) }),
     }
@@ -113,7 +113,7 @@ where
 
 fn parse_call<'a, It>(it: &mut Peekable<It>, left: Expr) -> Result<Expr, ParseError>
 where
-    It: Iterator<Item = &'a TokenWithContext>,
+    It: Iterator<Item = &'a WithSpan<Token>>,
 {
     expect(it, &Token::LeftParen)?;
     let args = parse_arguments(it)?;
@@ -123,7 +123,7 @@ where
 
 fn parse_arguments<'a, It>(it: &mut Peekable<It>) -> Result<Vec<Expr>, ParseError>
 where
-    It: Iterator<Item = &'a TokenWithContext>,
+    It: Iterator<Item = &'a WithSpan<Token>>,
 {
     let mut args = Vec::new();
     if peek(it)? != &Token::RightParen {
@@ -138,7 +138,7 @@ where
 
 fn parse_assign<'a, It>(it: &mut Peekable<It>, left: Expr) -> Result<Expr, ParseError>
 where
-    It: Iterator<Item = &'a TokenWithContext>,
+    It: Iterator<Item = &'a WithSpan<Token>>,
 {
     expect(it, &Token::Equal)?;
     let right = parse_expr(it, Precedence::None)?;
@@ -151,7 +151,7 @@ where
 
 fn parse_logical<'a, It>(it: &mut Peekable<It>, left: Expr) -> Result<Expr, ParseError>
 where
-    It: Iterator<Item = &'a TokenWithContext>,
+    It: Iterator<Item = &'a WithSpan<Token>>,
 {
     let precedence = Precedence::from(peek(it)?);
     let operator = parse_logical_op(it)?;
@@ -161,7 +161,7 @@ where
 
 fn parse_grouping<'a, It>(it: &mut Peekable<It>) -> Result<Expr, ParseError>
 where
-    It: Iterator<Item = &'a TokenWithContext>,
+    It: Iterator<Item = &'a WithSpan<Token>>,
 {
     expect(it, &Token::LeftParen)?;
     let expr = parse_expr(it, Precedence::None)?;
@@ -171,7 +171,7 @@ where
 
 fn parse_binary<'a, It>(it: &mut Peekable<It>, left: Expr) -> Result<Expr, ParseError>
 where
-    It: Iterator<Item = &'a TokenWithContext>,
+    It: Iterator<Item = &'a WithSpan<Token>>,
 {
     let precedence = Precedence::from(peek(it)?);
     let operator = parse_binary_op(it)?;
@@ -181,7 +181,7 @@ where
 
 fn parse_unary<'a, It>(it: &mut Peekable<It>) -> Result<Expr, ParseError>
 where
-    It: Iterator<Item = &'a TokenWithContext>,
+    It: Iterator<Item = &'a WithSpan<Token>>,
 {
     let operator = parse_unary_op(it)?;
     let right = parse_expr(it, Precedence::Unary)?;
@@ -190,10 +190,10 @@ where
 
 fn parse_logical_op<'a, It>(it: &mut Peekable<It>) -> Result<LogicalOperator, ParseError>
 where
-    It: Iterator<Item = &'a TokenWithContext>,
+    It: Iterator<Item = &'a WithSpan<Token>>,
 {
     let tc = next_with_context(it)?;
-    match &tc.token {
+    match &tc.value {
         &Token::And => Ok(LogicalOperator::And),
         &Token::Or => Ok(LogicalOperator::Or),
         _ => Err(ParseError { error: format!("expected unary op"), span: Some(tc.span) }),
@@ -202,10 +202,10 @@ where
 
 fn parse_unary_op<'a, It>(it: &mut Peekable<It>) -> Result<UnaryOperator, ParseError>
 where
-    It: Iterator<Item = &'a TokenWithContext>,
+    It: Iterator<Item = &'a WithSpan<Token>>,
 {
     let tc = next_with_context(it)?;
-    match &tc.token {
+    match &tc.value {
         &Token::Bang => Ok(UnaryOperator::Bang),
         &Token::Minus => Ok(UnaryOperator::Minus),
         _ => Err(ParseError { error: format!("expected unary op"), span: Some(tc.span) }),
@@ -214,10 +214,10 @@ where
 
 fn parse_binary_op<'a, It>(it: &mut Peekable<It>) -> Result<BinaryOperator, ParseError>
 where
-    It: Iterator<Item = &'a TokenWithContext>,
+    It: Iterator<Item = &'a WithSpan<Token>>,
 {
     let tc = next_with_context(it)?;
-    match &tc.token {
+    match &tc.value {
         &Token::BangEqual => Ok(BinaryOperator::BangEqual),
         &Token::EqualEqual => Ok(BinaryOperator::EqualEqual),
         &Token::Less => Ok(BinaryOperator::Less),
@@ -234,10 +234,10 @@ where
 
 fn parse_primary<'a, It>(it: &mut Peekable<It>) -> Result<Expr, ParseError>
 where
-    It: Iterator<Item = &'a TokenWithContext>,
+    It: Iterator<Item = &'a WithSpan<Token>>,
 {
     let tc = next_with_context(it)?;
-    match &tc.token {
+    match &tc.value {
         &Token::Nil => Ok(Expr::Nil),
         &Token::This => Ok(Expr::This),
         &Token::Number(n) => Ok(Expr::Number(n)),
@@ -252,11 +252,11 @@ where
 
 fn parse_super<'a, It>(it: &mut Peekable<It>) -> Result<Expr, ParseError>
 where
-    It: Iterator<Item = &'a TokenWithContext>,
+    It: Iterator<Item = &'a WithSpan<Token>>,
 {
     expect(it, &Token::Dot)?;
     let tc = next_with_context(it)?;
-    match &tc.token {
+    match &tc.value {
         &Token::Identifier(ref i) => Ok(Expr::Super(i.clone())),
         _ => Err(ParseError { error: format!("expected identifier"), span: Some(tc.span) }),
     }
@@ -264,7 +264,7 @@ where
 
 pub fn parse<'a, It>(it: &mut Peekable<It>) -> Result<Expr, ParseError>
 where
-    It: Iterator<Item = &'a TokenWithContext>,
+    It: Iterator<Item = &'a WithSpan<Token>>,
 {
     parse_expr(it, Precedence::None)
 }
