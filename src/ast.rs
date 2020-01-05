@@ -1,3 +1,5 @@
+use crate::position::WithSpan;
+
 pub type Identifier = String;
 
 #[derive(Debug, PartialEq, Copy, Clone)]
@@ -49,7 +51,7 @@ pub enum Expr {
 pub enum Stmt {
     Expression(Box<Expr>),
     Print(Box<Expr>),
-    Var(Identifier, Option<Box<Expr>>), //TODO Extract into enum Decl or Declaration
+    Var(WithSpan<Identifier>, Option<Box<Expr>>), //TODO Extract into enum Decl or Declaration
     If(Box<Expr>, Box<Stmt>, Option<Box<Stmt>>),
     Block(Vec<Stmt>),
     While(Box<Expr>, Box<Stmt>),

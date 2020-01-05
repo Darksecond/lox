@@ -110,3 +110,13 @@ macro_rules! expect {
         }
     }};
 }
+
+macro_rules! expect_with_span {
+    ($x:expr, $y:pat => $z:expr) => {{
+        let tc = next_with_context($x)?;
+        match &tc.value {
+            $y => Ok(WithSpan::new($z, tc.span)),
+            _ => Err(ParseError { error: "Unexpected token".into(), span: Some(tc.span) }),
+        }
+    }};
+}

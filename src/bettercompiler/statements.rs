@@ -3,6 +3,7 @@ use crate::ast::*;
 use crate::bytecode::*;
 use super::compiler::Compiler;
 use super::compiler::ContextType;
+use crate::position::WithSpan;
 
 pub fn compile_ast(compiler: &mut Compiler, ast: &Ast) -> Result<(), CompilerError> {
     let errors: Vec<_> = ast.iter()
@@ -15,7 +16,7 @@ pub fn compile_ast(compiler: &mut Compiler, ast: &Ast) -> Result<(), CompilerErr
 fn compile_stmt(compiler: &mut Compiler, stmt: &Stmt) -> Result<(), CompilerError> {
     match stmt {
         Stmt::Print(ref expr) => compile_print(compiler, expr),
-        Stmt::Var(ref identifier, ref expr) => compile_var_declaration(compiler, identifier, expr.as_ref()),
+        Stmt::Var(ref identifier, ref expr) => compile_var_declaration(compiler, identifier.as_ref(), expr.as_ref()),
         Stmt::Block(ref stmts) => compile_block(compiler, stmts),
         Stmt::Expression(ref expr) => compile_expression_statement(compiler, expr),
         Stmt::If(ref condition, ref then_stmt, ref else_stmt) => compile_if(compiler, condition, then_stmt, else_stmt.as_ref()),
@@ -155,10 +156,16 @@ fn compile_block(compiler: &mut Compiler, ast: &Ast) -> Result<(), CompilerError
     })
 }
 
-fn compile_var_declaration<T: AsRef<Expr>>(compiler: &mut Compiler, identifier: &str, expr: Option<T>) -> Result<(), CompilerError> {
+//TODO Cleanup
+use crate::position::Span;
+fn error_with_span(error: CompilerError, span: Span) -> CompilerError {
+    CompilerError::WithSpan(WithSpan::new(Box::new(error), span))
+}
+
+fn compile_var_declaration<T: AsRef<Expr>, I: AsRef<str>>(compiler: &mut Compiler, identifier: WithSpan<I>, expr: Option<T>) -> Result<(), CompilerError> {
     //declare
     if compiler.is_scoped() {
-        compiler.add_local(identifier)?;
+        compiler.add_local(identifier.value.as_ref()).map_err(|e| error_with_span(e, identifier.span))?;
     }
     
     //expr
@@ -172,7 +179,7 @@ fn compile_var_declaration<T: AsRef<Expr>>(compiler: &mut Compiler, identifier: 
     if compiler.is_scoped() {
         compiler.mark_local_initialized()?;
     } else {
-        let constant = compiler.add_constant(identifier);
+        let constant = compiler.add_constant(identifier.value.as_ref());
         compiler.add_instruction(Instruction::DefineGlobal(constant))?;
     }
 

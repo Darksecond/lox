@@ -114,7 +114,7 @@ where
     It: Iterator<Item = &'a WithSpan<Token>>,
 {
     expect(it, &Token::Var)?;
-    let name = expect!(it, Token::Identifier(i) => i)?;
+    let name = expect_with_span!(it, Token::Identifier(i) => i.clone())?;
     let mut initializer: Option<Expr> = None;
 
     if optionally(it, &Token::Equal)? {
@@ -123,7 +123,7 @@ where
 
     expect(it, &Token::Semicolon)?;
 
-    Ok(Stmt::Var(name.clone(), initializer.map(Box::new)))
+    Ok(Stmt::Var(name, initializer.map(Box::new)))
 }
 
 fn parse_expr<'a, It>(it: &mut Peekable<It>) -> Result<Expr, ParseError>
@@ -294,16 +294,23 @@ mod tests {
         );
     }
 
+    fn make_span_string(string: &str, column: usize) -> WithSpan<String> {
+        use crate::position::{Span, Position};
+        let start = Position { line: 1, column };
+        let end = Position { line: 1, column: column + string.len()-1 };
+        WithSpan::new(string.to_string(), Span { start, end })
+    }
+
     #[test]
     fn test_var_decl() {
         assert_eq!(
             parse_str("var beverage;"),
-            Ok(vec![Stmt::Var("beverage".into(), None),])
+            Ok(vec![Stmt::Var(make_span_string("beverage", 5), None),])
         );
         assert_eq!(
             parse_str("var beverage = nil;"),
             Ok(vec![Stmt::Var(
-                "beverage".into(),
+                make_span_string("beverage", 5),
                 Some(Box::new(Expr::Nil))
             ),])
         );
@@ -311,7 +318,7 @@ mod tests {
         assert_eq!(
             parse_str("var beverage = x = nil;"),
             Ok(vec![Stmt::Var(
-                "beverage".into(),
+                make_span_string("beverage", 5),
                 Some(Box::new(Expr::Assign("x".into(), Box::new(Expr::Nil))))
             ),])
         );
@@ -446,7 +453,7 @@ mod tests {
             Stmt::Block(what)
         }
         fn var_i_zero() -> Stmt {
-            Stmt::Var("i".into(), Some(Box::new(Expr::Number(0.))))
+            Stmt::Var(make_span_string("i", 9), Some(Box::new(Expr::Number(0.))))
         }
         fn nil() -> Expr {
             Expr::Nil

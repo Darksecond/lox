@@ -43,7 +43,7 @@ pub struct Span {
 }
 
 impl Span {
-    fn union(a: Self, b: Self) -> Self {
+    pub fn union(a: Self, b: Self) -> Self {
         use std::cmp;
 
         Span {
@@ -53,7 +53,7 @@ impl Span {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct WithSpan<T> {
     pub value: T,
     pub span: Span,
@@ -62,5 +62,12 @@ pub struct WithSpan<T> {
 impl<T> WithSpan<T> {
     pub fn new(value: T, span: Span) -> Self {
         WithSpan { value, span }
+    }
+
+    pub fn as_ref(&self) -> WithSpan<&T> {
+        WithSpan {
+            span: self.span,
+            value: &self.value,
+        }
     }
 }

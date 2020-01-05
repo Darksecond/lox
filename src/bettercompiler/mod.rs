@@ -9,6 +9,7 @@ use crate::bytecode::*;
 use crate::ast::*;
 use compiler::{Compiler, ContextType};
 use statements::compile_ast;
+use crate::position::WithSpan;
 
 #[derive(Debug)]
 pub enum CompilerError {
@@ -17,6 +18,7 @@ pub enum CompilerError {
     LocalAlreadyDefined(String),
     LocalNotInitialized(String),
     Multiple(Vec<CompilerError>),
+    WithSpan(WithSpan<Box<CompilerError>>),
 }
 
 pub fn compile(ast: &Ast) -> Result<Module, CompilerError> {
