@@ -48,7 +48,7 @@ impl CompilerContext {
     fn resolve_local(&self, name: &str) -> Result<Option<StackIndex>, CompilerError> {
         if let Some(local) = self.locals.get(name) {
             if !local.initialized() {
-                Err(CompilerError::LocalNotInitialized(name.into()))
+                Err(CompilerError::LocalNotInitialized)
             } else { Ok(Some(local.slot()))}
         } else {
             Ok(None)
@@ -156,7 +156,7 @@ impl Compiler {
         self.current_context_mut()?.locals
             .insert(name)
             .map(|l| l.slot())
-            .ok_or(CompilerError::LocalAlreadyDefined(name.into()))
+            .ok_or(CompilerError::LocalAlreadyDefined)
     }
 
     pub fn mark_local_initialized(&mut self) -> Result<(), CompilerError> { //TODO refactor
@@ -171,7 +171,7 @@ impl Compiler {
     fn resolve_local_in_context(name: &str, context: &CompilerContext) -> Result<Option<StackIndex>, CompilerError> {
         if let Some(local) = context.locals.get(name) {
             if !local.initialized() {
-                Err(CompilerError::LocalNotInitialized(name.into()))
+                Err(CompilerError::LocalNotInitialized)
             } else { Ok(Some(local.slot()))}
         } else {
             Ok(None)

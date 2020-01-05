@@ -13,10 +13,10 @@ use crate::position::WithSpan;
 
 #[derive(Debug)]
 pub enum CompilerError {
-    UnpatchableInstruction(Instruction),
     NoContext,
-    LocalAlreadyDefined(String),
-    LocalNotInitialized(String),
+    LocalAlreadyDefined,
+    LocalNotInitialized,
+
     Multiple(Vec<CompilerError>),
     WithSpan(WithSpan<Box<CompilerError>>),
 }
