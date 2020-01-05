@@ -28,6 +28,7 @@ impl Position {
 
 pub type Lexeme = String;
 
+//TODO Move to token module
 #[derive(Debug)]
 pub struct TokenWithContext {
     pub token: Token,
