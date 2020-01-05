@@ -1,6 +1,7 @@
 use super::ast::*;
 use super::common::*;
 use super::token::*;
+use super::tokenizer::TokenWithContext;
 use std::iter::{Iterator, Peekable};
 
 #[allow(dead_code)]
@@ -41,11 +42,11 @@ impl<'a> From<&'a Token> for Precedence {
 
 fn parse_expr<'a, It>(it: &mut Peekable<It>, precedence: Precedence) -> Result<Expr, String>
 where
-    It: Iterator<Item = &'a Token>,
+    It: Iterator<Item = &'a TokenWithContext>,
 {
     let mut expr = parse_prefix(it)?;
     while let Some(&token) = it.peek() {
-        let next_precedence = Precedence::from(token);
+        let next_precedence = Precedence::from(&token.token);
         if precedence >= next_precedence {
             break;
         }
@@ -56,7 +57,7 @@ where
 
 fn parse_infix<'a, It>(it: &mut Peekable<It>, left: Expr) -> Result<Expr, String>
 where
-    It: Iterator<Item = &'a Token>,
+    It: Iterator<Item = &'a TokenWithContext>,
 {
     match peek(it)? {
         &Token::BangEqual
@@ -79,7 +80,7 @@ where
 
 fn parse_prefix<'a, It>(it: &mut Peekable<It>) -> Result<Expr, String>
 where
-    It: Iterator<Item = &'a Token>,
+    It: Iterator<Item = &'a TokenWithContext>,
 {
     match peek(it)? {
         &Token::Number(_)
@@ -100,7 +101,7 @@ where
 
 fn parse_get<'a, It>(it: &mut Peekable<It>, left: Expr) -> Result<Expr, String>
 where
-    It: Iterator<Item = &'a Token>,
+    It: Iterator<Item = &'a TokenWithContext>,
 {
     expect(it, &Token::Dot)?;
     match next(it)? {
@@ -111,7 +112,7 @@ where
 
 fn parse_call<'a, It>(it: &mut Peekable<It>, left: Expr) -> Result<Expr, String>
 where
-    It: Iterator<Item = &'a Token>,
+    It: Iterator<Item = &'a TokenWithContext>,
 {
     expect(it, &Token::LeftParen)?;
     let args = parse_arguments(it)?;
@@ -121,7 +122,7 @@ where
 
 fn parse_arguments<'a, It>(it: &mut Peekable<It>) -> Result<Vec<Expr>, String>
 where
-    It: Iterator<Item = &'a Token>,
+    It: Iterator<Item = &'a TokenWithContext>,
 {
     let mut args = Vec::new();
     if peek(it)? != &Token::RightParen {
@@ -136,7 +137,7 @@ where
 
 fn parse_assign<'a, It>(it: &mut Peekable<It>, left: Expr) -> Result<Expr, String>
 where
-    It: Iterator<Item = &'a Token>,
+    It: Iterator<Item = &'a TokenWithContext>,
 {
     expect(it, &Token::Equal)?;
     let right = parse_expr(it, Precedence::None)?;
@@ -149,7 +150,7 @@ where
 
 fn parse_logical<'a, It>(it: &mut Peekable<It>, left: Expr) -> Result<Expr, String>
 where
-    It: Iterator<Item = &'a Token>,
+    It: Iterator<Item = &'a TokenWithContext>,
 {
     let precedence = Precedence::from(peek(it)?);
     let operator = parse_logical_op(it)?;
@@ -159,7 +160,7 @@ where
 
 fn parse_grouping<'a, It>(it: &mut Peekable<It>) -> Result<Expr, String>
 where
-    It: Iterator<Item = &'a Token>,
+    It: Iterator<Item = &'a TokenWithContext>,
 {
     expect(it, &Token::LeftParen)?;
     let expr = parse_expr(it, Precedence::None)?;
@@ -169,7 +170,7 @@ where
 
 fn parse_binary<'a, It>(it: &mut Peekable<It>, left: Expr) -> Result<Expr, String>
 where
-    It: Iterator<Item = &'a Token>,
+    It: Iterator<Item = &'a TokenWithContext>,
 {
     let precedence = Precedence::from(peek(it)?);
     let operator = parse_binary_op(it)?;
@@ -179,7 +180,7 @@ where
 
 fn parse_unary<'a, It>(it: &mut Peekable<It>) -> Result<Expr, String>
 where
-    It: Iterator<Item = &'a Token>,
+    It: Iterator<Item = &'a TokenWithContext>,
 {
     let operator = parse_unary_op(it)?;
     let right = parse_expr(it, Precedence::Unary)?;
@@ -188,7 +189,7 @@ where
 
 fn parse_logical_op<'a, It>(it: &mut Peekable<It>) -> Result<LogicalOperator, String>
 where
-    It: Iterator<Item = &'a Token>,
+    It: Iterator<Item = &'a TokenWithContext>,
 {
     match next(it)? {
         &Token::And => Ok(LogicalOperator::And),
@@ -199,7 +200,7 @@ where
 
 fn parse_unary_op<'a, It>(it: &mut Peekable<It>) -> Result<UnaryOperator, String>
 where
-    It: Iterator<Item = &'a Token>,
+    It: Iterator<Item = &'a TokenWithContext>,
 {
     match next(it)? {
         &Token::Bang => Ok(UnaryOperator::Bang),
@@ -210,7 +211,7 @@ where
 
 fn parse_binary_op<'a, It>(it: &mut Peekable<It>) -> Result<BinaryOperator, String>
 where
-    It: Iterator<Item = &'a Token>,
+    It: Iterator<Item = &'a TokenWithContext>,
 {
     match next(it)? {
         &Token::BangEqual => Ok(BinaryOperator::BangEqual),
@@ -229,7 +230,7 @@ where
 
 fn parse_primary<'a, It>(it: &mut Peekable<It>) -> Result<Expr, String>
 where
-    It: Iterator<Item = &'a Token>,
+    It: Iterator<Item = &'a TokenWithContext>,
 {
     match next(it)? {
         &Token::Nil => Ok(Expr::Nil),
@@ -246,7 +247,7 @@ where
 
 fn parse_super<'a, It>(it: &mut Peekable<It>) -> Result<Expr, String>
 where
-    It: Iterator<Item = &'a Token>,
+    It: Iterator<Item = &'a TokenWithContext>,
 {
     expect(it, &Token::Dot)?;
     match next(it)? {
@@ -257,7 +258,7 @@ where
 
 pub fn parse<'a, It>(it: &mut Peekable<It>) -> Result<Expr, String>
 where
-    It: Iterator<Item = &'a Token>,
+    It: Iterator<Item = &'a TokenWithContext>,
 {
     parse_expr(it, Precedence::None)
 }
@@ -267,7 +268,7 @@ mod tests {
     use super::super::tokenizer::*;
     use super::*;
     fn parse_str(data: &str) -> Result<Expr, String> {
-        let tokens = tokenize(data);
+        let tokens = tokenize_with_context(data);
         let mut it = tokens.as_slice().into_iter().peekable();
         parse(&mut it)
     }

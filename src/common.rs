@@ -1,29 +1,30 @@
 use super::token::Token;
+use super::tokenizer::TokenWithContext;
 use std::iter::{Iterator, Peekable};
 
 pub fn peek<'a, It>(it: &mut Peekable<It>) -> Result<&'a Token, String>
 where
-    It: Iterator<Item = &'a Token>,
+    It: Iterator<Item = &'a TokenWithContext>,
 {
     match it.peek() {
-        Some(&t) => Ok(t),
+        Some(&t) => Ok(&t.token),
         None => Err(String::from("No more tokens")),
     }
 }
 
 pub fn next<'a, It>(it: &mut Peekable<It>) -> Result<&'a Token, String>
 where
-    It: Iterator<Item = &'a Token>,
+    It: Iterator<Item = &'a TokenWithContext>,
 {
     match it.next() {
-        Some(t) => Ok(t),
+        Some(t) => Ok(&t.token),
         None => Err(String::from("No more tokens")),
     }
 }
 
 pub fn expect<'a, It>(it: &mut Peekable<It>, expected: &Token) -> Result<&'a Token, String>
 where
-    It: Iterator<Item = &'a Token>,
+    It: Iterator<Item = &'a TokenWithContext>,
 {
     let token = next(it)?;
     if token == expected {
@@ -35,11 +36,11 @@ where
 
 pub fn optionally<'a, It>(it: &mut Peekable<It>, expected: &Token) -> Result<bool, String>
 where
-    It: Iterator<Item = &'a Token>,
+    It: Iterator<Item = &'a TokenWithContext>,
 {
     match it.peek() {
         Some(&token) => {
-            if token == expected {
+            if &token.token == expected {
                 expect(it, expected)?;
                 Ok(true)
             } else {

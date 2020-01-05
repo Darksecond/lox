@@ -253,21 +253,6 @@ impl<'a> Lexer<'a> {
         Some(Token::Number(number.parse::<f64>().unwrap()))
     }
 
-    fn tokenize(&mut self) -> Vec<Token> {
-        let mut tokens: Vec<Token> = Vec::new();
-        loop {
-            self.it.clear_lexeme();
-            let ch = match self.it.next() {
-                None => break,
-                Some(c) => c,
-            };
-            if let Some(token) = self.match_token(ch) {
-                tokens.push(token);
-            }
-        }
-        tokens
-    }
-
     fn tokenize_with_context(&mut self) -> Vec<TokenWithContext> {
         let mut tokens: Vec<TokenWithContext> = Vec::new();
         loop {
@@ -292,12 +277,6 @@ impl<'a> Lexer<'a> {
 pub fn tokenize_with_context(buf: &str) -> Vec<TokenWithContext> {
     let mut t = Lexer::new(buf);
     t.tokenize_with_context()
-}
-
-#[deprecated(note="Please use `tokenize_with_context` instead.")]
-pub fn tokenize(buf: &str) -> Vec<Token> {
-    let mut t = Lexer::new(buf);
-    t.tokenize()
 }
 
 #[cfg(test)]

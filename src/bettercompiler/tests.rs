@@ -5,7 +5,7 @@ fn parse_stmt(data: &str) -> Result<Vec<Stmt>, String> {
     use crate::tokenizer::tokenize_with_context;
     let tokens = tokenize_with_context(data);
     // println!("Tokens: {:?}", tokens);
-    let mut it = tokens.as_slice().into_iter().map(|tc| &tc.token).peekable();
+    let mut it = tokens.as_slice().into_iter().peekable();
     crate::stmt_parser::parse(&mut it)
 }
 

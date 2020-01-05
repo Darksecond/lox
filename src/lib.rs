@@ -26,7 +26,7 @@ use bytecode::Module;
 pub fn compile(code: &str) -> Result<Module, Error> {
     use crate::{tokenizer::tokenize_with_context, stmt_parser::parse, bettercompiler::compile};
     let tokens = tokenize_with_context(code);
-    let mut it = tokens.as_slice().into_iter().map(|tc| &tc.token).peekable();
+    let mut it = tokens.as_slice().into_iter().peekable();
 
     let ast = parse(&mut it).map_err(|e| Error::ParseError(e))?;
     let module = compile(&ast).map_err(|e| Error::CompileError(e))?;

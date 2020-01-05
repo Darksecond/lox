@@ -1,11 +1,12 @@
 use super::ast::*;
 use super::common::*;
 use super::token::*;
+use super::tokenizer::TokenWithContext;
 use std::iter::{Iterator, Peekable};
 
 fn parse_program<'a, It>(it: &mut Peekable<It>) -> Result<Vec<Stmt>, String>
 where
-    It: Iterator<Item = &'a Token>,
+    It: Iterator<Item = &'a TokenWithContext>,
 {
     let mut statements = Vec::new();
     while let Some(_) = it.peek() {
@@ -19,7 +20,7 @@ where
 
 fn parse_declaration<'a, It>(it: &mut Peekable<It>) -> Result<Stmt, String>
 where
-    It: Iterator<Item = &'a Token>,
+    It: Iterator<Item = &'a TokenWithContext>,
 {
     match peek(it)? {
         &Token::Var => parse_var_declaration(it),
@@ -31,7 +32,7 @@ where
 
 fn parse_statement<'a, It>(it: &mut Peekable<It>) -> Result<Stmt, String>
 where
-    It: Iterator<Item = &'a Token>,
+    It: Iterator<Item = &'a TokenWithContext>,
 {
     match peek(it)? {
         &Token::Print => parse_print_statement(it),
@@ -46,7 +47,7 @@ where
 
 fn parse_class_declaration<'a, It>(it: &mut Peekable<It>) -> Result<Stmt, String>
 where
-    It: Iterator<Item = &'a Token>,
+    It: Iterator<Item = &'a TokenWithContext>,
 {
     expect(it, &Token::Class)?;
     let name = expect!(it, Token::Identifier(i) => i)?;
@@ -68,7 +69,7 @@ where
 
 fn parse_function_declaration<'a, It>(it: &mut Peekable<It>) -> Result<Stmt, String>
 where
-    It: Iterator<Item = &'a Token>,
+    It: Iterator<Item = &'a TokenWithContext>,
 {
     expect(it, &Token::Fun)?;
     parse_function(it)
@@ -76,7 +77,7 @@ where
 
 fn parse_function<'a, It>(it: &mut Peekable<It>) -> Result<Stmt, String>
 where
-    It: Iterator<Item = &'a Token>,
+    It: Iterator<Item = &'a TokenWithContext>,
 {
     let name = expect!(it, Token::Identifier(i) => i)?;
     expect(it, &Token::LeftParen)?;
@@ -97,7 +98,7 @@ where
 
 fn parse_params<'a, It>(it: &mut Peekable<It>) -> Result<Vec<Identifier>, String>
 where
-    It: Iterator<Item = &'a Token>,
+    It: Iterator<Item = &'a TokenWithContext>,
 {
     let mut params: Vec<Identifier> = Vec::new();
     params.push(expect!(it, Token::Identifier(i) => i.clone())?);
@@ -110,7 +111,7 @@ where
 
 fn parse_var_declaration<'a, It>(it: &mut Peekable<It>) -> Result<Stmt, String>
 where
-    It: Iterator<Item = &'a Token>,
+    It: Iterator<Item = &'a TokenWithContext>,
 {
     expect(it, &Token::Var)?;
     let name = expect!(it, Token::Identifier(i) => i)?;
@@ -127,14 +128,14 @@ where
 
 fn parse_expr<'a, It>(it: &mut Peekable<It>) -> Result<Expr, String>
 where
-    It: Iterator<Item = &'a Token>,
+    It: Iterator<Item = &'a TokenWithContext>,
 {
     super::expr_parser::parse(it)
 }
 
 fn parse_for_statement<'a, It>(it: &mut Peekable<It>) -> Result<Stmt, String>
 where
-    It: Iterator<Item = &'a Token>,
+    It: Iterator<Item = &'a TokenWithContext>,
 {
     expect(it, &Token::For)?;
     expect(it, &Token::LeftParen)?;
@@ -175,7 +176,7 @@ where
 
 fn parse_return_statement<'a, It>(it: &mut Peekable<It>) -> Result<Stmt, String>
 where
-    It: Iterator<Item = &'a Token>,
+    It: Iterator<Item = &'a TokenWithContext>,
 {
     expect(it, &Token::Return)?;
     let mut expr: Option<Expr> = None;
@@ -188,7 +189,7 @@ where
 
 fn parse_expr_statement<'a, It>(it: &mut Peekable<It>) -> Result<Stmt, String>
 where
-    It: Iterator<Item = &'a Token>,
+    It: Iterator<Item = &'a TokenWithContext>,
 {
     let expr = parse_expr(it)?;
     expect(it, &Token::Semicolon)?;
@@ -198,7 +199,7 @@ where
 
 fn parse_block_statement<'a, It>(it: &mut Peekable<It>) -> Result<Stmt, String>
 where
-    It: Iterator<Item = &'a Token>,
+    It: Iterator<Item = &'a TokenWithContext>,
 {
     expect(it, &Token::LeftBrace)?;
     let mut statements: Vec<Stmt> = Vec::new();
@@ -211,7 +212,7 @@ where
 
 fn parse_while_statement<'a, It>(it: &mut Peekable<It>) -> Result<Stmt, String>
 where
-    It: Iterator<Item = &'a Token>,
+    It: Iterator<Item = &'a TokenWithContext>,
 {
     expect(it, &Token::While)?;
     expect(it, &Token::LeftParen)?;
@@ -223,7 +224,7 @@ where
 
 fn parse_if_statement<'a, It>(it: &mut Peekable<It>) -> Result<Stmt, String>
 where
-    It: Iterator<Item = &'a Token>,
+    It: Iterator<Item = &'a TokenWithContext>,
 {
     expect(it, &Token::If)?;
     expect(it, &Token::LeftParen)?;
@@ -245,7 +246,7 @@ where
 
 fn parse_print_statement<'a, It>(it: &mut Peekable<It>) -> Result<Stmt, String>
 where
-    It: Iterator<Item = &'a Token>,
+    It: Iterator<Item = &'a TokenWithContext>,
 {
     expect(it, &Token::Print)?;
     let expr = parse_expr(it)?;
@@ -255,7 +256,7 @@ where
 
 pub fn parse<'a, It>(it: &mut Peekable<It>) -> Result<Vec<Stmt>, String>
 where
-    It: Iterator<Item = &'a Token>,
+    It: Iterator<Item = &'a TokenWithContext>,
 {
     parse_program(it)
 }
@@ -265,7 +266,7 @@ mod tests {
     use super::super::tokenizer::*;
     use super::*;
     fn parse_str(data: &str) -> Result<Vec<Stmt>, String> {
-        let tokens = tokenize(data);
+        let tokens = tokenize_with_context(data);
         let mut it = tokens.as_slice().into_iter().peekable();
         parse(&mut it)
     }
