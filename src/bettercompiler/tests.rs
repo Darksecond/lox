@@ -311,6 +311,20 @@ fn test_simple_scoped_function() {
 }
 
 #[test]
+fn test_simple_scoped_recursive_function() {
+    use crate::bytecode::Instruction::*;
+
+    let module = compile_code("{ fun first() { print first(); } first(); }");
+
+    assert_instructions(module.chunk(0), vec![Closure(0), GetLocal(1), Call(0), Pop, CloseUpvalue, Nil, Return]);
+    assert_instructions(module.chunk(1), vec![GetUpvalue(0), Call(0), Print, Nil, Return]);
+
+    assert_constants(&module, vec![
+        make_closure("first", 1, 0, vec![Upvalue::Local(1)])
+    ]);
+}
+
+#[test]
 fn test_function_with_return() {
     use crate::bytecode::Instruction::*;
 

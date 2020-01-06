@@ -29,19 +29,22 @@ fn compile_stmt(compiler: &mut Compiler, stmt: &Stmt) -> Result<(), CompilerErro
 
 fn declare_variable(compiler: &mut Compiler, identifier: &str) -> Result<(), CompilerError> {
     if compiler.is_scoped() {
-        compiler.add_local(identifier)?;
+        if compiler.has_local_in_current_scope(identifier) {
+            return Err(CompilerError::LocalAlreadyDefined); //TODO Don't return error, do `add_error` instead.
+        }
+
+        compiler.add_local(identifier);
     }
     Ok(())
 }
 
-fn define_variable(compiler: &mut Compiler, identifier: &str) -> Result<(), CompilerError> {
+fn define_variable(compiler: &mut Compiler, identifier: &str) {
     if compiler.is_scoped() {
         compiler.mark_local_initialized();
     } else {
         let constant = compiler.add_constant(identifier);
         compiler.add_instruction(Instruction::DefineGlobal(constant));
     }
-    Ok(())
 }
 
 fn compile_class(compiler: &mut Compiler, identifier: &str, _extends: Option<&str>, _stmts: &[Stmt]) -> Result<(), CompilerError> {
@@ -49,7 +52,7 @@ fn compile_class(compiler: &mut Compiler, identifier: &str, _extends: Option<&st
     declare_variable(compiler, identifier)?;
     let constant = compiler.add_constant(Constant::Class(Class{ name: identifier.to_string() }));
     compiler.add_instruction(Instruction::Class(constant));
-    define_variable(compiler, identifier)?;
+    define_variable(compiler, identifier);
 
     //TODO Extends
     //TODO Methods
@@ -68,17 +71,15 @@ fn compile_return<E: AsRef<Expr>>(compiler: &mut Compiler, expr: Option<E>) -> R
 }
 
 fn compile_function(compiler: &mut Compiler, identifier: &str, args: &Vec<Identifier>, block: &Vec<Stmt>) -> Result<(), CompilerError> {
-    //declare
+    declare_variable(compiler, identifier)?;
     if compiler.is_scoped() {
-        compiler.add_local(identifier)?;
         compiler.mark_local_initialized();
     }
 
     let (chunk_index, upvalues) = compiler.with_scoped_context(ContextType::Function, |compiler| {
-        compiler.add_local("")?; //the slot with the functions name in it
         for arg in args {
-            compiler.add_local(arg)?;
-            compiler.mark_local_initialized();
+            declare_variable(compiler, arg)?;
+            define_variable(compiler, arg);
         }
 
         compile_block(compiler, block)?;
@@ -102,11 +103,7 @@ fn compile_function(compiler: &mut Compiler, identifier: &str, args: &Vec<Identi
     let constant = compiler.add_constant(Constant::Closure(closure));
     compiler.add_instruction(Instruction::Closure(constant));
 
-    //define
-    if !compiler.is_scoped() {
-        let constant = compiler.add_constant(identifier);
-        compiler.add_instruction(Instruction::DefineGlobal(constant));
-    }
+    define_variable(compiler, identifier);
 
     Ok(())
 }
@@ -155,17 +152,8 @@ fn compile_block(compiler: &mut Compiler, ast: &Ast) -> Result<(), CompilerError
     })
 }
 
-//TODO Cleanup
-use crate::position::Span;
-fn error_with_span(error: CompilerError, span: Span) -> CompilerError {
-    CompilerError::WithSpan(WithSpan::new(Box::new(error), span))
-}
-
 fn compile_var_declaration<T: AsRef<Expr>, I: AsRef<str>>(compiler: &mut Compiler, identifier: WithSpan<I>, expr: Option<T>) -> Result<(), CompilerError> {
-    //declare
-    if compiler.is_scoped() {
-        compiler.add_local(identifier.value.as_ref()).map_err(|e| error_with_span(e, identifier.span))?;
-    }
+    declare_variable(compiler, identifier.value.as_ref())?;
     
     //expr
     if let Some(expr) = expr {
@@ -174,13 +162,7 @@ fn compile_var_declaration<T: AsRef<Expr>, I: AsRef<str>>(compiler: &mut Compile
         compile_nil(compiler)?;
     }
 
-    //define
-    if compiler.is_scoped() {
-        compiler.mark_local_initialized();
-    } else {
-        let constant = compiler.add_constant(identifier.value.as_ref());
-        compiler.add_instruction(Instruction::DefineGlobal(constant));
-    }
+    define_variable(compiler, identifier.value.as_ref());
 
     Ok(())
 }

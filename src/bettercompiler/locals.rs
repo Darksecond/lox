@@ -47,6 +47,10 @@ impl Locals {
         self.stack.iter().rev().find(|l| l.name == identifier)
     }
 
+    pub fn get_at_current_depth(&self, identifier: &str) -> Option<&Local> {
+        self.get_at_depth(identifier, self.scope_depth)
+    }
+
     pub fn mark_captured(&mut self, slot: usize) {
         let local = self.stack.iter_mut().find(|l| l.slot == slot);
         if let Some(local) = local {
@@ -54,7 +58,7 @@ impl Locals {
         }
     }
 
-    fn get_at_depth(&self, identifier: &str, depth: usize) -> Option<&Local> {
+    pub fn get_at_depth(&self, identifier: &str, depth: usize) -> Option<&Local> {
         self.stack.iter().rev().find(|l| l.depth == depth && l.name == identifier)
     }
 

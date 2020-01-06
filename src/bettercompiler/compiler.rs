@@ -124,6 +124,7 @@ impl Compiler {
 
     pub fn with_context<F>(&mut self, context_type: ContextType, f: F) -> Result<(ChunkIndex, Vec<Upvalue>), CompilerError> where F: FnOnce(&mut Self) -> Result<(), CompilerError> {
         self.begin_context(context_type);
+        self.add_local("");
         let result = f(self);
         let ctx_result = self.end_context();
         result?;
@@ -153,14 +154,16 @@ impl Compiler {
         self.current_chunk().instruction_index()
     }
 
-    pub fn add_local(&mut self, name: &str) -> Result<StackIndex, CompilerError> {
-        self.current_context_mut().locals
-            .insert(name)
-            .map(|l| l.slot())
-            .ok_or(CompilerError::LocalAlreadyDefined)
+    pub fn add_local(&mut self, name: &str) {
+        self.current_context_mut().locals.insert(name);
+    }
+
+    pub fn has_local_in_current_scope(&self, name: &str) -> bool {
+        self.current_context().locals.get_at_current_depth(name).is_some()
     }
 
     pub fn mark_local_initialized(&mut self) { //TODO refactor
+        //TODO Return early if not scoped
         self.current_context_mut().locals.mark_initialized()
     }
 

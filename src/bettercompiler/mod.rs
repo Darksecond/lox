@@ -24,7 +24,6 @@ pub fn compile(ast: &Ast) -> Result<Module, CompilerError> {
     let mut compiler = Compiler::new();
 
     compiler.with_context(ContextType::TopLevel, |compiler| {
-        compiler.add_local("")?;
         compile_ast(compiler, ast)?;
         compiler.add_instruction(Instruction::Nil);
         compiler.add_instruction(Instruction::Return);
