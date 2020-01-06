@@ -29,12 +29,13 @@ pub fn root<T: 'static + Trace + ?Sized>(obj: Gc<T>) -> Root<T> {
     HEAP.with(|heap| heap.borrow_mut().root(obj))
 }
 
-pub fn force_collect() {
-    STATS.with(|stats| {
-        let mut stats = stats.borrow_mut();
-        stats.bytes_allocated -= collect();
-    })
-}
+//TODO Currently unused
+// pub fn force_collect() {
+//     STATS.with(|stats| {
+//         let mut stats = stats.borrow_mut();
+//         stats.bytes_allocated -= collect();
+//     })
+// }
 
 fn collect() -> usize {
     HEAP.with(|heap| heap.borrow_mut().collect())

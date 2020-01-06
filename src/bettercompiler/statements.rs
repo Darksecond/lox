@@ -36,10 +36,10 @@ fn declare_variable(compiler: &mut Compiler, identifier: &str) -> Result<(), Com
 
 fn define_variable(compiler: &mut Compiler, identifier: &str) -> Result<(), CompilerError> {
     if compiler.is_scoped() {
-        compiler.mark_local_initialized()?;
+        compiler.mark_local_initialized();
     } else {
         let constant = compiler.add_constant(identifier);
-        compiler.add_instruction(Instruction::DefineGlobal(constant))?;
+        compiler.add_instruction(Instruction::DefineGlobal(constant));
     }
     Ok(())
 }
@@ -48,7 +48,7 @@ fn compile_class(compiler: &mut Compiler, identifier: &str, _extends: Option<&st
 
     declare_variable(compiler, identifier)?;
     let constant = compiler.add_constant(Constant::Class(Class{ name: identifier.to_string() }));
-    compiler.add_instruction(Instruction::Class(constant))?;
+    compiler.add_instruction(Instruction::Class(constant));
     define_variable(compiler, identifier)?;
 
     //TODO Extends
@@ -63,7 +63,7 @@ fn compile_return<E: AsRef<Expr>>(compiler: &mut Compiler, expr: Option<E>) -> R
     } else {
         compile_nil(compiler)?;
     }
-    compiler.add_instruction(Instruction::Return)?;
+    compiler.add_instruction(Instruction::Return);
     Ok(())
 }
 
@@ -71,20 +71,20 @@ fn compile_function(compiler: &mut Compiler, identifier: &str, args: &Vec<Identi
     //declare
     if compiler.is_scoped() {
         compiler.add_local(identifier)?;
-        compiler.mark_local_initialized()?;
+        compiler.mark_local_initialized();
     }
 
     let (chunk_index, upvalues) = compiler.with_scoped_context(ContextType::Function, |compiler| {
         compiler.add_local("")?; //the slot with the functions name in it
         for arg in args {
             compiler.add_local(arg)?;
-            compiler.mark_local_initialized()?;
+            compiler.mark_local_initialized();
         }
 
         compile_block(compiler, block)?;
 
-        compiler.add_instruction(Instruction::Nil)?;
-        compiler.add_instruction(Instruction::Return)?;
+        compiler.add_instruction(Instruction::Nil);
+        compiler.add_instruction(Instruction::Return);
         Ok(())
     })?;
 
@@ -100,53 +100,52 @@ fn compile_function(compiler: &mut Compiler, identifier: &str, args: &Vec<Identi
     };
 
     let constant = compiler.add_constant(Constant::Closure(closure));
-    compiler.add_instruction(Instruction::Closure(constant))?;
+    compiler.add_instruction(Instruction::Closure(constant));
 
     //define
     if !compiler.is_scoped() {
-        
         let constant = compiler.add_constant(identifier);
-        compiler.add_instruction(Instruction::DefineGlobal(constant))?;
+        compiler.add_instruction(Instruction::DefineGlobal(constant));
     }
 
     Ok(())
 }
 
 fn compile_while(compiler: &mut Compiler, condition: &Expr, body: &Stmt) -> Result<(), CompilerError> {
-    let loop_start = compiler.instruction_index()?;
+    let loop_start = compiler.instruction_index();
     compile_expr(compiler, condition)?;
-    let end_jump = compiler.add_instruction(Instruction::JumpIfFalse(0))?;
-    compiler.add_instruction(Instruction::Pop)?;
+    let end_jump = compiler.add_instruction(Instruction::JumpIfFalse(0));
+    compiler.add_instruction(Instruction::Pop);
     compile_stmt(compiler, body)?;
-    let loop_jump = compiler.add_instruction(Instruction::Jump(0))?;
-    compiler.patch_instruction_to(loop_jump, loop_start)?;
-    compiler.patch_instruction(end_jump)?;
-    compiler.add_instruction(Instruction::Pop)?;
+    let loop_jump = compiler.add_instruction(Instruction::Jump(0));
+    compiler.patch_instruction_to(loop_jump, loop_start);
+    compiler.patch_instruction(end_jump);
+    compiler.add_instruction(Instruction::Pop);
     Ok(())
 }
 
 fn compile_if<S: AsRef<Stmt>>(compiler: &mut Compiler, condition: &Expr, then_stmt: &Stmt, else_stmt: Option<S>) -> Result<(), CompilerError> {
     compile_expr(compiler, condition)?;
 
-    let then_index = compiler.add_instruction(Instruction::JumpIfFalse(0))?;
-    compiler.add_instruction(Instruction::Pop)?;
+    let then_index = compiler.add_instruction(Instruction::JumpIfFalse(0));
+    compiler.add_instruction(Instruction::Pop);
     compile_stmt(compiler, then_stmt)?;
     
     if let Some(else_stmt) = else_stmt {
-        let else_index = compiler.add_instruction(Instruction::Jump(0))?;
-        compiler.patch_instruction(then_index)?;
-        compiler.add_instruction(Instruction::Pop)?;
+        let else_index = compiler.add_instruction(Instruction::Jump(0));
+        compiler.patch_instruction(then_index);
+        compiler.add_instruction(Instruction::Pop);
         compile_stmt(compiler, else_stmt.as_ref())?;
-        compiler.patch_instruction(else_index)?;
+        compiler.patch_instruction(else_index);
     } else {
-        compiler.patch_instruction(then_index)?;
+        compiler.patch_instruction(then_index);
     }
     Ok(())
 }
 
 fn compile_expression_statement(compiler: &mut Compiler, expr: &Expr) -> Result<(), CompilerError> {
     compile_expr(compiler, expr)?;
-    compiler.add_instruction(Instruction::Pop)?;
+    compiler.add_instruction(Instruction::Pop);
     Ok(())
 }
 
@@ -177,10 +176,10 @@ fn compile_var_declaration<T: AsRef<Expr>, I: AsRef<str>>(compiler: &mut Compile
 
     //define
     if compiler.is_scoped() {
-        compiler.mark_local_initialized()?;
+        compiler.mark_local_initialized();
     } else {
         let constant = compiler.add_constant(identifier.value.as_ref());
-        compiler.add_instruction(Instruction::DefineGlobal(constant))?;
+        compiler.add_instruction(Instruction::DefineGlobal(constant));
     }
 
     Ok(())
@@ -188,7 +187,7 @@ fn compile_var_declaration<T: AsRef<Expr>, I: AsRef<str>>(compiler: &mut Compile
 
 fn compile_print(compiler: &mut Compiler, expr: &Expr) -> Result<(), CompilerError> {
     compile_expr(compiler, expr)?;
-    compiler.add_instruction(Instruction::Print)?;
+    compiler.add_instruction(Instruction::Print);
     Ok(())
 }
 
@@ -214,7 +213,7 @@ fn compile_expr(compiler: &mut Compiler, expr: &Expr) -> Result<(), CompilerErro
 fn compiler_get(compiler: &mut Compiler, expr: &Expr, identifier: &str) -> Result<(), CompilerError> {
     compile_expr(compiler, expr)?;
     let constant = compiler.add_constant(identifier);
-    compiler.add_instruction(Instruction::GetProperty(constant))?;
+    compiler.add_instruction(Instruction::GetProperty(constant));
     Ok(())
 }
 
@@ -222,15 +221,15 @@ fn compiler_set(compiler: &mut Compiler, expr: &Expr, identifier: &str, value: &
     compile_expr(compiler, expr)?;
     compile_expr(compiler, value)?;
     let constant = compiler.add_constant(identifier);
-    compiler.add_instruction(Instruction::SetProperty(constant))?;
+    compiler.add_instruction(Instruction::SetProperty(constant));
     Ok(())
 }
 
 fn compile_unary(compiler: &mut Compiler, operator: UnaryOperator, expr: &Expr) -> Result<(), CompilerError> {
     compile_expr(compiler, expr)?;
     match operator {
-        UnaryOperator::Minus => compiler.add_instruction(Instruction::Negate)?,
-        UnaryOperator::Bang => compiler.add_instruction(Instruction::Not)?,
+        UnaryOperator::Minus => compiler.add_instruction(Instruction::Negate),
+        UnaryOperator::Bang => compiler.add_instruction(Instruction::Not),
     };
 
     Ok(())
@@ -241,7 +240,7 @@ fn compile_call(compiler: &mut Compiler, identifier: &Expr, args: &Vec<Expr>) ->
     for arg in args {
         compile_expr(compiler, arg)?;
     }
-    compiler.add_instruction(Instruction::Call(args.len()))?;
+    compiler.add_instruction(Instruction::Call(args.len()));
     Ok(())
 }
 
@@ -255,29 +254,29 @@ fn compile_logical(compiler: &mut Compiler, operator: LogicalOperator, left: &Ex
 //TODO Implement this better, using one less jump, we can easily introduce a JumpIfTrue instruction.
 fn compile_logical_or(compiler: &mut Compiler, left: &Expr, right: &Expr) -> Result<(), CompilerError> {
     compile_expr(compiler, left)?;
-    let else_jump = compiler.add_instruction(Instruction::JumpIfFalse(0))?;
-    let end_jump = compiler.add_instruction(Instruction::Jump(0))?;
-    compiler.patch_instruction(else_jump)?;
-    compiler.add_instruction(Instruction::Pop)?;
+    let else_jump = compiler.add_instruction(Instruction::JumpIfFalse(0));
+    let end_jump = compiler.add_instruction(Instruction::Jump(0));
+    compiler.patch_instruction(else_jump);
+    compiler.add_instruction(Instruction::Pop);
     compile_expr(compiler, right)?;
-    compiler.patch_instruction(end_jump)?;
+    compiler.patch_instruction(end_jump);
     Ok(())
 }
 
 fn compile_logical_and(compiler: &mut Compiler, left: &Expr, right: &Expr) -> Result<(), CompilerError> {
     compile_expr(compiler, left)?;
-    let end_jump = compiler.add_instruction(Instruction::JumpIfFalse(0))?;
-    compiler.add_instruction(Instruction::Pop)?;
+    let end_jump = compiler.add_instruction(Instruction::JumpIfFalse(0));
+    compiler.add_instruction(Instruction::Pop);
     compile_expr(compiler, right)?;
-    compiler.patch_instruction(end_jump)?;
+    compiler.patch_instruction(end_jump);
     Ok(())
 }
 
 fn compile_boolean(compiler: &mut Compiler, boolean: bool) -> Result<(), CompilerError> {
     if boolean {
-        compiler.add_instruction(Instruction::True)?;
+        compiler.add_instruction(Instruction::True);
     } else {
-        compiler.add_instruction(Instruction::False)?;
+        compiler.add_instruction(Instruction::False);
     }
 
     Ok(())
@@ -287,14 +286,14 @@ fn compile_assign(compiler: &mut Compiler, identifier: &str, expr: &Expr) -> Res
     compile_expr(compiler, expr)?;
     if let Some(local) = compiler.resolve_local(identifier)? {
         // Local
-        compiler.add_instruction(Instruction::SetLocal(local))?;
+        compiler.add_instruction(Instruction::SetLocal(local));
     } else if let Some(upvalue) = compiler.resolve_upvalue(identifier)? {
         // Upvalue
-        compiler.add_instruction(Instruction::SetUpvalue(upvalue))?;
+        compiler.add_instruction(Instruction::SetUpvalue(upvalue));
     } else {
         // Global
         let constant = compiler.add_constant(identifier);
-        compiler.add_instruction(Instruction::SetGlobal(constant))?;
+        compiler.add_instruction(Instruction::SetGlobal(constant));
     }
     Ok(())
 }
@@ -302,32 +301,32 @@ fn compile_assign(compiler: &mut Compiler, identifier: &str, expr: &Expr) -> Res
 fn compile_variable(compiler: &mut Compiler, identifier: &str) -> Result<(), CompilerError> {
     if let Some(local) = compiler.resolve_local(identifier)? {
         // Local
-        compiler.add_instruction(Instruction::GetLocal(local))?;
+        compiler.add_instruction(Instruction::GetLocal(local));
     } else if let Some(upvalue) = compiler.resolve_upvalue(identifier)? {
         // Upvalue
-        compiler.add_instruction(Instruction::GetUpvalue(upvalue))?;
+        compiler.add_instruction(Instruction::GetUpvalue(upvalue));
     } else {
         // Global
         let constant = compiler.add_constant(identifier);
-        compiler.add_instruction(Instruction::GetGlobal(constant))?;
+        compiler.add_instruction(Instruction::GetGlobal(constant));
     }
     Ok(())
 }
 
 fn compile_nil(compiler: &mut Compiler) -> Result<(), CompilerError> {
-    compiler.add_instruction(Instruction::Nil)?;
+    compiler.add_instruction(Instruction::Nil);
     Ok(())
 }
 
 fn compile_number(compiler: &mut Compiler, num: f64) -> Result<(), CompilerError> {
     let constant = compiler.add_constant(num);
-    compiler.add_instruction(Instruction::Constant(constant))?;
+    compiler.add_instruction(Instruction::Constant(constant));
     Ok(())
 }
 
 fn compile_string(compiler: &mut Compiler, string: &str) -> Result<(), CompilerError> {
     let constant = compiler.add_constant(string);
-    compiler.add_instruction(Instruction::Constant(constant))?;
+    compiler.add_instruction(Instruction::Constant(constant));
     Ok(())
 }
 
@@ -335,16 +334,16 @@ fn compile_binary(compiler: &mut Compiler, operator: BinaryOperator, left: &Expr
     compile_expr(compiler, left)?;
     compile_expr(compiler, right)?;
     match operator {
-        BinaryOperator::Plus => compiler.add_instruction(Instruction::Add)?,
-        BinaryOperator::Minus => compiler.add_instruction(Instruction::Subtract)?,
-        BinaryOperator::Less => compiler.add_instruction(Instruction::Less)?,
-        BinaryOperator::LessEqual => { compiler.add_instruction(Instruction::Greater)?; compiler.add_instruction(Instruction::Not)? },
-        BinaryOperator::Star => compiler.add_instruction(Instruction::Multiply)?,
-        BinaryOperator::EqualEqual => compiler.add_instruction(Instruction::Equal)?,
-        BinaryOperator::BangEqual => { compiler.add_instruction(Instruction::Equal)?; compiler.add_instruction(Instruction::Not)? },
-        BinaryOperator::Greater => compiler.add_instruction(Instruction::Greater)?,
-        BinaryOperator::GreaterEqual => { compiler.add_instruction(Instruction::Less)?; compiler.add_instruction(Instruction::Not)? },
-        _ => unimplemented!(),
+        BinaryOperator::Plus => compiler.add_instruction(Instruction::Add),
+        BinaryOperator::Minus => compiler.add_instruction(Instruction::Subtract),
+        BinaryOperator::Less => compiler.add_instruction(Instruction::Less),
+        BinaryOperator::LessEqual => { compiler.add_instruction(Instruction::Greater); compiler.add_instruction(Instruction::Not) },
+        BinaryOperator::Star => compiler.add_instruction(Instruction::Multiply),
+        BinaryOperator::EqualEqual => compiler.add_instruction(Instruction::Equal),
+        BinaryOperator::BangEqual => { compiler.add_instruction(Instruction::Equal); compiler.add_instruction(Instruction::Not) },
+        BinaryOperator::Greater => compiler.add_instruction(Instruction::Greater),
+        BinaryOperator::GreaterEqual => { compiler.add_instruction(Instruction::Less); compiler.add_instruction(Instruction::Not) },
+        BinaryOperator::Slash => compiler.add_instruction(Instruction::Divide),
     };
     Ok(())
 }

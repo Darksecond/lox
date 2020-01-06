@@ -13,7 +13,6 @@ use crate::position::WithSpan;
 
 #[derive(Debug)]
 pub enum CompilerError {
-    NoContext,
     LocalAlreadyDefined,
     LocalNotInitialized,
 
@@ -27,8 +26,8 @@ pub fn compile(ast: &Ast) -> Result<Module, CompilerError> {
     compiler.with_context(ContextType::TopLevel, |compiler| {
         compiler.add_local("")?;
         compile_ast(compiler, ast)?;
-        compiler.add_instruction(Instruction::Nil)?;
-        compiler.add_instruction(Instruction::Return)?;
+        compiler.add_instruction(Instruction::Nil);
+        compiler.add_instruction(Instruction::Return);
         Ok(())
     })?;
 
