@@ -124,7 +124,11 @@ impl Compiler {
 
     pub fn with_context<F>(&mut self, context_type: ContextType, f: F) -> Result<(ChunkIndex, Vec<Upvalue>), CompilerError> where F: FnOnce(&mut Self) -> Result<(), CompilerError> {
         self.begin_context(context_type);
-        self.add_local("");
+
+        //TODO Move to begin_context
+        self.add_local(""); //TODO call local 'this' for method/initializer and maybe toplevel?
+        self.mark_local_initialized();
+
         let result = f(self);
         let ctx_result = self.end_context();
         result?;
