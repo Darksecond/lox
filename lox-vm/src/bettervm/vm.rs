@@ -220,6 +220,12 @@ impl<'a> Vm<'a> {
                     (b, a) => unimplemented!("{:?} * {:?}", a, b),
                 }
             },
+            Instruction::Divide => {
+                match (self.pop()?, self.pop()?) {
+                    (Value::Number(b), Value::Number(a)) => self.push(Value::Number(a/b)),
+                    (b, a) => unimplemented!("{:?} / {:?}", a, b),
+                }
+            },
             Instruction::Pop => {
                 self.pop()?;
             },
@@ -335,7 +341,6 @@ impl<'a> Vm<'a> {
                 self.close_upvalues(index);
                 self.stack.pop().ok_or(VmError::StackEmpty)?;
             },
-            _ => unimplemented!("{:?}", instr),
         }
 
         Ok(InterpretResult::More)
