@@ -51,13 +51,13 @@ pub enum Expr {
 pub enum Stmt {
     Expression(Box<Expr>),
     Print(Box<Expr>),
-    Var(WithSpan<Identifier>, Option<Box<Expr>>), //TODO Extract into enum Decl or Declaration
+    Var(WithSpan<Identifier>, Option<Box<Expr>>),
     If(Box<Expr>, Box<Stmt>, Option<Box<Stmt>>),
     Block(Vec<Stmt>),
     While(Box<Expr>, Box<Stmt>),
     Return(Option<Box<Expr>>),
-    Function(Identifier, Vec<Identifier>, Vec<Stmt>), //TODO Extract into enum Decl or Declaration
-    Class(Identifier, Option<Identifier>, Vec<Stmt>), //TODO Extract into enum Decl or Declaration
+    Function(Identifier, Vec<Identifier>, Vec<Stmt>),
+    Class(Identifier, Option<Identifier>, Vec<Stmt>),
 }
 
 pub type Ast = Vec<Stmt>;

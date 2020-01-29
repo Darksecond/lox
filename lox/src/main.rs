@@ -1,5 +1,3 @@
-use lox;
-
 fn main() {
     // let data = "print 3;";
     // let data = "print 1 + 2;1+2;print 3;";
@@ -60,7 +58,7 @@ fn main() {
 
     let data = std::fs::read_to_string("test.lox").unwrap();
 
-    let module = lox::compile(&data).unwrap();
+    let module = lox_compiler::compile(&data).unwrap();
 
     println!("constants: {:?}", module.constants());
     for chunk in module.chunks() {
@@ -69,5 +67,5 @@ fn main() {
 
     println!();
 
-    lox::bettervm::execute(&module).unwrap();
+    lox_vm::bettervm::execute(&module).unwrap();
 }

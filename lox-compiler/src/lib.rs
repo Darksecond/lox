@@ -2,24 +2,22 @@ mod tokenizer;
 #[macro_use]
 mod common;
 mod ast;
-mod bytecode;
 mod expr_parser;
 mod stmt_parser;
 mod token;
-mod bettergc;
 mod bettercompiler;
 mod position;
-pub mod bettervm;
+
+use lox_bytecode::bytecode;
 
 //TODO Better errors
 
-pub use crate::{bettercompiler::CompilerError, bettervm::VmError, common::ParseError};
+pub use crate::{bettercompiler::CompilerError, common::ParseError};
 
 #[derive(Debug)]
 pub enum Error {
     CompileError(CompilerError),
     ParseError(ParseError),
-    //TODO RuntimeError(VmError),
 }
 
 use bytecode::Module;

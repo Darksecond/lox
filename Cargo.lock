@@ -3,4 +3,27 @@
 [[package]]
 name = "lox"
 version = "0.1.0"
+dependencies = [
+ "lox-bytecode 0.1.0",
+ "lox-compiler 0.1.0",
+ "lox-vm 0.1.0",
+]
+
+[[package]]
+name = "lox-bytecode"
+version = "0.1.0"
+
+[[package]]
+name = "lox-compiler"
+version = "0.1.0"
+dependencies = [
+ "lox-bytecode 0.1.0",
+]
+
+[[package]]
+name = "lox-vm"
+version = "0.1.0"
+dependencies = [
+ "lox-bytecode 0.1.0",
+]
 

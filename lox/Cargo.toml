@@ -1,0 +1,10 @@
+[package]
+name = "lox"
+version = "0.1.0"
+authors = ["Tim Peters <tim@darksecond.nl>"]
+edition = "2018"
+
+[dependencies]
+lox-bytecode = { path = "../lox-bytecode" }
+lox-vm = { path = "../lox-vm" }
+lox-compiler = { path = "../lox-compiler" }
