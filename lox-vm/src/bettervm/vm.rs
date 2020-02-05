@@ -64,9 +64,6 @@ impl<'a> Vm<'a> {
 
         while self.interpret_next()? == InterpretResult::More {};
 
-        //TODO properly end the frame, close upvalues and clean the stack
-        //     this is required if we later want to be able to re-use a 'VmModule' in another vm.
-
         Ok(())
     }
 
@@ -192,13 +189,18 @@ impl<'a> Vm<'a> {
             Instruction::Return => {
                 let result = self.pop()?;
                 let frame = self.frames.pop().ok_or(VmError::FrameEmpty)?;
-                if self.frames.len() == 0 { return Ok(InterpretResult::Done); } // We are done interpreting //TODO Move this down?
 
                 for i in frame.base_counter..self.stack.len() {
                     self.close_upvalues(i);
                 }
                 
                 self.stack.split_off(frame.base_counter);
+
+                if self.frames.len() == 0 { 
+                    // We are done interpreting, don't push a result as it'll be nil
+                    return Ok(InterpretResult::Done); 
+                } 
+
                 self.push(result);
             },
             Instruction::Add => {

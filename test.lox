@@ -1,4 +1,3 @@
 print 15/5;
 print 15/3;
 print 15/7;
-print true/false;
