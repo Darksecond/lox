@@ -1,3 +1,5 @@
+use serde::{Serialize, Deserialize};
+
 pub type InstructionIndex = usize;
 pub type ConstantIndex = usize;
 pub type StackIndex = usize;
@@ -5,7 +7,7 @@ pub type ChunkIndex = usize;
 pub type ArgumentCount = usize;
 pub type UpvalueIndex = usize;
 
-#[derive(Debug, PartialEq, Copy, Clone)]
+#[derive(Debug, PartialEq, Copy, Clone, Serialize, Deserialize)]
 pub enum Instruction {
     Constant(ConstantIndex),
     True,
@@ -48,32 +50,32 @@ pub enum Instruction {
     // etc
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub struct Class {
     pub name: String,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub struct Closure {
     pub function: Function,
     pub upvalues: Vec<Upvalue>,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub enum Upvalue {
     Local(StackIndex),
     Upvalue(UpvalueIndex),
 }
 
 //TODO Merge this into Closure, we'll wait until methods are implemented though
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub struct Function {
     pub name: String,
     pub chunk_index: ChunkIndex,
     pub arity: usize,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub enum Constant {
     Number(f64),
     String(String),
@@ -91,11 +93,12 @@ impl From<Function> for Constant {
     fn from(item: Function) -> Self { Constant::Closure(Closure{ function: item, upvalues: vec![]}) }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Chunk {
     instructions: Vec<Instruction>,
 }
 
+#[derive(Serialize, Deserialize)]
 pub struct Module {
     chunks: Vec<Chunk>,
     constants: Vec<Constant>,
