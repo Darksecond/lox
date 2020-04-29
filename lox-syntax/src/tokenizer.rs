@@ -4,8 +4,6 @@ use std::str;
 use std::str::Chars;
 use crate::position::*;
 
-//TODO Make the tokenizer return proper errors instead of panic-ing
-
 struct Scanner<'a> {
     current_position: Position,
     it: Peekable<Chars<'a>>,
