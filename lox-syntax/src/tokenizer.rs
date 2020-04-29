@@ -119,12 +119,12 @@ impl<'a> Lexer<'a> {
             '\r' => None,
             '"' => {
                 let string: String = self.it.consume_while(|ch| ch != '"').into_iter().collect();
+                // Skip last "
                 match self.it.next() {
-                    // Skip last "
-                    None => panic!("Unterminated string"),
-                    _ => (),
+                    None => Some(Token::Error(crate::SyntaxError::UnterminatedString)),
+                    _ => Some(Token::String(string)),
                 }
-                Some(Token::String(string))
+                
             }
             x if x.is_numeric() => self.number(x),
             x if x.is_ascii_alphabetic() || x == '_' => self.identifier(x),
@@ -138,7 +138,7 @@ impl<'a> Lexer<'a> {
             '+' => Some(Token::Plus),
             ';' => Some(Token::Semicolon),
             '*' => Some(Token::Star),
-            _ => panic!("invalid char"),
+            c => Some(Token::Error(crate::SyntaxError::InvalidCharacter(c))),
         }
     }
 
@@ -240,6 +240,13 @@ mod tests {
     fn tokenize(buf: &str) -> Vec<Token> {
         use super::tokenize_with_context;
         tokenize_with_context(buf).iter().map(|tc| tc.value.clone()).collect()
+    }
+
+    #[test]
+    fn test_errors() {
+        use crate::SyntaxError;
+        assert_eq!(tokenize("\"test"), vec![Token::Error(SyntaxError::UnterminatedString)]);
+        assert_eq!(tokenize("&"), vec![Token::Error(SyntaxError::InvalidCharacter('&'))]);
     }
 
     #[test]

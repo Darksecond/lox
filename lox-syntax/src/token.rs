@@ -1,3 +1,5 @@
+use crate::SyntaxError;
+
 #[derive(PartialEq, Debug, Clone)]
 #[allow(dead_code)]
 pub enum Token {
@@ -44,4 +46,5 @@ pub enum Token {
     Var,
     While,
     Eof,
+    Error(SyntaxError),
 }
