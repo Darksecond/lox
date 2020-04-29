@@ -15,6 +15,7 @@ pub enum Token {
     Semicolon,
     Slash,
     Star,
+
     // One or two character tokens.
     Bang,
     BangEqual,
@@ -24,10 +25,12 @@ pub enum Token {
     GreaterEqual,
     Less,
     LessEqual,
+
     // Literals.
     Identifier(String),
     String(String),
     Number(f64),
+
     // Keywords.
     And,
     Class,
@@ -45,6 +48,8 @@ pub enum Token {
     True,
     Var,
     While,
+
+    // Other.
     Eof,
     Error(SyntaxError),
 }
