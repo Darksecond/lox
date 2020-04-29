@@ -6,10 +6,10 @@ mod locals;
 mod tests;
 
 use crate::bytecode::*;
-use crate::ast::*;
+use lox_syntax::ast::*;
 use compiler::{Compiler, ContextType};
 use statements::compile_ast;
-use crate::position::WithSpan;
+use lox_syntax::position::WithSpan;
 
 #[derive(Debug)]
 pub enum CompilerError {

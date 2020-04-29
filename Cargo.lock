@@ -27,6 +27,7 @@ name = "lox-compiler"
 version = "0.1.0"
 dependencies = [
  "lox-bytecode 0.1.0",
+ "lox-syntax 0.1.0",
 ]
 
 [[package]]

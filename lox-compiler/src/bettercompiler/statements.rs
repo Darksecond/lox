@@ -1,9 +1,9 @@
 use super::{CompilerError};
-use crate::ast::*;
+use lox_syntax::ast::*;
 use crate::bytecode::*;
 use super::compiler::Compiler;
 use super::compiler::ContextType;
-use crate::position::WithSpan;
+use lox_syntax::position::WithSpan;
 
 pub fn compile_ast(compiler: &mut Compiler, ast: &Ast) -> Result<(), CompilerError> {
     let errors: Vec<_> = ast.iter()

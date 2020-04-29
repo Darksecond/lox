@@ -6,3 +6,4 @@ edition = "2018"
 
 [dependencies]
 lox-bytecode = { path = "../lox-bytecode" }
+lox-syntax = { path = "../lox-syntax" }
