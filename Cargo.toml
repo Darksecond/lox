@@ -4,5 +4,6 @@ members = [
     "lox",
     "lox-bytecode",
     "lox-compiler",
-    "lox-vm"
+    "lox-vm",
+    "lox-syntax"
 ]
