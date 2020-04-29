@@ -5,14 +5,14 @@ use std::str::Chars;
 use crate::position::*;
 
 struct Scanner<'a> {
-    current_position: Position,
+    current_position: BytePos,
     it: Peekable<Chars<'a>>,
 }
 
 impl<'a> Scanner<'a> {
     fn new(buf: &str) -> Scanner {
         Scanner {
-            current_position: Position::default(),
+            current_position: BytePos::default(),
             it: buf.chars().peekable(),
         }
     }
@@ -220,7 +220,7 @@ impl<'a> Lexer<'a> {
                 Some(c) => c,
             };
             if let Some(token) = self.match_token(ch) {
-                tokens.push(WithSpan::new(token, Span { start: initial_position, end: self.it.current_position.unshift() }));
+                tokens.push(WithSpan::new(token, Span { start: initial_position, end: self.it.current_position }));
             }
         }
         tokens

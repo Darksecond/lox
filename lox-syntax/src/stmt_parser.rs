@@ -294,10 +294,10 @@ mod tests {
         );
     }
 
-    fn make_span_string(string: &str, column: usize) -> WithSpan<String> {
-        use crate::position::{Span, Position};
-        let start = Position { line: 1, column };
-        let end = Position { line: 1, column: column + string.len()-1 };
+    fn make_span_string(string: &str, offset: u32) -> WithSpan<String> {
+        use crate::position::{Span, BytePos};
+        let start = BytePos(offset);
+        let end = BytePos(string.len() as u32 + offset);
         WithSpan::new(string.to_string(), Span { start, end })
     }
 
@@ -305,12 +305,12 @@ mod tests {
     fn test_var_decl() {
         assert_eq!(
             parse_str("var beverage;"),
-            Ok(vec![Stmt::Var(make_span_string("beverage", 5), None),])
+            Ok(vec![Stmt::Var(make_span_string("beverage", 4), None),])
         );
         assert_eq!(
             parse_str("var beverage = nil;"),
             Ok(vec![Stmt::Var(
-                make_span_string("beverage", 5),
+                make_span_string("beverage", 4),
                 Some(Box::new(Expr::Nil))
             ),])
         );
@@ -318,7 +318,7 @@ mod tests {
         assert_eq!(
             parse_str("var beverage = x = nil;"),
             Ok(vec![Stmt::Var(
-                make_span_string("beverage", 5),
+                make_span_string("beverage", 4),
                 Some(Box::new(Expr::Assign("x".into(), Box::new(Expr::Nil))))
             ),])
         );
@@ -453,7 +453,7 @@ mod tests {
             Stmt::Block(what)
         }
         fn var_i_zero() -> Stmt {
-            Stmt::Var(make_span_string("i", 9), Some(Box::new(Expr::Number(0.))))
+            Stmt::Var(make_span_string("i", 8), Some(Box::new(Expr::Number(0.))))
         }
         fn nil() -> Expr {
             Expr::Nil
