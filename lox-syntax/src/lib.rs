@@ -4,7 +4,7 @@ pub mod common;
 mod expr_parser;
 pub mod position;
 pub mod stmt_parser;
-pub mod token;
+mod token;
 pub mod tokenizer;
 
 #[derive(PartialEq, Debug, Clone)]
