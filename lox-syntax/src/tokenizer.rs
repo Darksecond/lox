@@ -245,6 +245,8 @@ mod tests {
         use crate::SyntaxError;
         assert_eq!(tokenize("\"test"), vec![Token::Error(SyntaxError::UnterminatedString)]);
         assert_eq!(tokenize("&"), vec![Token::Error(SyntaxError::InvalidCharacter('&'))]);
+        assert_eq!(tokenize("&&"), vec![Token::Error(SyntaxError::InvalidCharacter('&')), Token::Error(SyntaxError::InvalidCharacter('&'))]);
+        assert_eq!(tokenize("& 3.14"), vec![Token::Error(SyntaxError::InvalidCharacter('&')), Token::Number(3.14)]);
     }
 
     #[test]
