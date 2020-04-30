@@ -50,6 +50,6 @@ pub enum Token {
     While,
 
     // Other.
-    Eof,
+    // Eof, // Not currently used
     Error(SyntaxError),
 }
