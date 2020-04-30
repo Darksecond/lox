@@ -51,5 +51,6 @@ pub enum Token {
 
     // Other.
     // Eof, // Not currently used
-    Error(SyntaxError),
+    UnterminatedString,
+    Unknown(char),
 }

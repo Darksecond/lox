@@ -9,6 +9,4 @@ pub mod tokenizer;
 
 #[derive(PartialEq, Debug, Clone)]
 pub enum SyntaxError {
-  UnterminatedString,
-  InvalidCharacter(char),
 }

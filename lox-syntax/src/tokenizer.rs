@@ -119,7 +119,7 @@ impl<'a> Lexer<'a> {
                 let string: String = self.it.consume_while(|ch| ch != '"').into_iter().collect();
                 // Skip last "
                 match self.it.next() {
-                    None => Some(Token::Error(crate::SyntaxError::UnterminatedString)),
+                    None => Some(Token::UnterminatedString),
                     _ => Some(Token::String(string)),
                 }
                 
@@ -136,7 +136,7 @@ impl<'a> Lexer<'a> {
             '+' => Some(Token::Plus),
             ';' => Some(Token::Semicolon),
             '*' => Some(Token::Star),
-            c => Some(Token::Error(crate::SyntaxError::InvalidCharacter(c))),
+            c => Some(Token::Unknown(c)),
         }
     }
 
@@ -242,11 +242,10 @@ mod tests {
 
     #[test]
     fn test_errors() {
-        use crate::SyntaxError;
-        assert_eq!(tokenize("\"test"), vec![Token::Error(SyntaxError::UnterminatedString)]);
-        assert_eq!(tokenize("&"), vec![Token::Error(SyntaxError::InvalidCharacter('&'))]);
-        assert_eq!(tokenize("&&"), vec![Token::Error(SyntaxError::InvalidCharacter('&')), Token::Error(SyntaxError::InvalidCharacter('&'))]);
-        assert_eq!(tokenize("& 3.14"), vec![Token::Error(SyntaxError::InvalidCharacter('&')), Token::Number(3.14)]);
+        assert_eq!(tokenize("\"test"), vec![Token::UnterminatedString]);
+        assert_eq!(tokenize("&"), vec![Token::Unknown('&')]);
+        assert_eq!(tokenize("&&"), vec![Token::Unknown('&'), Token::Unknown('&')]);
+        assert_eq!(tokenize("& 3.14"), vec![Token::Unknown('&'), Token::Number(3.14)]);
     }
 
     #[test]
