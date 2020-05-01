@@ -4,7 +4,6 @@ pub mod position;
 #[macro_use]
 mod common;
 mod expr_parser;
-mod parser;
 mod stmt_parser;
 mod token;
 mod tokenizer;
