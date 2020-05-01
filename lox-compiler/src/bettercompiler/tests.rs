@@ -1,13 +1,9 @@
 use crate::bytecode::*;
 use lox_syntax::ast::*;
-use lox_syntax::common::ParseError;
+use lox_syntax::ParseError;
 
 fn parse_stmt(data: &str) -> Result<Vec<Stmt>, ParseError> {
-    use lox_syntax::tokenizer::tokenize_with_context;
-    let tokens = tokenize_with_context(data);
-    // println!("Tokens: {:?}", tokens);
-    let mut it = tokens.as_slice().into_iter().peekable();
-    lox_syntax::stmt_parser::parse(&mut it)
+    lox_syntax::parse(data)
 }
 
 fn assert_first_chunk(data: &str, constants: Vec<Constant>, instructions: Vec<Instruction>) {
