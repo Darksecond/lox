@@ -1,5 +1,3 @@
-use crate::SyntaxError;
-
 #[derive(PartialEq, Debug, Clone)]
 #[allow(dead_code)]
 pub enum Token {
