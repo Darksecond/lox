@@ -105,7 +105,7 @@ fn parse_get<'a, It>(it: &mut Parser<'a, It>, left: Expr) -> Result<Expr, ParseE
 where
     It: Iterator<Item = &'a WithSpan<Token>>,
 {
-    it.expect(&Token::Dot)?;
+    it.expect(TokenKind::Dot)?;
     let tc = it.advance()?;
     match &tc.value {
         &Token::Identifier(ref i) => Ok(Expr::Get(Box::new(left), i.clone())),
@@ -117,9 +117,9 @@ fn parse_call<'a, It>(it: &mut Parser<'a, It>, left: Expr) -> Result<Expr, Parse
 where
     It: Iterator<Item = &'a WithSpan<Token>>,
 {
-    it.expect(&Token::LeftParen)?;
+    it.expect(TokenKind::LeftParen)?;
     let args = parse_arguments(it)?;
-    it.expect(&Token::RightParen)?;
+    it.expect(TokenKind::RightParen)?;
     Ok(Expr::Call(Box::new(left), args))
 }
 
@@ -131,7 +131,7 @@ where
     if !it.check(TokenKind::RightParen) {
         args.push(parse_expr(it, Precedence::None)?);
         while it.check(TokenKind::Comma) {
-            it.expect(&Token::Comma)?;
+            it.expect(TokenKind::Comma)?;
             args.push(parse_expr(it, Precedence::None)?);
         }
     }
@@ -142,7 +142,7 @@ fn parse_assign<'a, It>(it: &mut Parser<'a, It>, left: Expr) -> Result<Expr, Par
 where
     It: Iterator<Item = &'a WithSpan<Token>>,
 {
-    it.expect(&Token::Equal)?;
+    it.expect(TokenKind::Equal)?;
     let right = parse_expr(it, Precedence::None)?;
     match left {
         Expr::Variable(i) => Ok(Expr::Assign(i, Box::new(right))),
@@ -165,9 +165,9 @@ fn parse_grouping<'a, It>(it: &mut Parser<'a, It>) -> Result<Expr, ParseError>
 where
     It: Iterator<Item = &'a WithSpan<Token>>,
 {
-    it.expect(&Token::LeftParen)?;
+    it.expect(TokenKind::LeftParen)?;
     let expr = parse_expr(it, Precedence::None)?;
-    it.expect(&Token::RightParen)?;
+    it.expect(TokenKind::RightParen)?;
     Ok(Expr::Grouping(Box::new(expr)))
 }
 
@@ -256,7 +256,7 @@ fn parse_super<'a, It>(it: &mut Parser<'a, It>) -> Result<Expr, ParseError>
 where
     It: Iterator<Item = &'a WithSpan<Token>>,
 {
-    it.expect(&Token::Dot)?;
+    it.expect(TokenKind::Dot)?;
     let tc = it.advance()?;
     match &tc.value {
         &Token::Identifier(ref i) => Ok(Expr::Super(i.clone())),
@@ -277,7 +277,6 @@ mod tests {
     use super::*;
     fn parse_str(data: &str) -> Result<Expr, String> {
         let tokens = tokenize_with_context(data);
-        // let mut it = tokens.as_slice().into_iter().peekable();
         let mut parser = crate::parser::Parser::new(tokens.as_slice().into_iter());
         parse(&mut parser).map_err(|e| e.error)
     }

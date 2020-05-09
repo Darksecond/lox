@@ -58,19 +58,19 @@ where
     }
   }
 
-  pub fn expect(&mut self, expected: &Token) -> Result<&'a Token, ParseError> {
+  pub fn expect(&mut self, expected: TokenKind) -> Result<&'a Token, ParseError> {
       let token = self.advance()?;
-      if &token.value == expected {
+      if TokenKind::from(token) == expected {
         Ok(&token.value)
       } else {
         Err(ParseError { error: format!("Expected {:?} got {:?}", expected, &token.value).into(), span: Some(token.span) })
       }
   }
 
-  pub fn optionally(&mut self, expected: &Token) -> Result<bool, ParseError> {
+  pub fn optionally(&mut self, expected: TokenKind) -> Result<bool, ParseError> {
     match self.iterator.peek() {
       Some(&token) => {
-        if &token.value == expected {
+        if TokenKind::from(token) == expected {
           self.expect(expected)?;
           Ok(true)
         } else {

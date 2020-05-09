@@ -48,20 +48,20 @@ fn parse_class_declaration<'a, It>(it: &mut Parser<'a, It>) -> Result<Stmt, Pars
 where
     It: Iterator<Item = &'a WithSpan<Token>>,
 {
-    it.expect(&Token::Class)?;
+    it.expect(TokenKind::Class)?;
     let name = expect!(it, Token::Identifier(i) => i)?;
-    let superclass = if it.optionally(&Token::Less)? {
+    let superclass = if it.optionally(TokenKind::Less)? {
         let name = expect!(it, Token::Identifier(i) => i)?;
         Some(name.clone())
     } else {
         None
     };
-    it.expect(&Token::LeftBrace)?;
+    it.expect(TokenKind::LeftBrace)?;
     let mut functions: Vec<Stmt> = vec![];
     while !it.check(TokenKind::RightBrace) {
         functions.push(parse_function(it)?);
     }
-    it.expect(&Token::RightBrace)?;
+    it.expect(TokenKind::RightBrace)?;
 
     Ok(Stmt::Class(name.clone(), superclass, functions))
 }
@@ -70,7 +70,7 @@ fn parse_function_declaration<'a, It>(it: &mut Parser<'a, It>) -> Result<Stmt, P
 where
     It: Iterator<Item = &'a WithSpan<Token>>,
 {
-    it.expect(&Token::Fun)?;
+    it.expect(TokenKind::Fun)?;
     parse_function(it)
 }
 
@@ -79,19 +79,19 @@ where
     It: Iterator<Item = &'a WithSpan<Token>>,
 {
     let name = expect!(it, Token::Identifier(i) => i)?;
-    it.expect(&Token::LeftParen)?;
+    it.expect(TokenKind::LeftParen)?;
     let params = if !it.check(TokenKind::RightParen) {
         parse_params(it)?
     } else {
         Vec::new()
     };
-    it.expect(&Token::RightParen)?;
-    it.expect(&Token::LeftBrace)?;
+    it.expect(TokenKind::RightParen)?;
+    it.expect(TokenKind::LeftBrace)?;
     let mut body: Vec<Stmt> = Vec::new();
     while !it.check(TokenKind::RightBrace) {
         body.push(parse_declaration(it)?);
     }
-    it.expect(&Token::RightBrace)?;
+    it.expect(TokenKind::RightBrace)?;
     Ok(Stmt::Function(name.clone(), params, body))
 }
 
@@ -102,7 +102,7 @@ where
     let mut params: Vec<Identifier> = Vec::new();
     params.push(expect!(it, Token::Identifier(i) => i.clone())?);
     while it.check(TokenKind::Comma) {
-        it.expect(&Token::Comma)?;
+        it.expect(TokenKind::Comma)?;
         params.push(expect!(it, Token::Identifier(i) => i.clone())?);
     }
     Ok(params)
@@ -112,15 +112,15 @@ fn parse_var_declaration<'a, It>(it: &mut Parser<'a, It>) -> Result<Stmt, ParseE
 where
     It: Iterator<Item = &'a WithSpan<Token>>,
 {
-    it.expect(&Token::Var)?;
+    it.expect(TokenKind::Var)?;
     let name = expect_with_span!(it, Token::Identifier(i) => i.clone())?;
     let mut initializer: Option<Expr> = None;
 
-    if it.optionally(&Token::Equal)? {
+    if it.optionally(TokenKind::Equal)? {
         initializer = Some(parse_expr(it)?);
     }
 
-    it.expect(&Token::Semicolon)?;
+    it.expect(TokenKind::Semicolon)?;
 
     Ok(Stmt::Var(name, initializer.map(Box::new)))
 }
@@ -136,12 +136,12 @@ fn parse_for_statement<'a, It>(it: &mut Parser<'a, It>) -> Result<Stmt, ParseErr
 where
     It: Iterator<Item = &'a WithSpan<Token>>,
 {
-    it.expect(&Token::For)?;
-    it.expect(&Token::LeftParen)?;
+    it.expect(TokenKind::For)?;
+    it.expect(TokenKind::LeftParen)?;
     let initializer = match it.peek()? {
         &Token::Var => Some(parse_var_declaration(it)?),
         &Token::Semicolon => {
-            it.expect(&Token::Semicolon)?;
+            it.expect(TokenKind::Semicolon)?;
             None
         }
         _ => Some(parse_expr_statement(it)?),
@@ -151,13 +151,13 @@ where
     } else {
         Expr::Boolean(true)
     };
-    it.expect(&Token::Semicolon)?;
+    it.expect(TokenKind::Semicolon)?;
     let increment = if !it.check(TokenKind::RightParen) {
         Some(parse_expr(it)?)
     } else {
         None
     };
-    it.expect(&Token::RightParen)?;
+    it.expect(TokenKind::RightParen)?;
     let body = parse_statement(it)?;
     // Add increment if it exists
     let body = match increment {
@@ -177,12 +177,12 @@ fn parse_return_statement<'a, It>(it: &mut Parser<'a, It>) -> Result<Stmt, Parse
 where
     It: Iterator<Item = &'a WithSpan<Token>>,
 {
-    it.expect(&Token::Return)?;
+    it.expect(TokenKind::Return)?;
     let mut expr: Option<Expr> = None;
     if !it.check(TokenKind::Semicolon) {
         expr = Some(parse_expr(it)?);
     }
-    it.expect(&Token::Semicolon)?;
+    it.expect(TokenKind::Semicolon)?;
     Ok(Stmt::Return(expr.map(Box::new)))
 }
 
@@ -191,7 +191,7 @@ where
     It: Iterator<Item = &'a WithSpan<Token>>,
 {
     let expr = parse_expr(it)?;
-    it.expect(&Token::Semicolon)?;
+    it.expect(TokenKind::Semicolon)?;
 
     Ok(Stmt::Expression(Box::new(expr)))
 }
@@ -200,12 +200,12 @@ fn parse_block_statement<'a, It>(it: &mut Parser<'a, It>) -> Result<Stmt, ParseE
 where
     It: Iterator<Item = &'a WithSpan<Token>>,
 {
-    it.expect(&Token::LeftBrace)?;
+    it.expect(TokenKind::LeftBrace)?;
     let mut statements: Vec<Stmt> = Vec::new();
     while !it.check(TokenKind::RightBrace) {
         statements.push(parse_declaration(it)?);
     }
-    it.expect(&Token::RightBrace)?;
+    it.expect(TokenKind::RightBrace)?;
     Ok(Stmt::Block(statements))
 }
 
@@ -213,10 +213,10 @@ fn parse_while_statement<'a, It>(it: &mut Parser<'a, It>) -> Result<Stmt, ParseE
 where
     It: Iterator<Item = &'a WithSpan<Token>>,
 {
-    it.expect(&Token::While)?;
-    it.expect(&Token::LeftParen)?;
+    it.expect(TokenKind::While)?;
+    it.expect(TokenKind::LeftParen)?;
     let condition = parse_expr(it)?;
-    it.expect(&Token::RightParen)?;
+    it.expect(TokenKind::RightParen)?;
     let statement = parse_statement(it)?;
     Ok(Stmt::While(Box::new(condition), Box::new(statement)))
 }
@@ -225,14 +225,14 @@ fn parse_if_statement<'a, It>(it: &mut Parser<'a, It>) -> Result<Stmt, ParseErro
 where
     It: Iterator<Item = &'a WithSpan<Token>>,
 {
-    it.expect(&Token::If)?;
-    it.expect(&Token::LeftParen)?;
+    it.expect(TokenKind::If)?;
+    it.expect(TokenKind::LeftParen)?;
     let condition = parse_expr(it)?;
-    it.expect(&Token::RightParen)?;
+    it.expect(TokenKind::RightParen)?;
     let if_stmt = parse_statement(it)?;
     let mut else_stmt: Option<Stmt> = None;
 
-    if it.optionally(&Token::Else)? {
+    if it.optionally(TokenKind::Else)? {
         else_stmt = Some(parse_statement(it)?);
     }
 
@@ -247,9 +247,9 @@ fn parse_print_statement<'a, It>(it: &mut Parser<'a, It>) -> Result<Stmt, ParseE
 where
     It: Iterator<Item = &'a WithSpan<Token>>,
 {
-    it.expect(&Token::Print)?;
+    it.expect(TokenKind::Print)?;
     let expr = parse_expr(it)?;
-    it.expect(&Token::Semicolon)?;
+    it.expect(TokenKind::Semicolon)?;
     Ok(Stmt::Print(Box::new(expr)))
 }
 
@@ -266,7 +266,6 @@ mod tests {
     use super::*;
     fn parse_str(data: &str) -> Result<Vec<Stmt>, String> {
         let tokens = tokenize_with_context(data);
-        // let mut it = tokens.as_slice().into_iter().peekable();
         let mut parser = crate::parser::Parser::new(tokens.as_slice().into_iter());
         parse(&mut parser).map_err(|e| e.error) //TODO
     }
