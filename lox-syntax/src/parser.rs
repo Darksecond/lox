@@ -1,6 +1,5 @@
 use crate::position::{WithSpan};
 use crate::token::{Token, TokenKind};
-use crate::ParseError;
 use crate::SyntaxError;
 
 static EOF_TOKEN: WithSpan<Token> = WithSpan::empty(Token::Eof);
@@ -73,14 +72,14 @@ macro_rules! expect {
       let tc = $x.advance();
       match &tc.value {
           $y => Ok(&t.token),
-          t => Err(SyntaxError::Unexpected(tc.clone())),
+          _ => Err(SyntaxError::Unexpected(tc.clone())),
       }
   }};
   ($x:ident, $y:pat => $z:expr) => {{
       let tc = $x.advance();
       match &tc.value {
           $y => Ok($z),
-          t => Err(SyntaxError::Unexpected(tc.clone())),
+          _ => Err(SyntaxError::Unexpected(tc.clone())),
       }
   }};
 }
@@ -90,7 +89,7 @@ macro_rules! expect_with_span {
       let tc = $x.advance();
       match &tc.value {
           $y => Ok(WithSpan::new($z, tc.span)),
-          t => Err(SyntaxError::Unexpected(tc.clone())),
+          _ => Err(SyntaxError::Unexpected(tc.clone())),
       }
   }};
 }

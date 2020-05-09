@@ -89,7 +89,7 @@ fn parse_infix(it: &mut Parser, left: Expr) -> Result<Expr, SyntaxError> {
         TokenKind::Equal => parse_assign(it, left),
         TokenKind::LeftParen => parse_call(it, left),
         TokenKind::Dot => parse_get(it, left),
-        t => Err(SyntaxError::Unexpected(it.peek_token().clone())),
+        _ => Err(SyntaxError::Unexpected(it.peek_token().clone())),
     }
 }
 
@@ -107,7 +107,7 @@ fn parse_prefix(it: &mut Parser) -> Result<Expr, SyntaxError> {
         TokenKind::Bang | TokenKind::Minus => parse_unary(it),
 
         TokenKind::LeftParen => parse_grouping(it),
-        t => Err(SyntaxError::Unexpected(it.peek_token().clone())),
+        _ => Err(SyntaxError::Unexpected(it.peek_token().clone())),
     }
 }
 
@@ -116,7 +116,7 @@ fn parse_get(it: &mut Parser, left: Expr) -> Result<Expr, SyntaxError> {
     let tc = it.advance();
     match &tc.value {
         &Token::Identifier(ref i) => Ok(Expr::Get(Box::new(left), i.clone())),
-        t => Err(SyntaxError::Expected(TokenKind::Identifier, tc.clone())),
+        _ => Err(SyntaxError::Expected(TokenKind::Identifier, tc.clone())),
     }
 }
 
@@ -463,7 +463,7 @@ mod tests {
             ))
         );
         assert!(matches!(parse_str("a="), Err(SyntaxError::Unexpected(_))));
-        assert!(matches!(parse_str("3=3"), Err(SyntaxError::InvalidLeftValue(WithSpan{span: _, value: Expr::Number(3.0)}))));
+        assert!(matches!(parse_str("3=3"), Err(SyntaxError::InvalidLeftValue(WithSpan{span: _, value: Expr::Number(_)}))));
 
         assert_eq!(
             parse_str("a=1+2"),
