@@ -68,13 +68,6 @@ impl<'a> Parser<'a> {
 }
 
 macro_rules! expect {
-  ($x:ident, $y:pat) => {{
-      let tc = $x.advance();
-      match &tc.value {
-          $y => Ok(&t.token),
-          _ => Err(SyntaxError::Unexpected(tc.clone())),
-      }
-  }};
   ($x:ident, $y:pat => $z:expr) => {{
       let tc = $x.advance();
       match &tc.value {
