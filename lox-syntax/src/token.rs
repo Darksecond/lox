@@ -1,5 +1,4 @@
 #[derive(PartialEq, Debug, Clone)]
-#[allow(dead_code)]
 pub enum Token {
     // Single-character tokens.
     LeftParen,
