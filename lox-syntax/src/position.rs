@@ -14,6 +14,13 @@ pub struct Span {
 }
 
 impl Span {
+    pub unsafe fn new_unchecked(start: u32, end: u32) -> Self {
+        Span {
+            start: BytePos(start),
+            end: BytePos(end),
+        }
+    }
+
     pub fn union(a: Self, b: Self) -> Self {
         use std::cmp;
 
@@ -41,6 +48,16 @@ impl<T> WithSpan<T> {
             span: Span {
                 start: BytePos(0),
                 end: BytePos(0),
+            }
+        }
+    }
+
+    pub const unsafe fn new_unchecked(value: T, start: u32, end: u32) -> Self {
+        Self {
+            value,
+            span: Span {
+                start: BytePos(start),
+                end: BytePos(end),
             }
         }
     }

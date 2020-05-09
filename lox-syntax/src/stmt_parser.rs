@@ -47,7 +47,7 @@ fn parse_class_declaration(it: &mut Parser) -> Result<Stmt, SyntaxError> {
     let name = expect_identifier(it)?;
     let superclass = if it.optionally(TokenKind::Less)? {
         let name = expect_identifier(it)?;
-        Some(name.value.clone())
+        Some(name.clone())
     } else {
         None
     };
@@ -58,7 +58,7 @@ fn parse_class_declaration(it: &mut Parser) -> Result<Stmt, SyntaxError> {
     }
     it.expect(TokenKind::RightBrace)?;
 
-    Ok(Stmt::Class(name.value.clone(), superclass, functions))
+    Ok(Stmt::Class(name.clone(), superclass, functions))
 }
 
 fn parse_function_declaration(it: &mut Parser) -> Result<Stmt, SyntaxError> {
@@ -81,15 +81,15 @@ fn parse_function(it: &mut Parser) -> Result<Stmt, SyntaxError> {
         body.push(parse_declaration(it)?);
     }
     it.expect(TokenKind::RightBrace)?;
-    Ok(Stmt::Function(name.value.clone(), params, body))
+    Ok(Stmt::Function(name.clone(), params, body))
 }
 
-fn parse_params(it: &mut Parser) -> Result<Vec<Identifier>, SyntaxError> {
-    let mut params: Vec<Identifier> = Vec::new();
-    params.push(expect_identifier(it)?.value);
+fn parse_params(it: &mut Parser) -> Result<Vec<WithSpan<Identifier>>, SyntaxError> {
+    let mut params: Vec<WithSpan<Identifier>> = Vec::new();
+    params.push(expect_identifier(it)?);
     while it.check(TokenKind::Comma) {
         it.expect(TokenKind::Comma)?;
-        params.push(expect_identifier(it)?.value);
+        params.push(expect_identifier(it)?);
     }
     Ok(params)
 }
@@ -341,57 +341,62 @@ mod tests {
 
     #[test]
     fn test_function_stmt() {
-        assert_eq!(
-            parse_str("fun test(){}"),
-            Ok(vec![Stmt::Function("test".into(), vec![], vec![]),])
-        );
-        assert_eq!(
-            parse_str("fun test(a){}"),
-            Ok(vec![Stmt::Function(
-                "test".into(),
-                vec!["a".into()],
-                vec![]
-            ),])
-        );
-        assert_eq!(
-            parse_str("fun test(){nil;}"),
-            Ok(vec![Stmt::Function(
-                "test".into(),
-                vec![],
-                vec![Stmt::Expression(Box::new(Expr::Nil,)),]
-            ),])
-        );
+        unsafe { 
+            assert_eq!(
+                parse_str("fun test(){}"),
+                Ok(vec![Stmt::Function(WithSpan::new_unchecked("test".into(), 4, 8), vec![], vec![]),])
+            );
+            assert_eq!(
+                parse_str("fun test(a){}"),
+                Ok(vec![Stmt::Function(
+                    WithSpan::new_unchecked("test".into(), 4, 8),
+                    vec![WithSpan::new_unchecked("a".into(), 9, 10)],
+                    vec![]
+                ),])
+            );
+            assert_eq!(
+                parse_str("fun test(){nil;}"),
+                Ok(vec![Stmt::Function(
+                    WithSpan::new_unchecked("test".into(), 4, 8),
+                    vec![],
+                    vec![Stmt::Expression(Box::new(Expr::Nil,)),]
+                ),])
+            );
+        }
     }
 
     #[test]
     fn test_class_stmt() {
-        assert_eq!(
-            parse_str("class test{}"),
-            Ok(vec![Stmt::Class("test".into(), None, vec![]),])
-        );
-        assert_eq!(
-            parse_str("class test{a(){}}"),
-            Ok(vec![Stmt::Class(
-                "test".into(),
-                None,
-                vec![Stmt::Function("a".into(), vec![], vec![])]
-            )])
-        );
+        unsafe {
+            assert_eq!(
+                parse_str("class test{}"),
+                Ok(vec![Stmt::Class(WithSpan::new_unchecked("test".into(), 6, 10), None, vec![])])
+            );
+            assert_eq!(
+                parse_str("class test{a(){}}"),
+                Ok(vec![Stmt::Class(
+                    WithSpan::new_unchecked("test".into(), 6, 10),
+                    None,
+                    vec![Stmt::Function(WithSpan::new_unchecked("a".into(), 11, 12), vec![], vec![])]
+                )])
+            );
+        }
     }
 
     #[test]
     fn test_class_inheritance() {
-        assert_eq!(
-            parse_str("class BostonCream < Doughnut {}"),
-            Ok(vec![Stmt::Class(
-                "BostonCream".into(),
-                Some("Doughnut".into()),
-                vec![]
-            ),])
-        );
-        assert!(matches!(parse_str("class BostonCream < {}"), Err(SyntaxError::Unexpected(WithSpan{span:_,value: Token::LeftBrace}))));
+        unsafe {
+            assert_eq!(
+                parse_str("class BostonCream < Doughnut {}"),
+                Ok(vec![Stmt::Class(
+                    WithSpan::new_unchecked("BostonCream".into(), 6, 17),
+                    Some(WithSpan::new_unchecked("Doughnut".into(), 20, 28)),
+                    vec![]
+                )])
+            );
+        }
+        assert!(matches!(parse_str("class BostonCream < {}"), Err(SyntaxError::Expected(TokenKind::Identifier, WithSpan{span:_, value: Token::LeftBrace}))));
         assert!(matches!(parse_str("class BostonCream < Doughnut < BakedGood {}"), Err(SyntaxError::Expected(TokenKind::LeftBrace, WithSpan{span: _, value: Token::Less}))));
-
     }
 
     #[test]
