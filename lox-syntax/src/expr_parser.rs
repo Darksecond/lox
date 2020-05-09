@@ -94,7 +94,7 @@ fn parse_get(it: &mut Parser, left: Expr) -> Result<Expr, SyntaxError> {
     it.expect(TokenKind::Dot)?;
     let tc = it.advance();
     match &tc.value {
-        &Token::Identifier(ref i) => Ok(Expr::Get(Box::new(left), i.clone())),
+        &Token::Identifier(ref i) => Ok(Expr::Get(Box::new(left), WithSpan::new(i.clone(), tc.span))),
         _ => Err(SyntaxError::Expected(TokenKind::Identifier, tc.clone())),
     }
 }
@@ -532,7 +532,7 @@ mod tests {
                 parse_str("a.b"),
                 Ok(Expr::Get(
                     Box::new(Expr::Variable(WithSpan::new_unchecked("a".into(), 0, 1))),
-                    "b".into(),
+                    WithSpan::new_unchecked("b".into(), 2, 3),
                 ))
             );
 
@@ -541,9 +541,9 @@ mod tests {
                 Ok(Expr::Get(
                     Box::new(Expr::Get(
                         Box::new(Expr::Variable(WithSpan::new_unchecked("a".into(), 0, 1))),
-                        "b".into(),
+                        WithSpan::new_unchecked("b".into(), 2, 3),
                     )),
-                    "c".into(),
+                    WithSpan::new_unchecked("c".into(), 4, 5),
                 ))
             );
 
@@ -553,11 +553,11 @@ mod tests {
                     Box::new(Expr::Call(
                         Box::new(Expr::Get(
                             Box::new(Expr::Variable(WithSpan::new_unchecked("a".into(), 0, 1))),
-                            "b".into()
+                            WithSpan::new_unchecked("b".into(), 2, 3)
                         )),
                         vec![Expr::Number(3.0)]
                     )),
-                    "c".into()
+                    WithSpan::new_unchecked("c".into(), 7, 8)
                 ))
             );
         }
@@ -570,7 +570,7 @@ mod tests {
                 parse_str("a.b=3"),
                 Ok(Expr::Set(
                     Box::new(Expr::Variable(WithSpan::new_unchecked("a".into(), 0, 1))),
-                    "b".into(),
+                    WithSpan::new_unchecked("b".into(), 2, 3),
                     Box::new(Expr::Number(3.))
                 ))
             );

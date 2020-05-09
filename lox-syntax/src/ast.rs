@@ -43,8 +43,8 @@ pub enum Expr {
     Logical(Box<Expr>, LogicalOperator, Box<Expr>),
     Assign(WithSpan<Identifier>, Box<Expr>),
     Call(Box<Expr>, Vec<Expr>),
-    Get(Box<Expr>, Identifier),
-    Set(Box<Expr>, Identifier, Box<Expr>),
+    Get(Box<Expr>, WithSpan<Identifier>),
+    Set(Box<Expr>, WithSpan<Identifier>, Box<Expr>),
 }
 
 #[derive(Debug, PartialEq, Clone)]

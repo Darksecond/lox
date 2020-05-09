@@ -232,9 +232,9 @@ fn compile_expr(compiler: &mut Compiler, expr: &Expr) -> Result<(), CompilerErro
         Expr::Grouping(ref expr) => compile_expr(compiler, expr),
         Expr::Unary(operator, ref expr) => compile_unary(compiler, operator, expr),
         Expr::Set(ref expr, ref identifier, ref value) => {
-            compiler_set(compiler, expr, identifier, value)
+            compiler_set(compiler, expr, identifier.as_ref(), value)
         }
-        Expr::Get(ref expr, ref identifier) => compiler_get(compiler, expr, identifier),
+        Expr::Get(ref expr, ref identifier) => compiler_get(compiler, expr, identifier.as_ref()),
         ref expr => unimplemented!("{:?}", expr),
     }
 }
@@ -242,10 +242,10 @@ fn compile_expr(compiler: &mut Compiler, expr: &Expr) -> Result<(), CompilerErro
 fn compiler_get(
     compiler: &mut Compiler,
     expr: &Expr,
-    identifier: &str,
+    identifier: WithSpan<&String>,
 ) -> Result<(), CompilerError> {
     compile_expr(compiler, expr)?;
-    let constant = compiler.add_constant(identifier);
+    let constant = compiler.add_constant(identifier.value.as_str());
     compiler.add_instruction(Instruction::GetProperty(constant));
     Ok(())
 }
@@ -253,12 +253,12 @@ fn compiler_get(
 fn compiler_set(
     compiler: &mut Compiler,
     expr: &Expr,
-    identifier: &str,
+    identifier: WithSpan<&String>,
     value: &Expr,
 ) -> Result<(), CompilerError> {
     compile_expr(compiler, expr)?;
     compile_expr(compiler, value)?;
-    let constant = compiler.add_constant(identifier);
+    let constant = compiler.add_constant(identifier.value.as_str());
     compiler.add_instruction(Instruction::SetProperty(constant));
     Ok(())
 }
