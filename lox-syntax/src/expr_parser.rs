@@ -63,8 +63,7 @@ impl<'a> From<TokenKind> for Precedence {
 fn parse_expr(it: &mut Parser, precedence: Precedence) -> Result<Expr, SyntaxError> {
     let mut expr = parse_prefix(it)?;
     while !it.is_eof() {
-        let token = it.peek();
-        let next_precedence = Precedence::from(token);
+        let next_precedence = Precedence::from(it.peek());
         if precedence >= next_precedence {
             break;
         }
@@ -103,9 +102,7 @@ fn parse_prefix(it: &mut Parser) -> Result<Expr, SyntaxError> {
         | TokenKind::Identifier
         | TokenKind::Super
         | TokenKind::String => parse_primary(it),
-
         TokenKind::Bang | TokenKind::Minus => parse_unary(it),
-
         TokenKind::LeftParen => parse_grouping(it),
         _ => Err(SyntaxError::Unexpected(it.peek_token().clone())),
     }
@@ -145,7 +142,7 @@ fn parse_assign(it: &mut Parser, left: Expr) -> Result<Expr, SyntaxError> {
     match left {
         Expr::Variable(i) => Ok(Expr::Assign(i, Box::new(right))),
         Expr::Get(l, i) => Ok(Expr::Set(l, i, Box::new(right))),
-        e => Err(SyntaxError::InvalidLeftValue(WithSpan::empty(e.clone()))),
+        e => Err(SyntaxError::InvalidLeftValue(WithSpan::empty(e.clone()))), //TODO
     }
 }
 
