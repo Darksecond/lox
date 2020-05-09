@@ -1,6 +1,7 @@
 use crate::position::{WithSpan};
 use crate::token::{Token, TokenKind};
 use crate::ParseError;
+use crate::SyntaxError;
 
 static EOF_TOKEN: WithSpan<Token> = WithSpan::empty(Token::Eof);
 
@@ -22,24 +23,19 @@ impl<'a> Parser<'a> {
   }
 
   pub fn peek(&mut self) -> TokenKind {
+    self.peek_token().into()
+  }
+
+  pub fn peek_token(&mut self) -> &'a WithSpan<Token> {
     match self.tokens.get(self.cursor) {
-      Some(t) => t.into(),
-      None => TokenKind::Eof,
+      Some(t) => t,
+      None => &EOF_TOKEN,
     }
   }
 
   pub fn check(&mut self, match_token: TokenKind) -> bool {
     let token = self.peek();
     token == match_token
-  }
-
-  pub fn error<S: AsRef<str>>(&mut self, error: S) -> ParseError {
-    if !self.check(TokenKind::Eof) {
-      let token = self.advance();
-      ParseError { error: error.as_ref().to_string(), span: Some(token.span) }
-    } else {
-      "No more tokens".into()
-    }
   }
 
   pub fn advance(&mut self) -> &'a WithSpan<Token> {
@@ -52,16 +48,16 @@ impl<'a> Parser<'a> {
     }
   }
 
-  pub fn expect(&mut self, expected: TokenKind) -> Result<&'a Token, ParseError> {
+  pub fn expect(&mut self, expected: TokenKind) -> Result<&'a Token, SyntaxError> {
       let token = self.advance();
       if TokenKind::from(token) == expected {
         Ok(&token.value)
       } else {
-        Err(ParseError { error: format!("Expected {:?} got {:?}", expected, &token.value).into(), span: Some(token.span) })
+        Err(SyntaxError::Expected(expected, token.clone()))
       }
   }
 
-  pub fn optionally(&mut self, expected: TokenKind) -> Result<bool, ParseError> {
+  pub fn optionally(&mut self, expected: TokenKind) -> Result<bool, SyntaxError> {
     let token = self.peek();
     if TokenKind::from(token) == expected {
       self.expect(expected)?;
@@ -77,14 +73,14 @@ macro_rules! expect {
       let tc = $x.advance();
       match &tc.value {
           $y => Ok(&t.token),
-          t => Err(ParseError { error: format!("Unexpected {:?}", t).into(), span: Some(tc.span) }),
+          t => Err(SyntaxError::Unexpected(tc.clone())),
       }
   }};
   ($x:ident, $y:pat => $z:expr) => {{
       let tc = $x.advance();
       match &tc.value {
           $y => Ok($z),
-          t => Err(ParseError { error: format!("Unexpected {:?}", t).into(), span: Some(tc.span) }),
+          t => Err(SyntaxError::Unexpected(tc.clone())),
       }
   }};
 }
@@ -94,7 +90,7 @@ macro_rules! expect_with_span {
       let tc = $x.advance();
       match &tc.value {
           $y => Ok(WithSpan::new($z, tc.span)),
-          _ => Err(ParseError { error: "Unexpected token".into(), span: Some(tc.span) }),
+          t => Err(SyntaxError::Unexpected(tc.clone())),
       }
   }};
 }

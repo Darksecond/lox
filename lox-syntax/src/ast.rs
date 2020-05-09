@@ -28,7 +28,7 @@ pub enum LogicalOperator {
     Or,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Expr {
     Binary(Box<Expr>, BinaryOperator, Box<Expr>),
     Grouping(Box<Expr>),
@@ -47,7 +47,7 @@ pub enum Expr {
     Set(Box<Expr>, Identifier, Box<Expr>),
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Stmt {
     Expression(Box<Expr>),
     Print(Box<Expr>),

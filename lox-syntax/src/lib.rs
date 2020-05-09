@@ -10,13 +10,22 @@ mod token;
 mod tokenizer;
 
 
-use ast::Ast;
+use ast::{Ast, Expr};
+use token::{Token, TokenKind};
+use position::WithSpan;
 pub use common::ParseError;
 
 #[derive(PartialEq, Debug, Clone)]
-pub enum SyntaxError {}
+pub enum SyntaxError {
+  Expected(TokenKind, WithSpan<Token>),
+  Unexpected(WithSpan<Token>),
+  ExpectedUnaryOperator(WithSpan<Token>),
+  ExpectedBinaryOperator(WithSpan<Token>),
+  ExpectedPrimary(WithSpan<Token>),
+  InvalidLeftValue(WithSpan<Expr>),
+}
 
-pub fn parse(code: &str) -> Result<Ast, ParseError> {
+pub fn parse(code: &str) -> Result<Ast, SyntaxError> {
   use stmt_parser::parse;
   use tokenizer::tokenize_with_context;
   let tokens = tokenize_with_context(code);

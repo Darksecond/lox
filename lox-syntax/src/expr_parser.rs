@@ -1,7 +1,8 @@
 use super::ast::*;
-use super::common::*;
 use super::token::*;
 use crate::parser::Parser;
+use crate::SyntaxError;
+use crate::position::WithSpan;
 
 #[allow(dead_code)]
 #[derive(PartialEq, PartialOrd, Copy, Clone)]
@@ -59,7 +60,7 @@ impl<'a> From<TokenKind> for Precedence {
     }
 }
 
-fn parse_expr(it: &mut Parser, precedence: Precedence) -> Result<Expr, ParseError> {
+fn parse_expr(it: &mut Parser, precedence: Precedence) -> Result<Expr, SyntaxError> {
     let mut expr = parse_prefix(it)?;
     while !it.is_eof() {
         let token = it.peek();
@@ -72,7 +73,7 @@ fn parse_expr(it: &mut Parser, precedence: Precedence) -> Result<Expr, ParseErro
     Ok(expr)
 }
 
-fn parse_infix(it: &mut Parser, left: Expr) -> Result<Expr, ParseError> {
+fn parse_infix(it: &mut Parser, left: Expr) -> Result<Expr, SyntaxError> {
     match it.peek() {
         TokenKind::BangEqual
         | TokenKind::EqualEqual
@@ -88,11 +89,11 @@ fn parse_infix(it: &mut Parser, left: Expr) -> Result<Expr, ParseError> {
         TokenKind::Equal => parse_assign(it, left),
         TokenKind::LeftParen => parse_call(it, left),
         TokenKind::Dot => parse_get(it, left),
-        t => Err(it.error(format!("unexpected token: {:?}", t)))
+        t => Err(SyntaxError::Unexpected(it.peek_token().clone())),
     }
 }
 
-fn parse_prefix(it: &mut Parser) -> Result<Expr, ParseError> {
+fn parse_prefix(it: &mut Parser) -> Result<Expr, SyntaxError> {
     match it.peek() {
         TokenKind::Number
         | TokenKind::Nil
@@ -106,27 +107,27 @@ fn parse_prefix(it: &mut Parser) -> Result<Expr, ParseError> {
         TokenKind::Bang | TokenKind::Minus => parse_unary(it),
 
         TokenKind::LeftParen => parse_grouping(it),
-        t => Err(it.error(format!("unexpected token: {:?}", t)))
+        t => Err(SyntaxError::Unexpected(it.peek_token().clone())),
     }
 }
 
-fn parse_get(it: &mut Parser, left: Expr) -> Result<Expr, ParseError> {
+fn parse_get(it: &mut Parser, left: Expr) -> Result<Expr, SyntaxError> {
     it.expect(TokenKind::Dot)?;
     let tc = it.advance();
     match &tc.value {
         &Token::Identifier(ref i) => Ok(Expr::Get(Box::new(left), i.clone())),
-        _ => Err(ParseError { error: format!("Expected identifier"), span: Some(tc.span) }),
+        t => Err(SyntaxError::Expected(TokenKind::Identifier, tc.clone())),
     }
 }
 
-fn parse_call(it: &mut Parser, left: Expr) -> Result<Expr, ParseError> {
+fn parse_call(it: &mut Parser, left: Expr) -> Result<Expr, SyntaxError> {
     it.expect(TokenKind::LeftParen)?;
     let args = parse_arguments(it)?;
     it.expect(TokenKind::RightParen)?;
     Ok(Expr::Call(Box::new(left), args))
 }
 
-fn parse_arguments(it: &mut Parser) -> Result<Vec<Expr>, ParseError> {
+fn parse_arguments(it: &mut Parser) -> Result<Vec<Expr>, SyntaxError> {
     let mut args = Vec::new();
     if !it.check(TokenKind::RightParen) {
         args.push(parse_expr(it, Precedence::None)?);
@@ -138,62 +139,62 @@ fn parse_arguments(it: &mut Parser) -> Result<Vec<Expr>, ParseError> {
     Ok(args)
 }
 
-fn parse_assign(it: &mut Parser, left: Expr) -> Result<Expr, ParseError> {
+fn parse_assign(it: &mut Parser, left: Expr) -> Result<Expr, SyntaxError> {
     it.expect(TokenKind::Equal)?;
     let right = parse_expr(it, Precedence::None)?;
     match left {
         Expr::Variable(i) => Ok(Expr::Assign(i, Box::new(right))),
         Expr::Get(l, i) => Ok(Expr::Set(l, i, Box::new(right))),
-        e => Err(format!("invalid l-value: {:?}", e).into()),
+        e => Err(SyntaxError::InvalidLeftValue(WithSpan::empty(e.clone()))),
     }
 }
 
-fn parse_logical(it: &mut Parser, left: Expr) -> Result<Expr, ParseError> {
+fn parse_logical(it: &mut Parser, left: Expr) -> Result<Expr, SyntaxError> {
     let precedence = Precedence::from(it.peek());
     let operator = parse_logical_op(it)?;
     let right = parse_expr(it, precedence)?;
     Ok(Expr::Logical(Box::new(left), operator, Box::new(right)))
 }
 
-fn parse_grouping(it: &mut Parser) -> Result<Expr, ParseError> {
+fn parse_grouping(it: &mut Parser) -> Result<Expr, SyntaxError> {
     it.expect(TokenKind::LeftParen)?;
     let expr = parse_expr(it, Precedence::None)?;
     it.expect(TokenKind::RightParen)?;
     Ok(Expr::Grouping(Box::new(expr)))
 }
 
-fn parse_binary(it: &mut Parser, left: Expr) -> Result<Expr, ParseError> {
+fn parse_binary(it: &mut Parser, left: Expr) -> Result<Expr, SyntaxError> {
     let precedence = Precedence::from(it.peek());
     let operator = parse_binary_op(it)?;
     let right = parse_expr(it, precedence)?;
     Ok(Expr::Binary(Box::new(left), operator, Box::new(right)))
 }
 
-fn parse_unary(it: &mut Parser) -> Result<Expr, ParseError> {
+fn parse_unary(it: &mut Parser) -> Result<Expr, SyntaxError> {
     let operator = parse_unary_op(it)?;
     let right = parse_expr(it, Precedence::Unary)?;
     Ok(Expr::Unary(operator, Box::new(right)))
 }
 
-fn parse_logical_op(it: &mut Parser) -> Result<LogicalOperator, ParseError> {
+fn parse_logical_op(it: &mut Parser) -> Result<LogicalOperator, SyntaxError> {
     let tc = it.advance();
     match &tc.value {
         &Token::And => Ok(LogicalOperator::And),
         &Token::Or => Ok(LogicalOperator::Or),
-        _ => Err(ParseError { error: format!("expected unary op"), span: Some(tc.span) }),
+        _ => Err(SyntaxError::ExpectedUnaryOperator(tc.clone())),
     }
 }
 
-fn parse_unary_op(it: &mut Parser) -> Result<UnaryOperator, ParseError> {
+fn parse_unary_op(it: &mut Parser) -> Result<UnaryOperator, SyntaxError> {
     let tc = it.advance();
     match &tc.value {
         &Token::Bang => Ok(UnaryOperator::Bang),
         &Token::Minus => Ok(UnaryOperator::Minus),
-        _ => Err(ParseError { error: format!("expected unary op"), span: Some(tc.span) }),
+        _ => Err(SyntaxError::ExpectedUnaryOperator(tc.clone())),
     }
 }
 
-fn parse_binary_op(it: &mut Parser) -> Result<BinaryOperator, ParseError> {
+fn parse_binary_op(it: &mut Parser) -> Result<BinaryOperator, SyntaxError> {
     let tc = it.advance();
     match &tc.value {
         &Token::BangEqual => Ok(BinaryOperator::BangEqual),
@@ -206,11 +207,11 @@ fn parse_binary_op(it: &mut Parser) -> Result<BinaryOperator, ParseError> {
         &Token::Minus => Ok(BinaryOperator::Minus),
         &Token::Star => Ok(BinaryOperator::Star),
         &Token::Slash => Ok(BinaryOperator::Slash),
-        _ => Err(ParseError { error: format!("expected binary op"), span: Some(tc.span) }),
+        _ => Err(SyntaxError::ExpectedBinaryOperator(tc.clone())),
     }
 }
 
-fn parse_primary(it: &mut Parser) -> Result<Expr, ParseError> {
+fn parse_primary(it: &mut Parser) -> Result<Expr, SyntaxError> {
     let tc = it.advance();
     match &tc.value {
         &Token::Nil => Ok(Expr::Nil),
@@ -221,20 +222,20 @@ fn parse_primary(it: &mut Parser) -> Result<Expr, ParseError> {
         &Token::String(ref s) => Ok(Expr::String(s.clone())),
         &Token::Identifier(ref s) => Ok(Expr::Variable(s.clone())),
         &Token::Super => parse_super(it),
-        _ => Err(ParseError { error: format!("expected primary"), span: Some(tc.span) }),
+        _ => Err(SyntaxError::ExpectedPrimary(tc.clone())),
     }
 }
 
-fn parse_super(it: &mut Parser) -> Result<Expr, ParseError> {
+fn parse_super(it: &mut Parser) -> Result<Expr, SyntaxError> {
     it.expect(TokenKind::Dot)?;
     let tc = it.advance();
     match &tc.value {
         &Token::Identifier(ref i) => Ok(Expr::Super(i.clone())),
-        _ => Err(ParseError { error: format!("expected identifier"), span: Some(tc.span) }),
+        _ => Err(SyntaxError::Expected(TokenKind::Identifier, tc.clone())),
     }
 }
 
-pub fn parse(it: &mut Parser) -> Result<Expr, ParseError> {
+pub fn parse(it: &mut Parser) -> Result<Expr, SyntaxError> {
     parse_expr(it, Precedence::None)
 }
 
@@ -242,10 +243,10 @@ pub fn parse(it: &mut Parser) -> Result<Expr, ParseError> {
 mod tests {
     use super::super::tokenizer::*;
     use super::*;
-    fn parse_str(data: &str) -> Result<Expr, String> {
+    fn parse_str(data: &str) -> Result<Expr, SyntaxError> {
         let tokens = tokenize_with_context(data);
         let mut parser = crate::parser::Parser::new(&tokens);
-        parse(&mut parser).map_err(|e| e.error)
+        parse(&mut parser)
     }
 
     mod make {
@@ -383,7 +384,7 @@ mod tests {
             parse_str("1+2 3"),
             Ok(make::simple_binary(BinaryOperator::Plus))
         );
-        assert_eq!(parse_str("1+"), Err("No more tokens".into()));
+        assert!(matches!(parse_str("1+"), Err(SyntaxError::Unexpected(_))));
     }
 
     #[test]
@@ -404,11 +405,8 @@ mod tests {
                 Expr::Grouping(Box::new(simple_binary(BinaryOperator::Plus))),
             ))
         );
-        assert_eq!(parse_str("(1"), Err("Expected RightParen got Eof".into()));
-        assert_eq!(
-            parse_str("(1}"),
-            Err("Expected RightParen got RightBrace".into())
-        );
+        assert!(matches!(parse_str("(1"), Err(SyntaxError::Expected(TokenKind::RightParen, _))));
+        assert!(matches!(parse_str("(1}"), Err(SyntaxError::Expected(TokenKind::RightParen, WithSpan{span: _, value: Token::RightBrace}))));
     }
 
     #[test]
@@ -464,8 +462,9 @@ mod tests {
                 Box::new(Expr::Assign("b".into(), Box::new(Expr::Number(3.))))
             ))
         );
-        assert_eq!(parse_str("a="), Err("No more tokens".into()));
-        assert_eq!(parse_str("3=3"), Err("invalid l-value: Number(3.0)".into()));
+        assert!(matches!(parse_str("a="), Err(SyntaxError::Unexpected(_))));
+        assert!(matches!(parse_str("3=3"), Err(SyntaxError::InvalidLeftValue(WithSpan{span: _, value: Expr::Number(3.0)}))));
+
         assert_eq!(
             parse_str("a=1+2"),
             Ok(Expr::Assign(
@@ -523,10 +522,7 @@ mod tests {
             ))
         );
 
-        assert_eq!(
-            parse_str("a(3,)"),
-            Err("unexpected token: RightParen".into())
-        );
+        assert!(matches!(parse_str("a(3,)"), Err(SyntaxError::Unexpected(WithSpan{span: _, value: Token::RightParen}))));
     }
 
     #[test]

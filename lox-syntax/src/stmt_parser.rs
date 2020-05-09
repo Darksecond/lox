@@ -1,10 +1,10 @@
 use super::ast::*;
-use super::common::*;
 use super::token::*;
 use crate::position::WithSpan;
 use crate::parser::Parser;
+use crate::SyntaxError;
 
-fn parse_program(it: &mut Parser) -> Result<Vec<Stmt>, ParseError> {
+fn parse_program(it: &mut Parser) -> Result<Vec<Stmt>, SyntaxError> {
     let mut statements = Vec::new();
     while !it.is_eof() {
         statements.push(parse_declaration(it)?);
@@ -13,7 +13,7 @@ fn parse_program(it: &mut Parser) -> Result<Vec<Stmt>, ParseError> {
     Ok(statements)
 }
 
-fn parse_declaration(it: &mut Parser) -> Result<Stmt, ParseError> {
+fn parse_declaration(it: &mut Parser) -> Result<Stmt, SyntaxError> {
     match it.peek() {
         TokenKind::Var => parse_var_declaration(it),
         TokenKind::Fun => parse_function_declaration(it),
@@ -22,7 +22,7 @@ fn parse_declaration(it: &mut Parser) -> Result<Stmt, ParseError> {
     }
 }
 
-fn parse_statement(it: &mut Parser) -> Result<Stmt, ParseError> {
+fn parse_statement(it: &mut Parser) -> Result<Stmt, SyntaxError> {
     match it.peek() {
         TokenKind::Print => parse_print_statement(it),
         TokenKind::If => parse_if_statement(it),
@@ -34,7 +34,7 @@ fn parse_statement(it: &mut Parser) -> Result<Stmt, ParseError> {
     }
 }
 
-fn parse_class_declaration(it: &mut Parser) -> Result<Stmt, ParseError> {
+fn parse_class_declaration(it: &mut Parser) -> Result<Stmt, SyntaxError> {
     it.expect(TokenKind::Class)?;
     let name = expect!(it, Token::Identifier(i) => i)?;
     let superclass = if it.optionally(TokenKind::Less)? {
@@ -53,12 +53,12 @@ fn parse_class_declaration(it: &mut Parser) -> Result<Stmt, ParseError> {
     Ok(Stmt::Class(name.clone(), superclass, functions))
 }
 
-fn parse_function_declaration(it: &mut Parser) -> Result<Stmt, ParseError> {
+fn parse_function_declaration(it: &mut Parser) -> Result<Stmt, SyntaxError> {
     it.expect(TokenKind::Fun)?;
     parse_function(it)
 }
 
-fn parse_function(it: &mut Parser) -> Result<Stmt, ParseError> {
+fn parse_function(it: &mut Parser) -> Result<Stmt, SyntaxError> {
     let name = expect!(it, Token::Identifier(i) => i)?;
     it.expect(TokenKind::LeftParen)?;
     let params = if !it.check(TokenKind::RightParen) {
@@ -76,7 +76,7 @@ fn parse_function(it: &mut Parser) -> Result<Stmt, ParseError> {
     Ok(Stmt::Function(name.clone(), params, body))
 }
 
-fn parse_params(it: &mut Parser) -> Result<Vec<Identifier>, ParseError> {
+fn parse_params(it: &mut Parser) -> Result<Vec<Identifier>, SyntaxError> {
     let mut params: Vec<Identifier> = Vec::new();
     params.push(expect!(it, Token::Identifier(i) => i.clone())?);
     while it.check(TokenKind::Comma) {
@@ -86,7 +86,7 @@ fn parse_params(it: &mut Parser) -> Result<Vec<Identifier>, ParseError> {
     Ok(params)
 }
 
-fn parse_var_declaration(it: &mut Parser) -> Result<Stmt, ParseError> {
+fn parse_var_declaration(it: &mut Parser) -> Result<Stmt, SyntaxError> {
     it.expect(TokenKind::Var)?;
     let name = expect_with_span!(it, Token::Identifier(i) => i.clone())?;
     let mut initializer: Option<Expr> = None;
@@ -100,11 +100,11 @@ fn parse_var_declaration(it: &mut Parser) -> Result<Stmt, ParseError> {
     Ok(Stmt::Var(name, initializer.map(Box::new)))
 }
 
-fn parse_expr(it: &mut Parser) -> Result<Expr, ParseError> {
+fn parse_expr(it: &mut Parser) -> Result<Expr, SyntaxError> {
     super::expr_parser::parse(it).map_err(|e| e.into())
 }
 
-fn parse_for_statement(it: &mut Parser) -> Result<Stmt, ParseError> {
+fn parse_for_statement(it: &mut Parser) -> Result<Stmt, SyntaxError> {
     it.expect(TokenKind::For)?;
     it.expect(TokenKind::LeftParen)?;
     let initializer = match it.peek() {
@@ -142,7 +142,7 @@ fn parse_for_statement(it: &mut Parser) -> Result<Stmt, ParseError> {
     Ok(body)
 }
 
-fn parse_return_statement(it: &mut Parser) -> Result<Stmt, ParseError> {
+fn parse_return_statement(it: &mut Parser) -> Result<Stmt, SyntaxError> {
     it.expect(TokenKind::Return)?;
     let mut expr: Option<Expr> = None;
     if !it.check(TokenKind::Semicolon) {
@@ -152,14 +152,14 @@ fn parse_return_statement(it: &mut Parser) -> Result<Stmt, ParseError> {
     Ok(Stmt::Return(expr.map(Box::new)))
 }
 
-fn parse_expr_statement(it: &mut Parser) -> Result<Stmt, ParseError> {
+fn parse_expr_statement(it: &mut Parser) -> Result<Stmt, SyntaxError> {
     let expr = parse_expr(it)?;
     it.expect(TokenKind::Semicolon)?;
 
     Ok(Stmt::Expression(Box::new(expr)))
 }
 
-fn parse_block_statement(it: &mut Parser) -> Result<Stmt, ParseError> {
+fn parse_block_statement(it: &mut Parser) -> Result<Stmt, SyntaxError> {
     it.expect(TokenKind::LeftBrace)?;
     let mut statements: Vec<Stmt> = Vec::new();
     while !it.check(TokenKind::RightBrace) {
@@ -169,7 +169,7 @@ fn parse_block_statement(it: &mut Parser) -> Result<Stmt, ParseError> {
     Ok(Stmt::Block(statements))
 }
 
-fn parse_while_statement(it: &mut Parser) -> Result<Stmt, ParseError> {
+fn parse_while_statement(it: &mut Parser) -> Result<Stmt, SyntaxError> {
     it.expect(TokenKind::While)?;
     it.expect(TokenKind::LeftParen)?;
     let condition = parse_expr(it)?;
@@ -178,7 +178,7 @@ fn parse_while_statement(it: &mut Parser) -> Result<Stmt, ParseError> {
     Ok(Stmt::While(Box::new(condition), Box::new(statement)))
 }
 
-fn parse_if_statement(it: &mut Parser) -> Result<Stmt, ParseError> {
+fn parse_if_statement(it: &mut Parser) -> Result<Stmt, SyntaxError> {
     it.expect(TokenKind::If)?;
     it.expect(TokenKind::LeftParen)?;
     let condition = parse_expr(it)?;
@@ -197,14 +197,14 @@ fn parse_if_statement(it: &mut Parser) -> Result<Stmt, ParseError> {
     ))
 }
 
-fn parse_print_statement(it: &mut Parser) -> Result<Stmt, ParseError> {
+fn parse_print_statement(it: &mut Parser) -> Result<Stmt, SyntaxError> {
     it.expect(TokenKind::Print)?;
     let expr = parse_expr(it)?;
     it.expect(TokenKind::Semicolon)?;
     Ok(Stmt::Print(Box::new(expr)))
 }
 
-pub fn parse(it: &mut Parser) -> Result<Vec<Stmt>, ParseError> {
+pub fn parse(it: &mut Parser) -> Result<Vec<Stmt>, SyntaxError> {
     parse_program(it)
 }
 
@@ -212,10 +212,10 @@ pub fn parse(it: &mut Parser) -> Result<Vec<Stmt>, ParseError> {
 mod tests {
     use super::super::tokenizer::*;
     use super::*;
-    fn parse_str(data: &str) -> Result<Vec<Stmt>, String> {
+    fn parse_str(data: &str) -> Result<Vec<Stmt>, SyntaxError> {
         let tokens = tokenize_with_context(data);
         let mut parser = crate::parser::Parser::new(&tokens);
-        parse(&mut parser).map_err(|e| e.error) //TODO
+        parse(&mut parser)
     }
 
     #[test]
@@ -270,10 +270,7 @@ mod tests {
             ),])
         );
 
-        assert_eq!(
-            parse_str("if (nil) var beverage = nil;"),
-            Err("unexpected token: Var".into())
-        );
+        assert!(matches!(parse_str("if (nil) var beverage = nil;"), Err(SyntaxError::Unexpected(WithSpan{span:_,value: Token::Var}))));
     }
 
     #[test]
@@ -384,14 +381,9 @@ mod tests {
                 vec![]
             ),])
         );
-        assert_eq!(
-            parse_str("class BostonCream < {}"),
-            Err("Unexpected LeftBrace".into())
-        );
-        assert_eq!(
-            parse_str("class BostonCream < Doughnut < BakedGood {}"),
-            Err("Expected LeftBrace got Less".into())
-        );
+        assert!(matches!(parse_str("class BostonCream < {}"), Err(SyntaxError::Unexpected(WithSpan{span:_,value: Token::LeftBrace}))));
+        assert!(matches!(parse_str("class BostonCream < Doughnut < BakedGood {}"), Err(SyntaxError::Expected(TokenKind::LeftBrace, WithSpan{span: _, value: Token::Less}))));
+
     }
 
     #[test]
