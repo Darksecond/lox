@@ -46,8 +46,9 @@ where
     It: Iterator<Item = &'a WithSpan<Token>>,
 {
     let mut expr = parse_prefix(it)?;
-    while let Some(&token) = it.raw_peek() {
-        let next_precedence = Precedence::from(&token.value);
+    while !it.is_eof() {
+        let token = it.peek()?;
+        let next_precedence = Precedence::from(token);
         if precedence >= next_precedence {
             break;
         }
@@ -127,9 +128,9 @@ where
     It: Iterator<Item = &'a WithSpan<Token>>,
 {
     let mut args = Vec::new();
-    if it.peek()? != &Token::RightParen {
+    if !it.check(TokenKind::RightParen) {
         args.push(parse_expr(it, Precedence::None)?);
-        while it.peek()? == &Token::Comma {
+        while it.check(TokenKind::Comma) {
             it.expect(&Token::Comma)?;
             args.push(parse_expr(it, Precedence::None)?);
         }

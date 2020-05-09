@@ -1,5 +1,5 @@
 use crate::position::{WithSpan};
-use crate::token::Token;
+use crate::token::{Token, TokenKind};
 use std::iter::{Iterator, Peekable};
 use crate::ParseError;
 
@@ -20,12 +20,11 @@ where
     }
   }
 
-  pub fn raw_peek(&mut self) -> Option<&&'a WithSpan<Token>> {
-    self.iterator.peek()
-  }
-
-  pub fn raw_next(&mut self) -> Option<&'a WithSpan<Token>> {
-    self.iterator.next()
+  pub fn is_eof(&mut self) -> bool {
+    match self.iterator.peek() {
+      Some(_) => false,
+      None => true,
+    }
   }
 
   pub fn peek(&mut self) -> Result<&'a Token, String> {
@@ -33,6 +32,15 @@ where
       Some(&t) => Ok(&t.value),
       None => Err(String::from("No more tokens")),
     }
+  }
+
+  pub fn check(&mut self, match_token: TokenKind) -> bool {
+    if let Some(token) = self.iterator.peek() {
+      if TokenKind::from(*token) == match_token {
+        return true;
+      }
+    }
+    false
   }
 
   pub fn error<S: AsRef<str>>(&mut self, error: S) -> ParseError {

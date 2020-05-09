@@ -10,13 +10,11 @@ where
     It: Iterator<Item = &'a WithSpan<Token>>,
 {
     let mut statements = Vec::new();
-    while let Some(_) = it.raw_peek() {
+    while !it.is_eof() {
         statements.push(parse_declaration(it)?);
     }
-    match it.raw_next() {
-        Some(t) => Err(ParseError { error: "Expected None".into(), span: Some(t.span) }),
-        None => Ok(statements),
-    }
+    
+    Ok(statements)
 }
 
 fn parse_declaration<'a, It>(it: &mut Parser<'a, It>) -> Result<Stmt, ParseError>
@@ -60,7 +58,7 @@ where
     };
     it.expect(&Token::LeftBrace)?;
     let mut functions: Vec<Stmt> = vec![];
-    while it.peek()? != &Token::RightBrace {
+    while !it.check(TokenKind::RightBrace) {
         functions.push(parse_function(it)?);
     }
     it.expect(&Token::RightBrace)?;
@@ -82,7 +80,7 @@ where
 {
     let name = expect!(it, Token::Identifier(i) => i)?;
     it.expect(&Token::LeftParen)?;
-    let params = if it.peek()? != &Token::RightParen {
+    let params = if !it.check(TokenKind::RightParen) {
         parse_params(it)?
     } else {
         Vec::new()
@@ -90,7 +88,7 @@ where
     it.expect(&Token::RightParen)?;
     it.expect(&Token::LeftBrace)?;
     let mut body: Vec<Stmt> = Vec::new();
-    while it.peek()? != &Token::RightBrace {
+    while !it.check(TokenKind::RightBrace) {
         body.push(parse_declaration(it)?);
     }
     it.expect(&Token::RightBrace)?;
@@ -103,7 +101,7 @@ where
 {
     let mut params: Vec<Identifier> = Vec::new();
     params.push(expect!(it, Token::Identifier(i) => i.clone())?);
-    while it.peek()? == &Token::Comma {
+    while it.check(TokenKind::Comma) {
         it.expect(&Token::Comma)?;
         params.push(expect!(it, Token::Identifier(i) => i.clone())?);
     }
@@ -148,13 +146,13 @@ where
         }
         _ => Some(parse_expr_statement(it)?),
     };
-    let condition = if it.peek()? != &Token::Semicolon {
+    let condition = if !it.check(TokenKind::Semicolon) {
         parse_expr(it)?
     } else {
         Expr::Boolean(true)
     };
     it.expect(&Token::Semicolon)?;
-    let increment = if it.peek()? != &Token::RightParen {
+    let increment = if !it.check(TokenKind::RightParen) {
         Some(parse_expr(it)?)
     } else {
         None
@@ -181,7 +179,7 @@ where
 {
     it.expect(&Token::Return)?;
     let mut expr: Option<Expr> = None;
-    if it.peek()? != &Token::Semicolon {
+    if !it.check(TokenKind::Semicolon) {
         expr = Some(parse_expr(it)?);
     }
     it.expect(&Token::Semicolon)?;
@@ -204,7 +202,7 @@ where
 {
     it.expect(&Token::LeftBrace)?;
     let mut statements: Vec<Stmt> = Vec::new();
-    while it.peek()? != &Token::RightBrace {
+    while !it.check(TokenKind::RightBrace) {
         statements.push(parse_declaration(it)?);
     }
     it.expect(&Token::RightBrace)?;
