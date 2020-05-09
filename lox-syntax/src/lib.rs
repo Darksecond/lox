@@ -13,7 +13,6 @@ mod tokenizer;
 use ast::{Ast, Expr};
 use token::{Token, TokenKind};
 use position::WithSpan;
-pub use common::ParseError;
 
 #[derive(PartialEq, Debug, Clone)]
 pub enum SyntaxError {

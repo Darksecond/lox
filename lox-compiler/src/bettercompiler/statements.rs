@@ -178,10 +178,10 @@ fn compile_expr(compiler: &mut Compiler, expr: &Expr) -> Result<(), CompilerErro
         Expr::Number(num) => compile_number(compiler, num),
         Expr::String(ref string) => compile_string(compiler, string),
         Expr::Binary(ref left, operator, ref right) => compile_binary(compiler, operator, left, right),
-        Expr::Variable(ref identifier) => compile_variable(compiler, identifier),
+        Expr::Variable(ref identifier) => compile_variable(compiler, identifier.as_ref()),
         Expr::Nil => compile_nil(compiler),
         Expr::Boolean(boolean) => compile_boolean(compiler, boolean),
-        Expr::Assign(ref identifier, ref expr) => compile_assign(compiler, identifier, expr),
+        Expr::Assign(ref identifier, ref expr) => compile_assign(compiler, identifier.as_ref(), expr),
         Expr::Logical(ref left, operator, ref right) => compile_logical(compiler, operator, left, right),
         Expr::Call(ref identifier, ref args) => compile_call(compiler, identifier, args),
         Expr::Grouping(ref expr) => compile_expr(compiler, expr),
@@ -264,32 +264,32 @@ fn compile_boolean(compiler: &mut Compiler, boolean: bool) -> Result<(), Compile
     Ok(())
 }
 
-fn compile_assign(compiler: &mut Compiler, identifier: &str, expr: &Expr) -> Result<(), CompilerError> {
+fn compile_assign(compiler: &mut Compiler, identifier: WithSpan<&String>, expr: &Expr) -> Result<(), CompilerError> {
     compile_expr(compiler, expr)?;
-    if let Some(local) = compiler.resolve_local(identifier)? {
+    if let Some(local) = compiler.resolve_local(identifier.value)? {
         // Local
         compiler.add_instruction(Instruction::SetLocal(local));
-    } else if let Some(upvalue) = compiler.resolve_upvalue(identifier)? {
+    } else if let Some(upvalue) = compiler.resolve_upvalue(identifier.value)? {
         // Upvalue
         compiler.add_instruction(Instruction::SetUpvalue(upvalue));
     } else {
         // Global
-        let constant = compiler.add_constant(identifier);
+        let constant = compiler.add_constant(identifier.value.as_str());
         compiler.add_instruction(Instruction::SetGlobal(constant));
     }
     Ok(())
 }
 
-fn compile_variable(compiler: &mut Compiler, identifier: &str) -> Result<(), CompilerError> {
-    if let Some(local) = compiler.resolve_local(identifier)? {
+fn compile_variable(compiler: &mut Compiler, identifier: WithSpan<&String>) -> Result<(), CompilerError> {
+    if let Some(local) = compiler.resolve_local(identifier.value)? {
         // Local
         compiler.add_instruction(Instruction::GetLocal(local));
-    } else if let Some(upvalue) = compiler.resolve_upvalue(identifier)? {
+    } else if let Some(upvalue) = compiler.resolve_upvalue(identifier.value)? {
         // Upvalue
         compiler.add_instruction(Instruction::GetUpvalue(upvalue));
     } else {
         // Global
-        let constant = compiler.add_constant(identifier);
+        let constant = compiler.add_constant(identifier.value.as_str());
         compiler.add_instruction(Instruction::GetGlobal(constant));
     }
     Ok(())

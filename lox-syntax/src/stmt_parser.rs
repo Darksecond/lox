@@ -3,14 +3,7 @@ use super::token::*;
 use crate::position::WithSpan;
 use crate::parser::Parser;
 use crate::SyntaxError;
-
-fn expect_identifier(p: &mut Parser) -> Result<WithSpan<Identifier>, SyntaxError> {
-    let token = p.advance();
-    match &token.value {
-        Token::Identifier(ident) => Ok(WithSpan::new(ident.clone(), token.span)),
-        _ => Err(SyntaxError::Expected(TokenKind::Identifier, token.clone())),
-    }
-}
+use crate::common::*;
 
 fn parse_program(it: &mut Parser) -> Result<Vec<Stmt>, SyntaxError> {
     let mut statements = Vec::new();
@@ -270,13 +263,15 @@ mod tests {
             ),])
         );
 
-        assert_eq!(
-            parse_str("var beverage = x = nil;"),
-            Ok(vec![Stmt::Var(
-                make_span_string("beverage", 4),
-                Some(Box::new(Expr::Assign("x".into(), Box::new(Expr::Nil))))
-            ),])
-        );
+        unsafe {
+            assert_eq!(
+                parse_str("var beverage = x = nil;"),
+                Ok(vec![Stmt::Var(
+                    make_span_string("beverage", 4),
+                    Some(Box::new(Expr::Assign(WithSpan::new_unchecked("x".into(), 15, 16), Box::new(Expr::Nil))))
+                ),])
+            );
+        }
 
         assert!(matches!(parse_str("if (nil) var beverage = nil;"), Err(SyntaxError::Unexpected(WithSpan{span:_,value: Token::Var}))));
     }

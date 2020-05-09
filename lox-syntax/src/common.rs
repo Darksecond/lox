@@ -1,33 +1,13 @@
-use crate::position::{Span};
+use crate::parser::Parser;
+use crate::SyntaxError;
+use crate::token::{Token, TokenKind};
+use crate::position::WithSpan;
+use crate::ast::Identifier;
 
-//TODO Replace with WithSpan<String>
-#[derive(Debug)]
-pub struct ParseError {
-    pub error: String,
-    pub span: Option<Span>,
-}
-
-impl From<&str> for ParseError {
-    fn from(error: &str) -> ParseError {
-        ParseError {
-            error: error.to_string(),
-            span: None,
-        }
-    }
-}
-impl From<&String> for ParseError {
-    fn from(error: &String) -> ParseError {
-        ParseError {
-            error: error.to_string(),
-            span: None,
-        }
-    }
-}
-impl From<String> for ParseError {
-    fn from(error: String) -> ParseError {
-        ParseError {
-            error: error,
-            span: None,
-        }
+pub fn expect_identifier(p: &mut Parser) -> Result<WithSpan<Identifier>, SyntaxError> {
+    let token = p.advance();
+    match &token.value {
+        Token::Identifier(ident) => Ok(WithSpan::new(ident.clone(), token.span)),
+        _ => Err(SyntaxError::Expected(TokenKind::Identifier, token.clone())),
     }
 }
