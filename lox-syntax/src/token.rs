@@ -48,7 +48,7 @@ pub enum Token {
     While,
 
     // Other.
-    // Eof, // Not currently used
+    Eof,
     UnterminatedString,
     Unknown(char),
 }
@@ -102,7 +102,7 @@ pub enum TokenKind {
     While,
 
     // Other.
-    // Eof, // Not currently used
+    Eof,
     UnterminatedString,
     Unknown,
 }
@@ -154,6 +154,7 @@ impl From<&Token> for TokenKind {
             Token::True => TokenKind::True,
             Token::Var => TokenKind::Var,
             Token::While => TokenKind::While,
+            Token::Eof => TokenKind::Eof,
             Token::UnterminatedString => TokenKind::UnterminatedString,
             Token::Unknown(_) => TokenKind::Unknown,
         }

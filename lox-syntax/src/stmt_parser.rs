@@ -21,10 +21,10 @@ fn parse_declaration<'a, It>(it: &mut Parser<'a, It>) -> Result<Stmt, ParseError
 where
     It: Iterator<Item = &'a WithSpan<Token>>,
 {
-    match it.peek()? {
-        &Token::Var => parse_var_declaration(it),
-        &Token::Fun => parse_function_declaration(it),
-        &Token::Class => parse_class_declaration(it),
+    match it.peek() {
+        TokenKind::Var => parse_var_declaration(it),
+        TokenKind::Fun => parse_function_declaration(it),
+        TokenKind::Class => parse_class_declaration(it),
         _ => parse_statement(it),
     }
 }
@@ -33,13 +33,13 @@ fn parse_statement<'a, It>(it: &mut Parser<'a, It>) -> Result<Stmt, ParseError>
 where
     It: Iterator<Item = &'a WithSpan<Token>>,
 {
-    match it.peek()? {
-        &Token::Print => parse_print_statement(it),
-        &Token::If => parse_if_statement(it),
-        &Token::LeftBrace => parse_block_statement(it),
-        &Token::While => parse_while_statement(it),
-        &Token::Return => parse_return_statement(it),
-        &Token::For => parse_for_statement(it),
+    match it.peek() {
+        TokenKind::Print => parse_print_statement(it),
+        TokenKind::If => parse_if_statement(it),
+        TokenKind::LeftBrace => parse_block_statement(it),
+        TokenKind::While => parse_while_statement(it),
+        TokenKind::Return => parse_return_statement(it),
+        TokenKind::For => parse_for_statement(it),
         _ => parse_expr_statement(it),
     }
 }
@@ -138,9 +138,9 @@ where
 {
     it.expect(TokenKind::For)?;
     it.expect(TokenKind::LeftParen)?;
-    let initializer = match it.peek()? {
-        &Token::Var => Some(parse_var_declaration(it)?),
-        &Token::Semicolon => {
+    let initializer = match it.peek() {
+        TokenKind::Var => Some(parse_var_declaration(it)?),
+        TokenKind::Semicolon => {
             it.expect(TokenKind::Semicolon)?;
             None
         }

@@ -41,13 +41,33 @@ impl<'a> From<&'a Token> for Precedence {
     }
 }
 
+impl<'a> From<TokenKind> for Precedence {
+    fn from(token: TokenKind) -> Precedence {
+        match token {
+            TokenKind::Equal => Precedence::Assign,
+            TokenKind::Or => Precedence::Or,
+            TokenKind::And => Precedence::And,
+            TokenKind::BangEqual | TokenKind::EqualEqual => Precedence::Equality,
+            TokenKind::Less | TokenKind::LessEqual | TokenKind::Greater | TokenKind::GreaterEqual => {
+                Precedence::Comparison
+            }
+            TokenKind::Plus | TokenKind::Minus => Precedence::Term,
+            TokenKind::Star | TokenKind::Slash => Precedence::Factor,
+            TokenKind::Bang => Precedence::Unary, // Minus is already specified, but I think this is only for infix ops
+            TokenKind::LeftParen => Precedence::Call,
+            TokenKind::Dot => Precedence::Call,
+            _ => Precedence::None,
+        }
+    }
+}
+
 fn parse_expr<'a, It>(it: &mut Parser<'a, It>, precedence: Precedence) -> Result<Expr, ParseError>
 where
     It: Iterator<Item = &'a WithSpan<Token>>,
 {
     let mut expr = parse_prefix(it)?;
     while !it.is_eof() {
-        let token = it.peek()?;
+        let token = it.peek();
         let next_precedence = Precedence::from(token);
         if precedence >= next_precedence {
             break;
@@ -61,21 +81,21 @@ fn parse_infix<'a, It>(it: &mut Parser<'a, It>, left: Expr) -> Result<Expr, Pars
 where
     It: Iterator<Item = &'a WithSpan<Token>>,
 {
-    match it.peek()? {
-        &Token::BangEqual
-        | &Token::EqualEqual
-        | &Token::Less
-        | &Token::LessEqual
-        | &Token::Greater
-        | &Token::GreaterEqual
-        | &Token::Plus
-        | &Token::Minus
-        | &Token::Star
-        | &Token::Slash => parse_binary(it, left),
-        &Token::Or | &Token::And => parse_logical(it, left),
-        &Token::Equal => parse_assign(it, left),
-        &Token::LeftParen => parse_call(it, left),
-        &Token::Dot => parse_get(it, left),
+    match it.peek() {
+        TokenKind::BangEqual
+        | TokenKind::EqualEqual
+        | TokenKind::Less
+        | TokenKind::LessEqual
+        | TokenKind::Greater
+        | TokenKind::GreaterEqual
+        | TokenKind::Plus
+        | TokenKind::Minus
+        | TokenKind::Star
+        | TokenKind::Slash => parse_binary(it, left),
+        TokenKind::Or | TokenKind::And => parse_logical(it, left),
+        TokenKind::Equal => parse_assign(it, left),
+        TokenKind::LeftParen => parse_call(it, left),
+        TokenKind::Dot => parse_get(it, left),
         t => Err(it.error(format!("unexpected token: {:?}", t)))
     }
 }
@@ -84,19 +104,19 @@ fn parse_prefix<'a, It>(it: &mut Parser<'a, It>) -> Result<Expr, ParseError>
 where
     It: Iterator<Item = &'a WithSpan<Token>>,
 {
-    match it.peek()? {
-        &Token::Number(_)
-        | &Token::Nil
-        | &Token::This
-        | &Token::True
-        | &Token::False
-        | &Token::Identifier(_)
-        | &Token::Super
-        | &Token::String(_) => parse_primary(it),
+    match it.peek() {
+        TokenKind::Number
+        | TokenKind::Nil
+        | TokenKind::This
+        | TokenKind::True
+        | TokenKind::False
+        | TokenKind::Identifier
+        | TokenKind::Super
+        | TokenKind::String => parse_primary(it),
 
-        &Token::Bang | &Token::Minus => parse_unary(it),
+        TokenKind::Bang | TokenKind::Minus => parse_unary(it),
 
-        &Token::LeftParen => parse_grouping(it),
+        TokenKind::LeftParen => parse_grouping(it),
         t => Err(it.error(format!("unexpected token: {:?}", t)))
     }
 }
@@ -155,7 +175,7 @@ fn parse_logical<'a, It>(it: &mut Parser<'a, It>, left: Expr) -> Result<Expr, Pa
 where
     It: Iterator<Item = &'a WithSpan<Token>>,
 {
-    let precedence = Precedence::from(it.peek()?);
+    let precedence = Precedence::from(it.peek());
     let operator = parse_logical_op(it)?;
     let right = parse_expr(it, precedence)?;
     Ok(Expr::Logical(Box::new(left), operator, Box::new(right)))
@@ -175,7 +195,7 @@ fn parse_binary<'a, It>(it: &mut Parser<'a, It>, left: Expr) -> Result<Expr, Par
 where
     It: Iterator<Item = &'a WithSpan<Token>>,
 {
-    let precedence = Precedence::from(it.peek()?);
+    let precedence = Precedence::from(it.peek());
     let operator = parse_binary_op(it)?;
     let right = parse_expr(it, precedence)?;
     Ok(Expr::Binary(Box::new(left), operator, Box::new(right)))

@@ -21,26 +21,19 @@ where
   }
 
   pub fn is_eof(&mut self) -> bool {
-    match self.iterator.peek() {
-      Some(_) => false,
-      None => true,
-    }
+    self.check(TokenKind::Eof)
   }
 
-  pub fn peek(&mut self) -> Result<&'a Token, String> {
+  pub fn peek(&mut self) -> TokenKind {
     match self.iterator.peek() {
-      Some(&t) => Ok(&t.value),
-      None => Err(String::from("No more tokens")),
+      Some(&t) => t.into(),
+      None => TokenKind::Eof,
     }
   }
 
   pub fn check(&mut self, match_token: TokenKind) -> bool {
-    if let Some(token) = self.iterator.peek() {
-      if TokenKind::from(*token) == match_token {
-        return true;
-      }
-    }
-    false
+    let token = self.peek();
+    token == match_token
   }
 
   pub fn error<S: AsRef<str>>(&mut self, error: S) -> ParseError {
