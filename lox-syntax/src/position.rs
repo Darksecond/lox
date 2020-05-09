@@ -31,11 +31,21 @@ pub struct WithSpan<T> {
 }
 
 impl<T> WithSpan<T> {
-    pub fn new(value: T, span: Span) -> Self {
+    pub const fn new(value: T, span: Span) -> Self {
         WithSpan { value, span }
     }
 
-    pub fn as_ref(&self) -> WithSpan<&T> {
+    pub const fn empty(value: T) -> Self {
+        Self {
+            value,
+            span: Span {
+                start: BytePos(0),
+                end: BytePos(0),
+            }
+        }
+    }
+
+    pub const fn as_ref(&self) -> WithSpan<&T> {
         WithSpan {
             span: self.span,
             value: &self.value,

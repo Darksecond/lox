@@ -126,7 +126,7 @@ where
     It: Iterator<Item = &'a WithSpan<Token>>,
 {
     it.expect(TokenKind::Dot)?;
-    let tc = it.advance()?;
+    let tc = it.advance();
     match &tc.value {
         &Token::Identifier(ref i) => Ok(Expr::Get(Box::new(left), i.clone())),
         _ => Err(ParseError { error: format!("Expected identifier"), span: Some(tc.span) }),
@@ -214,7 +214,7 @@ fn parse_logical_op<'a, It>(it: &mut Parser<'a, It>) -> Result<LogicalOperator, 
 where
     It: Iterator<Item = &'a WithSpan<Token>>,
 {
-    let tc = it.advance()?;
+    let tc = it.advance();
     match &tc.value {
         &Token::And => Ok(LogicalOperator::And),
         &Token::Or => Ok(LogicalOperator::Or),
@@ -226,7 +226,7 @@ fn parse_unary_op<'a, It>(it: &mut Parser<'a, It>) -> Result<UnaryOperator, Pars
 where
     It: Iterator<Item = &'a WithSpan<Token>>,
 {
-    let tc = it.advance()?;
+    let tc = it.advance();
     match &tc.value {
         &Token::Bang => Ok(UnaryOperator::Bang),
         &Token::Minus => Ok(UnaryOperator::Minus),
@@ -238,7 +238,7 @@ fn parse_binary_op<'a, It>(it: &mut Parser<'a, It>) -> Result<BinaryOperator, Pa
 where
     It: Iterator<Item = &'a WithSpan<Token>>,
 {
-    let tc = it.advance()?;
+    let tc = it.advance();
     match &tc.value {
         &Token::BangEqual => Ok(BinaryOperator::BangEqual),
         &Token::EqualEqual => Ok(BinaryOperator::EqualEqual),
@@ -258,7 +258,7 @@ fn parse_primary<'a, It>(it: &mut Parser<'a, It>) -> Result<Expr, ParseError>
 where
     It: Iterator<Item = &'a WithSpan<Token>>,
 {
-    let tc = it.advance()?;
+    let tc = it.advance();
     match &tc.value {
         &Token::Nil => Ok(Expr::Nil),
         &Token::This => Ok(Expr::This),
@@ -277,7 +277,7 @@ where
     It: Iterator<Item = &'a WithSpan<Token>>,
 {
     it.expect(TokenKind::Dot)?;
-    let tc = it.advance()?;
+    let tc = it.advance();
     match &tc.value {
         &Token::Identifier(ref i) => Ok(Expr::Super(i.clone())),
         _ => Err(ParseError { error: format!("expected identifier"), span: Some(tc.span) }),
@@ -457,7 +457,7 @@ mod tests {
                 Expr::Grouping(Box::new(simple_binary(BinaryOperator::Plus))),
             ))
         );
-        assert_eq!(parse_str("(1"), Err("No more tokens".into()));
+        assert_eq!(parse_str("(1"), Err("Expected RightParen got Eof".into()));
         assert_eq!(
             parse_str("(1}"),
             Err("Expected RightParen got RightBrace".into())
