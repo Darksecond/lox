@@ -14,22 +14,22 @@ impl<'a> Parser<'a> {
         Parser { tokens, cursor: 0 }
     }
 
-    pub fn is_eof(&mut self) -> bool {
+    pub fn is_eof(&self) -> bool {
         self.check(TokenKind::Eof)
     }
 
-    pub fn peek(&mut self) -> TokenKind {
+    pub fn peek(&self) -> TokenKind {
         self.peek_token().into()
     }
 
-    pub fn peek_token(&mut self) -> &'a WithSpan<Token> {
+    pub fn peek_token(&self) -> &'a WithSpan<Token> {
         match self.tokens.get(self.cursor) {
             Some(t) => t,
             None => &EOF_TOKEN,
         }
     }
 
-    pub fn check(&mut self, match_token: TokenKind) -> bool {
+    pub fn check(&self, match_token: TokenKind) -> bool {
         let token = self.peek();
         token == match_token
     }
