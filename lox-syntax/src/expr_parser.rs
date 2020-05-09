@@ -1,9 +1,9 @@
 use super::ast::*;
 use super::token::*;
-use crate::parser::Parser;
-use crate::SyntaxError;
-use crate::position::WithSpan;
 use crate::common::*;
+use crate::parser::Parser;
+use crate::position::WithSpan;
+use crate::SyntaxError;
 
 #[allow(dead_code)]
 #[derive(PartialEq, PartialOrd, Copy, Clone)]
@@ -28,9 +28,10 @@ impl<'a> From<TokenKind> for Precedence {
             TokenKind::Or => Precedence::Or,
             TokenKind::And => Precedence::And,
             TokenKind::BangEqual | TokenKind::EqualEqual => Precedence::Equality,
-            TokenKind::Less | TokenKind::LessEqual | TokenKind::Greater | TokenKind::GreaterEqual => {
-                Precedence::Comparison
-            }
+            TokenKind::Less
+            | TokenKind::LessEqual
+            | TokenKind::Greater
+            | TokenKind::GreaterEqual => Precedence::Comparison,
             TokenKind::Plus | TokenKind::Minus => Precedence::Term,
             TokenKind::Star | TokenKind::Slash => Precedence::Factor,
             TokenKind::Bang => Precedence::Unary, // Minus is already specified, but I think this is only for infix ops
@@ -254,9 +255,15 @@ mod tests {
             Ok(Expr::String(String::from("test")))
         );
         unsafe {
-        assert_eq!(parse_str("test"), Ok(Expr::Variable(WithSpan::new_unchecked("test".into(), 0, 4))));
-        assert_eq!(parse_str("this"), Ok(Expr::This));
-            assert_eq!(parse_str("super.iets"), Ok(Expr::Super(WithSpan::new_unchecked("iets".into(), 6, 10))));
+            assert_eq!(
+                parse_str("test"),
+                Ok(Expr::Variable(WithSpan::new_unchecked("test".into(), 0, 4)))
+            );
+            assert_eq!(parse_str("this"), Ok(Expr::This));
+            assert_eq!(
+                parse_str("super.iets"),
+                Ok(Expr::Super(WithSpan::new_unchecked("iets".into(), 6, 10)))
+            );
         }
     }
 
@@ -382,7 +389,10 @@ mod tests {
                 Expr::Grouping(Box::new(simple_binary(BinaryOperator::Plus))),
             ))
         );
-        assert!(matches!(parse_str("(1"), Err(SyntaxError::Expected(TokenKind::RightParen, _))));
+        assert!(matches!(
+            parse_str("(1"),
+            Err(SyntaxError::Expected(TokenKind::RightParen, _))
+        ));
         assert!(matches!(parse_str("(1}"), Err(SyntaxError::Expected(TokenKind::RightParen, WithSpan{span: _, value: Token::RightBrace}))));
     }
 
@@ -428,105 +438,129 @@ mod tests {
 
     #[test]
     fn test_assignment() {
-        unsafe {assert_eq!(
-            parse_str("a=3"),
-            Ok(Expr::Assign(WithSpan::new_unchecked("a".into(), 0, 1), Box::new(Expr::Number(3.))))
-        );
-        assert_eq!(
-            parse_str("a=b=3"),
-            Ok(Expr::Assign(
-                WithSpan::new_unchecked("a".into(), 0, 1),
-                Box::new(Expr::Assign(WithSpan::new_unchecked("b".into(), 2, 3), Box::new(Expr::Number(3.))))
-            ))
-        );
-        assert!(matches!(parse_str("a="), Err(SyntaxError::Unexpected(_))));
-        assert!(matches!(parse_str("3=3"), Err(SyntaxError::InvalidLeftValue(WithSpan{span: _, value: Expr::Number(_)}))));
+        unsafe {
+            assert_eq!(
+                parse_str("a=3"),
+                Ok(Expr::Assign(
+                    WithSpan::new_unchecked("a".into(), 0, 1),
+                    Box::new(Expr::Number(3.))
+                ))
+            );
+            assert_eq!(
+                parse_str("a=b=3"),
+                Ok(Expr::Assign(
+                    WithSpan::new_unchecked("a".into(), 0, 1),
+                    Box::new(Expr::Assign(
+                        WithSpan::new_unchecked("b".into(), 2, 3),
+                        Box::new(Expr::Number(3.))
+                    ))
+                ))
+            );
+            assert!(matches!(parse_str("a="), Err(SyntaxError::Unexpected(_))));
+            assert!(matches!(parse_str("3=3"), Err(SyntaxError::InvalidLeftValue(WithSpan{span: _, value: Expr::Number(_)}))));
 
-        assert_eq!(
-            parse_str("a=1+2"),
-            Ok(Expr::Assign(
-                WithSpan::new_unchecked("a".into(), 0, 1),
-                Box::new(make::simple_binary(BinaryOperator::Plus))
-            ))
-        );}
+            assert_eq!(
+                parse_str("a=1+2"),
+                Ok(Expr::Assign(
+                    WithSpan::new_unchecked("a".into(), 0, 1),
+                    Box::new(make::simple_binary(BinaryOperator::Plus))
+                ))
+            );
+        }
     }
 
     #[test]
     fn test_call() {
-        unsafe {assert_eq!(
-            parse_str("a()"),
-            Ok(Expr::Call(Box::new(Expr::Variable(WithSpan::new_unchecked("a".into(), 0, 1))), vec![]))
-        );
-
-        assert_eq!(
-            parse_str("a(3)"),
-            Ok(Expr::Call(
-                Box::new(Expr::Variable(WithSpan::new_unchecked("a".into(), 0, 1))),
-                vec![Expr::Number(3.)]
-            ))
-        );
-        assert_eq!(
-            parse_str("a(3,4)"),
-            Ok(Expr::Call(
-                Box::new(Expr::Variable(WithSpan::new_unchecked("a".into(), 0, 1))),
-                vec![Expr::Number(3.), Expr::Number(4.),]
-            ))
-        );
-
-        assert_eq!(
-            parse_str("-a(3)"),
-            Ok(Expr::Unary(
-                UnaryOperator::Minus,
-                Box::new(Expr::Call(
-                    Box::new(Expr::Variable(WithSpan::new_unchecked("a".into(), 1, 2))),
-                    vec![Expr::Number(3.)]
+        unsafe {
+            assert_eq!(
+                parse_str("a()"),
+                Ok(Expr::Call(
+                    Box::new(Expr::Variable(WithSpan::new_unchecked("a".into(), 0, 1))),
+                    vec![]
                 ))
-            ))
-        );
+            );
 
-        assert_eq!(
-            parse_str("a(3)+a(3)"),
-            Ok(Expr::Binary(
-                Box::new(Expr::Call(
+            assert_eq!(
+                parse_str("a(3)"),
+                Ok(Expr::Call(
                     Box::new(Expr::Variable(WithSpan::new_unchecked("a".into(), 0, 1))),
                     vec![Expr::Number(3.)]
-                )),
-                BinaryOperator::Plus,
-                Box::new(Expr::Call(
-                    Box::new(Expr::Variable(WithSpan::new_unchecked("a".into(), 5, 6))),
-                    vec![Expr::Number(3.)]
                 ))
-            ))
-        );}
+            );
+            assert_eq!(
+                parse_str("a(3,4)"),
+                Ok(Expr::Call(
+                    Box::new(Expr::Variable(WithSpan::new_unchecked("a".into(), 0, 1))),
+                    vec![Expr::Number(3.), Expr::Number(4.),]
+                ))
+            );
+
+            assert_eq!(
+                parse_str("-a(3)"),
+                Ok(Expr::Unary(
+                    UnaryOperator::Minus,
+                    Box::new(Expr::Call(
+                        Box::new(Expr::Variable(WithSpan::new_unchecked("a".into(), 1, 2))),
+                        vec![Expr::Number(3.)]
+                    ))
+                ))
+            );
+
+            assert_eq!(
+                parse_str("a(3)+a(3)"),
+                Ok(Expr::Binary(
+                    Box::new(Expr::Call(
+                        Box::new(Expr::Variable(WithSpan::new_unchecked("a".into(), 0, 1))),
+                        vec![Expr::Number(3.)]
+                    )),
+                    BinaryOperator::Plus,
+                    Box::new(Expr::Call(
+                        Box::new(Expr::Variable(WithSpan::new_unchecked("a".into(), 5, 6))),
+                        vec![Expr::Number(3.)]
+                    ))
+                ))
+            );
+        }
 
         assert!(matches!(parse_str("a(3,)"), Err(SyntaxError::Unexpected(WithSpan{span: _, value: Token::RightParen}))));
     }
 
     #[test]
     fn test_get() {
-        unsafe {assert_eq!(
-            parse_str("a.b"),
-            Ok(Expr::Get(Box::new(Expr::Variable(WithSpan::new_unchecked("a".into(), 0, 1))), "b".into(),))
-        );
+        unsafe {
+            assert_eq!(
+                parse_str("a.b"),
+                Ok(Expr::Get(
+                    Box::new(Expr::Variable(WithSpan::new_unchecked("a".into(), 0, 1))),
+                    "b".into(),
+                ))
+            );
 
-        assert_eq!(
-            parse_str("a.b.c"),
-            Ok(Expr::Get(
-                Box::new(Expr::Get(Box::new(Expr::Variable(WithSpan::new_unchecked("a".into(), 0, 1))), "b".into(),)),
-                "c".into(),
-            ))
-        );
+            assert_eq!(
+                parse_str("a.b.c"),
+                Ok(Expr::Get(
+                    Box::new(Expr::Get(
+                        Box::new(Expr::Variable(WithSpan::new_unchecked("a".into(), 0, 1))),
+                        "b".into(),
+                    )),
+                    "c".into(),
+                ))
+            );
 
-        assert_eq!(
-            parse_str("a.b(3).c"),
-            Ok(Expr::Get(
-                Box::new(Expr::Call(
-                    Box::new(Expr::Get(Box::new(Expr::Variable(WithSpan::new_unchecked("a".into(), 0, 1))), "b".into())),
-                    vec![Expr::Number(3.0)]
-                )),
-                "c".into()
-            ))
-        );}
+            assert_eq!(
+                parse_str("a.b(3).c"),
+                Ok(Expr::Get(
+                    Box::new(Expr::Call(
+                        Box::new(Expr::Get(
+                            Box::new(Expr::Variable(WithSpan::new_unchecked("a".into(), 0, 1))),
+                            "b".into()
+                        )),
+                        vec![Expr::Number(3.0)]
+                    )),
+                    "c".into()
+                ))
+            );
+        }
     }
 
     #[test]

@@ -1,4 +1,4 @@
-pub mod bettervm;
 mod bettergc;
+pub mod bettervm;
 
 use lox_bytecode::bytecode;

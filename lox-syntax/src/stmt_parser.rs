@@ -1,16 +1,16 @@
 use super::ast::*;
 use super::token::*;
-use crate::position::WithSpan;
-use crate::parser::Parser;
-use crate::SyntaxError;
 use crate::common::*;
+use crate::parser::Parser;
+use crate::position::WithSpan;
+use crate::SyntaxError;
 
 fn parse_program(it: &mut Parser) -> Result<Vec<Stmt>, SyntaxError> {
     let mut statements = Vec::new();
     while !it.is_eof() {
         statements.push(parse_declaration(it)?);
     }
-    
+
     Ok(statements)
 }
 
@@ -243,7 +243,7 @@ mod tests {
     }
 
     fn make_span_string(string: &str, offset: u32) -> WithSpan<String> {
-        use crate::position::{Span, BytePos};
+        use crate::position::{BytePos, Span};
         let start = BytePos(offset);
         let end = BytePos(string.len() as u32 + offset);
         WithSpan::new(string.to_string(), Span { start, end })
@@ -268,7 +268,10 @@ mod tests {
                 parse_str("var beverage = x = nil;"),
                 Ok(vec![Stmt::Var(
                     make_span_string("beverage", 4),
-                    Some(Box::new(Expr::Assign(WithSpan::new_unchecked("x".into(), 15, 16), Box::new(Expr::Nil))))
+                    Some(Box::new(Expr::Assign(
+                        WithSpan::new_unchecked("x".into(), 15, 16),
+                        Box::new(Expr::Nil)
+                    )))
                 ),])
             );
         }
@@ -336,10 +339,14 @@ mod tests {
 
     #[test]
     fn test_function_stmt() {
-        unsafe { 
+        unsafe {
             assert_eq!(
                 parse_str("fun test(){}"),
-                Ok(vec![Stmt::Function(WithSpan::new_unchecked("test".into(), 4, 8), vec![], vec![]),])
+                Ok(vec![Stmt::Function(
+                    WithSpan::new_unchecked("test".into(), 4, 8),
+                    vec![],
+                    vec![]
+                ),])
             );
             assert_eq!(
                 parse_str("fun test(a){}"),
@@ -365,14 +372,22 @@ mod tests {
         unsafe {
             assert_eq!(
                 parse_str("class test{}"),
-                Ok(vec![Stmt::Class(WithSpan::new_unchecked("test".into(), 6, 10), None, vec![])])
+                Ok(vec![Stmt::Class(
+                    WithSpan::new_unchecked("test".into(), 6, 10),
+                    None,
+                    vec![]
+                )])
             );
             assert_eq!(
                 parse_str("class test{a(){}}"),
                 Ok(vec![Stmt::Class(
                     WithSpan::new_unchecked("test".into(), 6, 10),
                     None,
-                    vec![Stmt::Function(WithSpan::new_unchecked("a".into(), 11, 12), vec![], vec![])]
+                    vec![Stmt::Function(
+                        WithSpan::new_unchecked("a".into(), 11, 12),
+                        vec![],
+                        vec![]
+                    )]
                 )])
             );
         }

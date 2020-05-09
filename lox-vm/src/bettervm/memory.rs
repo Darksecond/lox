@@ -1,4 +1,4 @@
-use crate::bettergc::{Trace, Gc};
+use crate::bettergc::{Gc, Trace};
 use crate::bytecode::ChunkIndex;
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -13,8 +13,12 @@ impl Upvalue {
     pub fn is_open_with_index(&self, index: usize) -> bool {
         match self {
             Self::Open(i) => {
-                if *i == index { true } else { false }
-            },
+                if *i == index {
+                    true
+                } else {
+                    false
+                }
+            }
             Self::Closed(_) => false,
         }
     }
@@ -55,8 +59,7 @@ pub struct Class {
 }
 
 impl Trace for Class {
-    fn trace(&self) {
-    }
+    fn trace(&self) {}
 }
 
 #[derive(Debug)]
@@ -83,7 +86,9 @@ impl std::fmt::Debug for NativeFunction {
     }
 }
 
-impl Trace for NativeFunction { fn trace(&self) {} }
+impl Trace for NativeFunction {
+    fn trace(&self) {}
+}
 
 //TODO Drop this entirely and merge this into Closure
 //     We'll wait and see how methods will be implemented before we do this though
@@ -94,7 +99,9 @@ pub struct Function {
     pub arity: usize,
 }
 
-impl Trace for Function { fn trace(&self) {} }
+impl Trace for Function {
+    fn trace(&self) {}
+}
 
 impl From<&crate::bytecode::Function> for Function {
     fn from(value: &crate::bytecode::Function) -> Self {
@@ -143,7 +150,7 @@ impl Value {
     }
 
     pub fn is_same_type(a: &Value, b: &Value) -> bool {
-        match (b,a) {
+        match (b, a) {
             (Value::Number(_), Value::Number(_)) => true,
             (Value::Boolean(_), Value::Boolean(_)) => true,
             (Value::String(_), Value::String(_)) => true,

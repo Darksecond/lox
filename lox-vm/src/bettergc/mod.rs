@@ -1,10 +1,10 @@
 pub mod gc;
 
+use std::cell::Cell;
+use std::fmt;
+use std::ops::{Deref, DerefMut};
 use std::ptr::NonNull;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::cell::Cell;
-use std::ops::{Deref, DerefMut};
-use std::fmt;
 
 pub trait Trace {
     fn trace(&self);
@@ -76,13 +76,14 @@ impl Default for Header {
 
 impl Heap {
     pub fn new() -> Self {
-        Heap{
-            objects: vec![],
-        }
+        Heap { objects: vec![] }
     }
 
     fn allocate<T: 'static + Trace>(&mut self, data: T) -> NonNull<Allocation<T>> {
-        let mut alloc = Box::new(Allocation{header: Header::default(), data});
+        let mut alloc = Box::new(Allocation {
+            header: Header::default(),
+            data,
+        });
         let ptr = unsafe { NonNull::new_unchecked(&mut *alloc) };
         self.objects.push(alloc);
         ptr
@@ -91,18 +92,22 @@ impl Heap {
     /// Create a UniqueRoot, it cannot be Copied or Cloned, but it is mutably dereferencing.
     /// Which means it's ideal for Root containers and such.
     pub fn unique<T: 'static + Trace>(&mut self, data: T) -> UniqueRoot<T> {
-        let root = UniqueRoot{ptr: self.allocate(data) };
+        let root = UniqueRoot {
+            ptr: self.allocate(data),
+        };
         root.allocation().root();
         root
     }
 
     pub fn root<T: 'static + Trace + ?Sized>(&mut self, obj: Gc<T>) -> Root<T> {
         obj.allocation().root();
-        Root{ ptr: obj.ptr }
+        Root { ptr: obj.ptr }
     }
 
     pub fn manage<T: 'static + Trace>(&mut self, data: T) -> Root<T> {
-        let root = Root{ ptr: self.allocate(data) };
+        let root = Root {
+            ptr: self.allocate(data),
+        };
         root.allocation().root();
         root
     }
@@ -115,8 +120,13 @@ impl Heap {
     }
 
     fn mark(&mut self) {
-        for object in &self.objects { object.unmark(); }
-        self.objects.iter().filter(|o| o.header.roots.load(Ordering::Relaxed) > 0).for_each(|o| o.trace());
+        for object in &self.objects {
+            object.unmark();
+        }
+        self.objects
+            .iter()
+            .filter(|o| o.header.roots.load(Ordering::Relaxed) > 0)
+            .for_each(|o| o.trace());
     }
 
     fn sweep(&mut self) {
@@ -139,8 +149,12 @@ impl<T: 'static + Trace + ?Sized> Gc<T> {
         unsafe { &self.ptr.as_ref() }
     }
 }
-impl<T: 'static + Trace + ?Sized> Copy for Gc<T> { }
-impl<T: 'static + Trace + ?Sized> Clone for Gc<T> { fn clone(&self) -> Gc<T> { *self } }
+impl<T: 'static + Trace + ?Sized> Copy for Gc<T> {}
+impl<T: 'static + Trace + ?Sized> Clone for Gc<T> {
+    fn clone(&self) -> Gc<T> {
+        *self
+    }
+}
 impl<T: 'static + Trace + ?Sized> Deref for Gc<T> {
     type Target = T;
 
@@ -160,13 +174,21 @@ impl<T: fmt::Display + 'static + Trace + ?Sized> fmt::Display for Gc<T> {
         inner.fmt(f)
     }
 }
-impl<T: 'static + Trace + ?Sized> Trace for Gc<T> { fn trace(&self) { self.allocation().trace(); } }
+impl<T: 'static + Trace + ?Sized> Trace for Gc<T> {
+    fn trace(&self) {
+        self.allocation().trace();
+    }
+}
 
-impl<T: 'static + Trace + ?Sized> Trace for Root<T> { fn trace(&self) { self.allocation().trace(); } }
+impl<T: 'static + Trace + ?Sized> Trace for Root<T> {
+    fn trace(&self) {
+        self.allocation().trace();
+    }
+}
 impl<T: 'static + Trace + ?Sized> Clone for Root<T> {
     fn clone(&self) -> Root<T> {
         self.allocation().root();
-        Root{ptr:self.ptr}
+        Root { ptr: self.ptr }
     }
 }
 impl<T: 'static + Trace + ?Sized> Root<T> {
@@ -197,7 +219,11 @@ impl<T: fmt::Debug + 'static + Trace + ?Sized> fmt::Debug for Root<T> {
     }
 }
 
-impl<T: 'static + Trace + ?Sized> Trace for UniqueRoot<T> { fn trace(&self) { self.allocation().trace(); } }
+impl<T: 'static + Trace + ?Sized> Trace for UniqueRoot<T> {
+    fn trace(&self) {
+        self.allocation().trace();
+    }
+}
 impl<T: 'static + Trace + ?Sized> UniqueRoot<T> {
     fn allocation_mut(&mut self) -> &mut Allocation<T> {
         unsafe { self.ptr.as_mut() }
@@ -230,11 +256,9 @@ impl<T: fmt::Debug + 'static + Trace + ?Sized> fmt::Debug for UniqueRoot<T> {
     }
 }
 
-
-
 use std::cell::RefCell;
-use std::hash::Hash;
 use std::collections::HashMap;
+use std::hash::Hash;
 impl<T: Trace> Trace for RefCell<T> {
     fn trace(&self) {
         self.borrow().trace();
@@ -262,4 +286,6 @@ impl<K: Eq + Hash, T: Trace> Trace for HashMap<K, T> {
     }
 }
 
-impl Trace for String { fn trace(&self) {} }
+impl Trace for String {
+    fn trace(&self) {}
+}

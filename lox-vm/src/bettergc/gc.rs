@@ -50,7 +50,6 @@ fn collect_if_needed() {
 
             stats.threshold = (stats.bytes_allocated as f32 * 1.4) as usize;
         }
-        
     })
 }
 

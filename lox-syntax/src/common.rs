@@ -1,8 +1,8 @@
-use crate::parser::Parser;
-use crate::SyntaxError;
-use crate::token::{Token, TokenKind};
-use crate::position::WithSpan;
 use crate::ast::Identifier;
+use crate::parser::Parser;
+use crate::position::WithSpan;
+use crate::token::{Token, TokenKind};
+use crate::SyntaxError;
 
 pub fn expect_identifier(p: &mut Parser) -> Result<WithSpan<Identifier>, SyntaxError> {
     let token = p.advance();

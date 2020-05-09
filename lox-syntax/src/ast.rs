@@ -57,7 +57,11 @@ pub enum Stmt {
     While(Box<Expr>, Box<Stmt>),
     Return(Option<Box<Expr>>),
     Function(WithSpan<Identifier>, Vec<WithSpan<Identifier>>, Vec<Stmt>),
-    Class(WithSpan<Identifier>, Option<WithSpan<Identifier>>, Vec<Stmt>),
+    Class(
+        WithSpan<Identifier>,
+        Option<WithSpan<Identifier>>,
+        Vec<Stmt>,
+    ),
 }
 
 pub type Ast = Vec<Stmt>;

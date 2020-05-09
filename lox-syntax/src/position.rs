@@ -48,7 +48,7 @@ impl<T> WithSpan<T> {
             span: Span {
                 start: BytePos(0),
                 end: BytePos(0),
-            }
+            },
         }
     }
 
@@ -58,7 +58,7 @@ impl<T> WithSpan<T> {
             span: Span {
                 start: BytePos(start),
                 end: BytePos(end),
-            }
+            },
         }
     }
 

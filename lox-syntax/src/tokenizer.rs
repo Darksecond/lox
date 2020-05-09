@@ -1,8 +1,8 @@
 use super::token::Token;
+use crate::position::*;
 use std::iter::Peekable;
 use std::str;
 use std::str::Chars;
-use crate::position::*;
 
 struct Scanner<'a> {
     current_position: BytePos,
@@ -122,7 +122,6 @@ impl<'a> Lexer<'a> {
                     None => Some(Token::UnterminatedString),
                     _ => Some(Token::String(string)),
                 }
-                
             }
             x if x.is_numeric() => self.number(x),
             x if x.is_ascii_alphabetic() || x == '_' => self.identifier(x),
@@ -220,7 +219,13 @@ impl<'a> Lexer<'a> {
                 Some(c) => c,
             };
             if let Some(token) = self.match_token(ch) {
-                tokens.push(WithSpan::new(token, Span { start: initial_position, end: self.it.current_position }));
+                tokens.push(WithSpan::new(
+                    token,
+                    Span {
+                        start: initial_position,
+                        end: self.it.current_position,
+                    },
+                ));
             }
         }
         tokens
@@ -237,15 +242,24 @@ mod tests {
     use super::Token;
     fn tokenize(buf: &str) -> Vec<Token> {
         use super::tokenize_with_context;
-        tokenize_with_context(buf).iter().map(|tc| tc.value.clone()).collect()
+        tokenize_with_context(buf)
+            .iter()
+            .map(|tc| tc.value.clone())
+            .collect()
     }
 
     #[test]
     fn test_errors() {
         assert_eq!(tokenize("\"test"), vec![Token::UnterminatedString]);
         assert_eq!(tokenize("&"), vec![Token::Unknown('&')]);
-        assert_eq!(tokenize("&&"), vec![Token::Unknown('&'), Token::Unknown('&')]);
-        assert_eq!(tokenize("& 3.14"), vec![Token::Unknown('&'), Token::Number(3.14)]);
+        assert_eq!(
+            tokenize("&&"),
+            vec![Token::Unknown('&'), Token::Unknown('&')]
+        );
+        assert_eq!(
+            tokenize("& 3.14"),
+            vec![Token::Unknown('&'), Token::Number(3.14)]
+        );
     }
 
     #[test]
@@ -289,5 +303,4 @@ mod tests {
         );
         assert_eq!(tokenize("or"), vec![Token::Or]);
     }
-
 }

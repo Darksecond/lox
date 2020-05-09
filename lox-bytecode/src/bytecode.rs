@@ -1,4 +1,4 @@
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 pub type InstructionIndex = usize;
 pub type ConstantIndex = usize;
@@ -26,7 +26,7 @@ pub enum Instruction {
     Less,
 
     Pop,
-    
+
     Return,
     Print,
 
@@ -84,13 +84,22 @@ pub enum Constant {
 }
 
 impl From<f64> for Constant {
-    fn from(item: f64) -> Self { Constant::Number(item) }
+    fn from(item: f64) -> Self {
+        Constant::Number(item)
+    }
 }
 impl From<&str> for Constant {
-    fn from(item: &str) -> Self { Constant::String(String::from(item)) }
+    fn from(item: &str) -> Self {
+        Constant::String(String::from(item))
+    }
 }
 impl From<Function> for Constant {
-    fn from(item: Function) -> Self { Constant::Closure(Closure{ function: item, upvalues: vec![]}) }
+    fn from(item: Function) -> Self {
+        Constant::Closure(Closure {
+            function: item,
+            upvalues: vec![],
+        })
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -112,8 +121,12 @@ impl Module {
         }
     }
 
-    pub fn chunk(&self, index: ChunkIndex) -> &Chunk { &self.chunks[index] }
-    pub fn chunk_mut(&mut self, index: ChunkIndex) -> &mut Chunk { &mut self.chunks[index] }
+    pub fn chunk(&self, index: ChunkIndex) -> &Chunk {
+        &self.chunks[index]
+    }
+    pub fn chunk_mut(&mut self, index: ChunkIndex) -> &mut Chunk {
+        &mut self.chunks[index]
+    }
 
     pub fn add_chunk(&mut self) -> ChunkIndex {
         self.chunks.push(Chunk::new());

@@ -1,15 +1,15 @@
 mod compiler;
-mod statements;
 mod locals;
+mod statements;
 
 #[cfg(test)]
 mod tests;
 
 use crate::bytecode::*;
-use lox_syntax::ast::*;
 use compiler::{Compiler, ContextType};
-use statements::compile_ast;
+use lox_syntax::ast::*;
 use lox_syntax::position::WithSpan;
+use statements::compile_ast;
 
 #[derive(Debug)]
 pub enum CompilerError {
