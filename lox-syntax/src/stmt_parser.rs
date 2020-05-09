@@ -4,6 +4,14 @@ use crate::position::WithSpan;
 use crate::parser::Parser;
 use crate::SyntaxError;
 
+fn expect_identifier(p: &mut Parser) -> Result<WithSpan<Identifier>, SyntaxError> {
+    let token = p.advance();
+    match &token.value {
+        Token::Identifier(ident) => Ok(WithSpan::new(ident.clone(), token.span)),
+        _ => Err(SyntaxError::Expected(TokenKind::Identifier, token.clone())),
+    }
+}
+
 fn parse_program(it: &mut Parser) -> Result<Vec<Stmt>, SyntaxError> {
     let mut statements = Vec::new();
     while !it.is_eof() {
@@ -36,10 +44,10 @@ fn parse_statement(it: &mut Parser) -> Result<Stmt, SyntaxError> {
 
 fn parse_class_declaration(it: &mut Parser) -> Result<Stmt, SyntaxError> {
     it.expect(TokenKind::Class)?;
-    let name = expect!(it, Token::Identifier(i) => i)?;
+    let name = expect_identifier(it)?;
     let superclass = if it.optionally(TokenKind::Less)? {
-        let name = expect!(it, Token::Identifier(i) => i)?;
-        Some(name.clone())
+        let name = expect_identifier(it)?;
+        Some(name.value.clone())
     } else {
         None
     };
@@ -50,7 +58,7 @@ fn parse_class_declaration(it: &mut Parser) -> Result<Stmt, SyntaxError> {
     }
     it.expect(TokenKind::RightBrace)?;
 
-    Ok(Stmt::Class(name.clone(), superclass, functions))
+    Ok(Stmt::Class(name.value.clone(), superclass, functions))
 }
 
 fn parse_function_declaration(it: &mut Parser) -> Result<Stmt, SyntaxError> {
@@ -59,7 +67,7 @@ fn parse_function_declaration(it: &mut Parser) -> Result<Stmt, SyntaxError> {
 }
 
 fn parse_function(it: &mut Parser) -> Result<Stmt, SyntaxError> {
-    let name = expect!(it, Token::Identifier(i) => i)?;
+    let name = expect_identifier(it)?;
     it.expect(TokenKind::LeftParen)?;
     let params = if !it.check(TokenKind::RightParen) {
         parse_params(it)?
@@ -73,22 +81,22 @@ fn parse_function(it: &mut Parser) -> Result<Stmt, SyntaxError> {
         body.push(parse_declaration(it)?);
     }
     it.expect(TokenKind::RightBrace)?;
-    Ok(Stmt::Function(name.clone(), params, body))
+    Ok(Stmt::Function(name.value.clone(), params, body))
 }
 
 fn parse_params(it: &mut Parser) -> Result<Vec<Identifier>, SyntaxError> {
     let mut params: Vec<Identifier> = Vec::new();
-    params.push(expect!(it, Token::Identifier(i) => i.clone())?);
+    params.push(expect_identifier(it)?.value);
     while it.check(TokenKind::Comma) {
         it.expect(TokenKind::Comma)?;
-        params.push(expect!(it, Token::Identifier(i) => i.clone())?);
+        params.push(expect_identifier(it)?.value);
     }
     Ok(params)
 }
 
 fn parse_var_declaration(it: &mut Parser) -> Result<Stmt, SyntaxError> {
     it.expect(TokenKind::Var)?;
-    let name = expect_with_span!(it, Token::Identifier(i) => i.clone())?;
+    let name = expect_identifier(it)?;
     let mut initializer: Option<Expr> = None;
 
     if it.optionally(TokenKind::Equal)? {

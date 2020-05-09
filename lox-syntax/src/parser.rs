@@ -47,10 +47,10 @@ impl<'a> Parser<'a> {
     }
   }
 
-  pub fn expect(&mut self, expected: TokenKind) -> Result<&'a Token, SyntaxError> {
+  pub fn expect(&mut self, expected: TokenKind) -> Result<&'a WithSpan<Token>, SyntaxError> {
       let token = self.advance();
       if TokenKind::from(token) == expected {
-        Ok(&token.value)
+        Ok(token)
       } else {
         Err(SyntaxError::Expected(expected, token.clone()))
       }
@@ -65,24 +65,4 @@ impl<'a> Parser<'a> {
       Ok(false)
     }
   }
-}
-
-macro_rules! expect {
-  ($x:ident, $y:pat => $z:expr) => {{
-      let tc = $x.advance();
-      match &tc.value {
-          $y => Ok($z),
-          _ => Err(SyntaxError::Unexpected(tc.clone())),
-      }
-  }};
-}
-
-macro_rules! expect_with_span {
-  ($x:ident, $y:pat => $z:expr) => {{
-      let tc = $x.advance();
-      match &tc.value {
-          $y => Ok(WithSpan::new($z, tc.span)),
-          _ => Err(SyntaxError::Unexpected(tc.clone())),
-      }
-  }};
 }
