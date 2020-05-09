@@ -1,28 +1,29 @@
 use super::ast::*;
 use super::common::*;
 use super::token::*;
-use std::iter::{Iterator, Peekable};
+use std::iter::{Iterator};
 use crate::position::WithSpan;
+use crate::parser::Parser;
 
-fn parse_program<'a, It>(it: &mut Peekable<It>) -> Result<Vec<Stmt>, ParseError>
+fn parse_program<'a, It>(it: &mut Parser<'a, It>) -> Result<Vec<Stmt>, ParseError>
 where
     It: Iterator<Item = &'a WithSpan<Token>>,
 {
     let mut statements = Vec::new();
-    while let Some(_) = it.peek() {
+    while let Some(_) = it.raw_peek() {
         statements.push(parse_declaration(it)?);
     }
-    match it.next() {
+    match it.raw_next() {
         Some(t) => Err(ParseError { error: "Expected None".into(), span: Some(t.span) }),
         None => Ok(statements),
     }
 }
 
-fn parse_declaration<'a, It>(it: &mut Peekable<It>) -> Result<Stmt, ParseError>
+fn parse_declaration<'a, It>(it: &mut Parser<'a, It>) -> Result<Stmt, ParseError>
 where
     It: Iterator<Item = &'a WithSpan<Token>>,
 {
-    match peek(it)? {
+    match it.peek()? {
         &Token::Var => parse_var_declaration(it),
         &Token::Fun => parse_function_declaration(it),
         &Token::Class => parse_class_declaration(it),
@@ -30,11 +31,11 @@ where
     }
 }
 
-fn parse_statement<'a, It>(it: &mut Peekable<It>) -> Result<Stmt, ParseError>
+fn parse_statement<'a, It>(it: &mut Parser<'a, It>) -> Result<Stmt, ParseError>
 where
     It: Iterator<Item = &'a WithSpan<Token>>,
 {
-    match peek(it)? {
+    match it.peek()? {
         &Token::Print => parse_print_statement(it),
         &Token::If => parse_if_statement(it),
         &Token::LeftBrace => parse_block_statement(it),
@@ -45,120 +46,120 @@ where
     }
 }
 
-fn parse_class_declaration<'a, It>(it: &mut Peekable<It>) -> Result<Stmt, ParseError>
+fn parse_class_declaration<'a, It>(it: &mut Parser<'a, It>) -> Result<Stmt, ParseError>
 where
     It: Iterator<Item = &'a WithSpan<Token>>,
 {
-    expect(it, &Token::Class)?;
+    it.expect(&Token::Class)?;
     let name = expect!(it, Token::Identifier(i) => i)?;
-    let superclass = if optionally(it, &Token::Less)? {
+    let superclass = if it.optionally(&Token::Less)? {
         let name = expect!(it, Token::Identifier(i) => i)?;
         Some(name.clone())
     } else {
         None
     };
-    expect(it, &Token::LeftBrace)?;
+    it.expect(&Token::LeftBrace)?;
     let mut functions: Vec<Stmt> = vec![];
-    while peek(it)? != &Token::RightBrace {
+    while it.peek()? != &Token::RightBrace {
         functions.push(parse_function(it)?);
     }
-    expect(it, &Token::RightBrace)?;
+    it.expect(&Token::RightBrace)?;
 
     Ok(Stmt::Class(name.clone(), superclass, functions))
 }
 
-fn parse_function_declaration<'a, It>(it: &mut Peekable<It>) -> Result<Stmt, ParseError>
+fn parse_function_declaration<'a, It>(it: &mut Parser<'a, It>) -> Result<Stmt, ParseError>
 where
     It: Iterator<Item = &'a WithSpan<Token>>,
 {
-    expect(it, &Token::Fun)?;
+    it.expect(&Token::Fun)?;
     parse_function(it)
 }
 
-fn parse_function<'a, It>(it: &mut Peekable<It>) -> Result<Stmt, ParseError>
+fn parse_function<'a, It>(it: &mut Parser<'a, It>) -> Result<Stmt, ParseError>
 where
     It: Iterator<Item = &'a WithSpan<Token>>,
 {
     let name = expect!(it, Token::Identifier(i) => i)?;
-    expect(it, &Token::LeftParen)?;
-    let params = if peek(it)? != &Token::RightParen {
+    it.expect(&Token::LeftParen)?;
+    let params = if it.peek()? != &Token::RightParen {
         parse_params(it)?
     } else {
         Vec::new()
     };
-    expect(it, &Token::RightParen)?;
-    expect(it, &Token::LeftBrace)?;
+    it.expect(&Token::RightParen)?;
+    it.expect(&Token::LeftBrace)?;
     let mut body: Vec<Stmt> = Vec::new();
-    while peek(it)? != &Token::RightBrace {
+    while it.peek()? != &Token::RightBrace {
         body.push(parse_declaration(it)?);
     }
-    expect(it, &Token::RightBrace)?;
+    it.expect(&Token::RightBrace)?;
     Ok(Stmt::Function(name.clone(), params, body))
 }
 
-fn parse_params<'a, It>(it: &mut Peekable<It>) -> Result<Vec<Identifier>, ParseError>
+fn parse_params<'a, It>(it: &mut Parser<'a, It>) -> Result<Vec<Identifier>, ParseError>
 where
     It: Iterator<Item = &'a WithSpan<Token>>,
 {
     let mut params: Vec<Identifier> = Vec::new();
     params.push(expect!(it, Token::Identifier(i) => i.clone())?);
-    while peek(it)? == &Token::Comma {
-        expect(it, &Token::Comma)?;
+    while it.peek()? == &Token::Comma {
+        it.expect(&Token::Comma)?;
         params.push(expect!(it, Token::Identifier(i) => i.clone())?);
     }
     Ok(params)
 }
 
-fn parse_var_declaration<'a, It>(it: &mut Peekable<It>) -> Result<Stmt, ParseError>
+fn parse_var_declaration<'a, It>(it: &mut Parser<'a, It>) -> Result<Stmt, ParseError>
 where
     It: Iterator<Item = &'a WithSpan<Token>>,
 {
-    expect(it, &Token::Var)?;
+    it.expect(&Token::Var)?;
     let name = expect_with_span!(it, Token::Identifier(i) => i.clone())?;
     let mut initializer: Option<Expr> = None;
 
-    if optionally(it, &Token::Equal)? {
+    if it.optionally(&Token::Equal)? {
         initializer = Some(parse_expr(it)?);
     }
 
-    expect(it, &Token::Semicolon)?;
+    it.expect(&Token::Semicolon)?;
 
     Ok(Stmt::Var(name, initializer.map(Box::new)))
 }
 
-fn parse_expr<'a, It>(it: &mut Peekable<It>) -> Result<Expr, ParseError>
+fn parse_expr<'a, It>(it: &mut Parser<'a, It>) -> Result<Expr, ParseError>
 where
     It: Iterator<Item = &'a WithSpan<Token>>,
 {
     super::expr_parser::parse(it).map_err(|e| e.into())
 }
 
-fn parse_for_statement<'a, It>(it: &mut Peekable<It>) -> Result<Stmt, ParseError>
+fn parse_for_statement<'a, It>(it: &mut Parser<'a, It>) -> Result<Stmt, ParseError>
 where
     It: Iterator<Item = &'a WithSpan<Token>>,
 {
-    expect(it, &Token::For)?;
-    expect(it, &Token::LeftParen)?;
-    let initializer = match peek(it)? {
+    it.expect(&Token::For)?;
+    it.expect(&Token::LeftParen)?;
+    let initializer = match it.peek()? {
         &Token::Var => Some(parse_var_declaration(it)?),
         &Token::Semicolon => {
-            expect(it, &Token::Semicolon)?;
+            it.expect(&Token::Semicolon)?;
             None
         }
         _ => Some(parse_expr_statement(it)?),
     };
-    let condition = if peek(it)? != &Token::Semicolon {
+    let condition = if it.peek()? != &Token::Semicolon {
         parse_expr(it)?
     } else {
         Expr::Boolean(true)
     };
-    expect(it, &Token::Semicolon)?;
-    let increment = if peek(it)? != &Token::RightParen {
+    it.expect(&Token::Semicolon)?;
+    let increment = if it.peek()? != &Token::RightParen {
         Some(parse_expr(it)?)
     } else {
         None
     };
-    expect(it, &Token::RightParen)?;
+    it.expect(&Token::RightParen)?;
     let body = parse_statement(it)?;
     // Add increment if it exists
     let body = match increment {
@@ -174,66 +175,66 @@ where
     Ok(body)
 }
 
-fn parse_return_statement<'a, It>(it: &mut Peekable<It>) -> Result<Stmt, ParseError>
+fn parse_return_statement<'a, It>(it: &mut Parser<'a, It>) -> Result<Stmt, ParseError>
 where
     It: Iterator<Item = &'a WithSpan<Token>>,
 {
-    expect(it, &Token::Return)?;
+    it.expect(&Token::Return)?;
     let mut expr: Option<Expr> = None;
-    if peek(it)? != &Token::Semicolon {
+    if it.peek()? != &Token::Semicolon {
         expr = Some(parse_expr(it)?);
     }
-    expect(it, &Token::Semicolon)?;
+    it.expect(&Token::Semicolon)?;
     Ok(Stmt::Return(expr.map(Box::new)))
 }
 
-fn parse_expr_statement<'a, It>(it: &mut Peekable<It>) -> Result<Stmt, ParseError>
+fn parse_expr_statement<'a, It>(it: &mut Parser<'a, It>) -> Result<Stmt, ParseError>
 where
     It: Iterator<Item = &'a WithSpan<Token>>,
 {
     let expr = parse_expr(it)?;
-    expect(it, &Token::Semicolon)?;
+    it.expect(&Token::Semicolon)?;
 
     Ok(Stmt::Expression(Box::new(expr)))
 }
 
-fn parse_block_statement<'a, It>(it: &mut Peekable<It>) -> Result<Stmt, ParseError>
+fn parse_block_statement<'a, It>(it: &mut Parser<'a, It>) -> Result<Stmt, ParseError>
 where
     It: Iterator<Item = &'a WithSpan<Token>>,
 {
-    expect(it, &Token::LeftBrace)?;
+    it.expect(&Token::LeftBrace)?;
     let mut statements: Vec<Stmt> = Vec::new();
-    while peek(it)? != &Token::RightBrace {
+    while it.peek()? != &Token::RightBrace {
         statements.push(parse_declaration(it)?);
     }
-    expect(it, &Token::RightBrace)?;
+    it.expect(&Token::RightBrace)?;
     Ok(Stmt::Block(statements))
 }
 
-fn parse_while_statement<'a, It>(it: &mut Peekable<It>) -> Result<Stmt, ParseError>
+fn parse_while_statement<'a, It>(it: &mut Parser<'a, It>) -> Result<Stmt, ParseError>
 where
     It: Iterator<Item = &'a WithSpan<Token>>,
 {
-    expect(it, &Token::While)?;
-    expect(it, &Token::LeftParen)?;
+    it.expect(&Token::While)?;
+    it.expect(&Token::LeftParen)?;
     let condition = parse_expr(it)?;
-    expect(it, &Token::RightParen)?;
+    it.expect(&Token::RightParen)?;
     let statement = parse_statement(it)?;
     Ok(Stmt::While(Box::new(condition), Box::new(statement)))
 }
 
-fn parse_if_statement<'a, It>(it: &mut Peekable<It>) -> Result<Stmt, ParseError>
+fn parse_if_statement<'a, It>(it: &mut Parser<'a, It>) -> Result<Stmt, ParseError>
 where
     It: Iterator<Item = &'a WithSpan<Token>>,
 {
-    expect(it, &Token::If)?;
-    expect(it, &Token::LeftParen)?;
+    it.expect(&Token::If)?;
+    it.expect(&Token::LeftParen)?;
     let condition = parse_expr(it)?;
-    expect(it, &Token::RightParen)?;
+    it.expect(&Token::RightParen)?;
     let if_stmt = parse_statement(it)?;
     let mut else_stmt: Option<Stmt> = None;
 
-    if optionally(it, &Token::Else)? {
+    if it.optionally(&Token::Else)? {
         else_stmt = Some(parse_statement(it)?);
     }
 
@@ -244,17 +245,17 @@ where
     ))
 }
 
-fn parse_print_statement<'a, It>(it: &mut Peekable<It>) -> Result<Stmt, ParseError>
+fn parse_print_statement<'a, It>(it: &mut Parser<'a, It>) -> Result<Stmt, ParseError>
 where
     It: Iterator<Item = &'a WithSpan<Token>>,
 {
-    expect(it, &Token::Print)?;
+    it.expect(&Token::Print)?;
     let expr = parse_expr(it)?;
-    expect(it, &Token::Semicolon)?;
+    it.expect(&Token::Semicolon)?;
     Ok(Stmt::Print(Box::new(expr)))
 }
 
-pub fn parse<'a, It>(it: &mut Peekable<It>) -> Result<Vec<Stmt>, ParseError>
+pub fn parse<'a, It>(it: &mut Parser<'a, It>) -> Result<Vec<Stmt>, ParseError>
 where
     It: Iterator<Item = &'a WithSpan<Token>>,
 {
@@ -267,8 +268,9 @@ mod tests {
     use super::*;
     fn parse_str(data: &str) -> Result<Vec<Stmt>, String> {
         let tokens = tokenize_with_context(data);
-        let mut it = tokens.as_slice().into_iter().peekable();
-        parse(&mut it).map_err(|e| e.error) //TODO
+        // let mut it = tokens.as_slice().into_iter().peekable();
+        let mut parser = crate::parser::Parser::new(tokens.as_slice().into_iter());
+        parse(&mut parser).map_err(|e| e.error) //TODO
     }
 
     #[test]
