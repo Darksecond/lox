@@ -20,6 +20,6 @@ pub fn parse(code: &str) -> Result<Ast, ParseError> {
   use stmt_parser::parse;
   use tokenizer::tokenize_with_context;
   let tokens = tokenize_with_context(code);
-  let mut parser = crate::parser::Parser::new(tokens.as_slice().into_iter());
+  let mut parser = crate::parser::Parser::new(&tokens);
   parse(&mut parser)
 }

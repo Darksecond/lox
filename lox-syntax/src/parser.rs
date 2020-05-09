@@ -1,24 +1,19 @@
 use crate::position::{WithSpan};
 use crate::token::{Token, TokenKind};
-use std::iter::{Iterator, Peekable};
 use crate::ParseError;
 
 static EOF_TOKEN: WithSpan<Token> = WithSpan::empty(Token::Eof);
 
-pub struct Parser<'a, It>
-where
-  It: Iterator<Item = &'a WithSpan<Token>>,
-{
-  iterator: Peekable<It>,
+pub struct Parser<'a> {
+  tokens: &'a [WithSpan<Token>],
+  cursor: usize,
 }
 
-impl<'a, It> Parser<'a, It>
-where
-  It: Iterator<Item = &'a WithSpan<Token>>,
-{
-  pub fn new(iterator: It) -> Self {
+impl<'a> Parser<'a> {
+  pub fn new(tokens: &'a [WithSpan<Token>]) -> Self {
     Parser {
-      iterator: iterator.peekable(),
+      tokens,
+      cursor: 0,
     }
   }
 
@@ -27,8 +22,8 @@ where
   }
 
   pub fn peek(&mut self) -> TokenKind {
-    match self.iterator.peek() {
-      Some(&t) => t.into(),
+    match self.tokens.get(self.cursor) {
+      Some(t) => t.into(),
       None => TokenKind::Eof,
     }
   }
@@ -39,7 +34,8 @@ where
   }
 
   pub fn error<S: AsRef<str>>(&mut self, error: S) -> ParseError {
-    if let Some(token) = self.iterator.peek() {
+    if !self.check(TokenKind::Eof) {
+      let token = self.advance();
       ParseError { error: error.as_ref().to_string(), span: Some(token.span) }
     } else {
       "No more tokens".into()
@@ -47,9 +43,12 @@ where
   }
 
   pub fn advance(&mut self) -> &'a WithSpan<Token> {
-    match self.iterator.next() {
-      Some(t) => t,
-      None => &EOF_TOKEN,
+    let token = self.tokens.get(self.cursor);
+    if let Some(token) = token {
+      self.cursor = self.cursor + 1;
+      token
+    } else {
+      &EOF_TOKEN
     }
   }
 
@@ -63,16 +62,12 @@ where
   }
 
   pub fn optionally(&mut self, expected: TokenKind) -> Result<bool, ParseError> {
-    match self.iterator.peek() {
-      Some(&token) => {
-        if TokenKind::from(token) == expected {
-          self.expect(expected)?;
-          Ok(true)
-        } else {
-          Ok(false)
-        }
-      }
-      None => Ok(false),
+    let token = self.peek();
+    if TokenKind::from(token) == expected {
+      self.expect(expected)?;
+      Ok(true)
+    } else {
+      Ok(false)
     }
   }
 }
