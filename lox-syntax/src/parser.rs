@@ -51,7 +51,7 @@ where
     }
   }
 
-  pub fn next(&mut self) -> Result<&'a WithSpan<Token>, String> {
+  pub fn advance(&mut self) -> Result<&'a WithSpan<Token>, String> {
     match self.iterator.next() {
       Some(t) => Ok(t),
       None => Err(String::from("No more tokens")),
@@ -59,7 +59,7 @@ where
   }
 
   pub fn expect(&mut self, expected: &Token) -> Result<&'a Token, ParseError> {
-      let token = self.next()?;
+      let token = self.advance()?;
       if &token.value == expected {
         Ok(&token.value)
       } else {
@@ -84,14 +84,14 @@ where
 
 macro_rules! expect {
   ($x:ident, $y:pat) => {{
-      let tc = $x.next()?;
+      let tc = $x.advance()?;
       match &tc.value {
           $y => Ok(&t.token),
           t => Err(ParseError { error: format!("Unexpected {:?}", t).into(), span: Some(tc.span) }),
       }
   }};
   ($x:ident, $y:pat => $z:expr) => {{
-      let tc = $x.next()?;
+      let tc = $x.advance()?;
       match &tc.value {
           $y => Ok($z),
           t => Err(ParseError { error: format!("Unexpected {:?}", t).into(), span: Some(tc.span) }),
@@ -101,7 +101,7 @@ macro_rules! expect {
 
 macro_rules! expect_with_span {
   ($x:ident, $y:pat => $z:expr) => {{
-      let tc = $x.next()?;
+      let tc = $x.advance()?;
       match &tc.value {
           $y => Ok(WithSpan::new($z, tc.span)),
           _ => Err(ParseError { error: "Unexpected token".into(), span: Some(tc.span) }),
