@@ -2,7 +2,7 @@ use super::ast::*;
 use super::token::*;
 use crate::common::*;
 use crate::parser::Parser;
-use crate::position::WithSpan;
+use crate::position::{WithSpan, Span};
 use crate::SyntaxError;
 
 #[allow(dead_code)]
@@ -83,9 +83,9 @@ fn parse_prefix(it: &mut Parser) -> Result<Expr, SyntaxError> {
         | TokenKind::False
         | TokenKind::Identifier
         | TokenKind::Super
-        | TokenKind::String => parse_primary(it),
+        | TokenKind::String => parse_primary(it).map(|e| e.value),
         TokenKind::Bang | TokenKind::Minus => parse_unary(it),
-        TokenKind::LeftParen => parse_grouping(it),
+        TokenKind::LeftParen => parse_grouping(it).map(|e| e.value),
         _ => Err(SyntaxError::Unexpected(it.peek_token().clone())),
     }
 }
@@ -135,11 +135,13 @@ fn parse_logical(it: &mut Parser, left: Expr) -> Result<Expr, SyntaxError> {
     Ok(Expr::Logical(Box::new(left), operator, Box::new(right)))
 }
 
-fn parse_grouping(it: &mut Parser) -> Result<Expr, SyntaxError> {
-    it.expect(TokenKind::LeftParen)?;
+fn parse_grouping(it: &mut Parser) -> Result<WithSpan<Expr>, SyntaxError> {
+    let left_paren = it.expect(TokenKind::LeftParen)?;
     let expr = parse_expr(it, Precedence::None)?;
-    it.expect(TokenKind::RightParen)?;
-    Ok(Expr::Grouping(Box::new(expr)))
+    let right_paren = it.expect(TokenKind::RightParen)?;
+
+    let span = Span::union(left_paren.span, right_paren.span);
+    Ok(WithSpan::new(Expr::Grouping(Box::new(expr)), span))
 }
 
 fn parse_binary(it: &mut Parser, left: Expr) -> Result<Expr, SyntaxError> {
@@ -194,25 +196,26 @@ fn parse_binary_op(it: &mut Parser) -> Result<WithSpan<BinaryOperator>, SyntaxEr
     Ok(WithSpan::new(operator, tc.span))
 }
 
-fn parse_primary(it: &mut Parser) -> Result<Expr, SyntaxError> {
+fn parse_primary(it: &mut Parser) -> Result<WithSpan<Expr>, SyntaxError> {
     let tc = it.advance();
     match &tc.value {
-        &Token::Nil => Ok(Expr::Nil),
-        &Token::This => Ok(Expr::This),
-        &Token::Number(n) => Ok(Expr::Number(n)),
-        &Token::True => Ok(Expr::Boolean(true)),
-        &Token::False => Ok(Expr::Boolean(false)),
-        &Token::String(ref s) => Ok(Expr::String(s.clone())),
-        &Token::Identifier(ref s) => Ok(Expr::Variable(WithSpan::new(s.clone(), tc.span))),
-        &Token::Super => parse_super(it),
+        &Token::Nil => Ok(WithSpan::new(Expr::Nil, tc.span)),
+        &Token::This => Ok(WithSpan::new(Expr::This, tc.span)),
+        &Token::Number(n) => Ok(WithSpan::new(Expr::Number(n), tc.span)),
+        &Token::True => Ok(WithSpan::new(Expr::Boolean(true), tc.span)),
+        &Token::False => Ok(WithSpan::new(Expr::Boolean(false), tc.span)),
+        &Token::String(ref s) => Ok(WithSpan::new(Expr::String(s.clone()), tc.span)),
+        &Token::Identifier(ref s) => Ok(WithSpan::new(Expr::Variable(WithSpan::new(s.clone(), tc.span)), tc.span)),
+        &Token::Super => parse_super(it, &tc),
         _ => Err(SyntaxError::ExpectedPrimary(tc.clone())),
     }
 }
 
-fn parse_super(it: &mut Parser) -> Result<Expr, SyntaxError> {
+fn parse_super(it: &mut Parser, keyword: &WithSpan<Token>) -> Result<WithSpan<Expr>, SyntaxError> {
     it.expect(TokenKind::Dot)?;
     let name = expect_identifier(it)?;
-    Ok(Expr::Super(name))
+    let span = Span::union(keyword.span, name.span);
+    Ok(WithSpan::new(Expr::Super(name), span))
 }
 
 pub fn parse(it: &mut Parser) -> Result<Expr, SyntaxError> {
