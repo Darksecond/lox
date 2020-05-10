@@ -216,7 +216,7 @@ fn compile_expr(compiler: &mut Compiler, expr: &Expr) -> Result<(), CompilerErro
     match *expr {
         Expr::Number(num) => compile_number(compiler, num),
         Expr::String(ref string) => compile_string(compiler, string),
-        Expr::Binary(ref left, operator, ref right) => {
+        Expr::Binary(ref left, ref operator, ref right) => {
             compile_binary(compiler, operator, left, right)
         }
         Expr::Variable(ref identifier) => compile_variable(compiler, identifier.as_ref()),
@@ -398,13 +398,13 @@ fn compile_string(compiler: &mut Compiler, string: &str) -> Result<(), CompilerE
 
 fn compile_binary(
     compiler: &mut Compiler,
-    operator: BinaryOperator,
+    operator: &WithSpan<BinaryOperator>,
     left: &Expr,
     right: &Expr,
 ) -> Result<(), CompilerError> {
     compile_expr(compiler, left)?;
     compile_expr(compiler, right)?;
-    match operator {
+    match operator.value {
         BinaryOperator::Plus => compiler.add_instruction(Instruction::Add),
         BinaryOperator::Minus => compiler.add_instruction(Instruction::Subtract),
         BinaryOperator::Less => compiler.add_instruction(Instruction::Less),

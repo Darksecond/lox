@@ -30,7 +30,7 @@ pub enum LogicalOperator {
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum Expr {
-    Binary(Box<Expr>, BinaryOperator, Box<Expr>),
+    Binary(Box<Expr>, WithSpan<BinaryOperator>, Box<Expr>),
     Grouping(Box<Expr>),
     Number(f64),
     Boolean(bool),

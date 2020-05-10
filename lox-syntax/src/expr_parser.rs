@@ -173,21 +173,23 @@ fn parse_unary_op(it: &mut Parser) -> Result<WithSpan<UnaryOperator>, SyntaxErro
     }
 }
 
-fn parse_binary_op(it: &mut Parser) -> Result<BinaryOperator, SyntaxError> {
+fn parse_binary_op(it: &mut Parser) -> Result<WithSpan<BinaryOperator>, SyntaxError> {
     let tc = it.advance();
-    match &tc.value {
-        &Token::BangEqual => Ok(BinaryOperator::BangEqual),
-        &Token::EqualEqual => Ok(BinaryOperator::EqualEqual),
-        &Token::Less => Ok(BinaryOperator::Less),
-        &Token::LessEqual => Ok(BinaryOperator::LessEqual),
-        &Token::Greater => Ok(BinaryOperator::Greater),
-        &Token::GreaterEqual => Ok(BinaryOperator::GreaterEqual),
-        &Token::Plus => Ok(BinaryOperator::Plus),
-        &Token::Minus => Ok(BinaryOperator::Minus),
-        &Token::Star => Ok(BinaryOperator::Star),
-        &Token::Slash => Ok(BinaryOperator::Slash),
-        _ => Err(SyntaxError::ExpectedBinaryOperator(tc.clone())),
-    }
+    let operator = match &tc.value {
+        &Token::BangEqual => BinaryOperator::BangEqual,
+        &Token::EqualEqual => BinaryOperator::EqualEqual,
+        &Token::Less => BinaryOperator::Less,
+        &Token::LessEqual => BinaryOperator::LessEqual,
+        &Token::Greater => BinaryOperator::Greater,
+        &Token::GreaterEqual => BinaryOperator::GreaterEqual,
+        &Token::Plus => BinaryOperator::Plus,
+        &Token::Minus => BinaryOperator::Minus,
+        &Token::Star => BinaryOperator::Star,
+        &Token::Slash => BinaryOperator::Slash,
+        _ => return Err(SyntaxError::ExpectedBinaryOperator(tc.clone())),
+    };
+
+    Ok(WithSpan::new(operator, tc.span))
 }
 
 fn parse_primary(it: &mut Parser) -> Result<Expr, SyntaxError> {
@@ -234,12 +236,12 @@ mod tests {
         pub fn nr(value: f64) -> Expr {
             Expr::Number(value)
         }
-        pub fn simple_binary(operator: BinaryOperator) -> Expr {
+        pub fn simple_binary(operator: WithSpan<BinaryOperator>) -> Expr {
             let left = nr(1.);
             let right = nr(2.);
             Expr::Binary(Box::new(left), operator, Box::new(right))
         }
-        pub fn binary(left: Expr, operator: BinaryOperator, right: Expr) -> Expr {
+        pub fn binary(left: Expr, operator: WithSpan<BinaryOperator>, right: Expr) -> Expr {
             Expr::Binary(Box::new(left), operator, Box::new(right))
         }
         pub fn minus_nr(value: f64, start: u32) -> Expr {
@@ -308,43 +310,43 @@ mod tests {
     fn test_binary() {
         assert_eq!(
             parse_str("1!=2"),
-            Ok(make::simple_binary(BinaryOperator::BangEqual))
+            Ok(make::simple_binary(wspn(BinaryOperator::BangEqual, 1, 3)))
         );
         assert_eq!(
             parse_str("1==2"),
-            Ok(make::simple_binary(BinaryOperator::EqualEqual))
+            Ok(make::simple_binary(wspn(BinaryOperator::EqualEqual, 1, 3)))
         );
         assert_eq!(
             parse_str("1>2"),
-            Ok(make::simple_binary(BinaryOperator::Greater))
+            Ok(make::simple_binary(wspn(BinaryOperator::Greater, 1, 2)))
         );
         assert_eq!(
             parse_str("1>=2"),
-            Ok(make::simple_binary(BinaryOperator::GreaterEqual))
+            Ok(make::simple_binary(wspn(BinaryOperator::GreaterEqual, 1, 3)))
         );
         assert_eq!(
             parse_str("1<2"),
-            Ok(make::simple_binary(BinaryOperator::Less))
+            Ok(make::simple_binary(wspn(BinaryOperator::Less, 1, 2)))
         );
         assert_eq!(
             parse_str("1<=2"),
-            Ok(make::simple_binary(BinaryOperator::LessEqual))
+            Ok(make::simple_binary(wspn(BinaryOperator::LessEqual, 1, 3)))
         );
         assert_eq!(
             parse_str("1+2"),
-            Ok(make::simple_binary(BinaryOperator::Plus))
+            Ok(make::simple_binary(wspn(BinaryOperator::Plus, 1, 2)))
         );
         assert_eq!(
             parse_str("1-2"),
-            Ok(make::simple_binary(BinaryOperator::Minus))
+            Ok(make::simple_binary(wspn(BinaryOperator::Minus, 1, 2)))
         );
         assert_eq!(
             parse_str("1*2"),
-            Ok(make::simple_binary(BinaryOperator::Star))
+            Ok(make::simple_binary(wspn(BinaryOperator::Star, 1, 2)))
         );
         assert_eq!(
             parse_str("1/2"),
-            Ok(make::simple_binary(BinaryOperator::Slash))
+            Ok(make::simple_binary(wspn(BinaryOperator::Slash, 1, 2)))
         );
     }
 
@@ -354,14 +356,14 @@ mod tests {
         assert_eq!(
             parse_str("1*2+3*4"),
             Ok(binary(
-                binary(nr(1.), BinaryOperator::Star, nr(2.)),
-                BinaryOperator::Plus,
-                binary(nr(3.), BinaryOperator::Star, nr(4.))
+                binary(nr(1.), wspn(BinaryOperator::Star, 1, 2), nr(2.)),
+                wspn(BinaryOperator::Plus, 3, 4),
+                binary(nr(3.), wspn(BinaryOperator::Star, 5, 6), nr(4.))
             ))
         );
         assert_eq!(
             parse_str("-1*-2"),
-            Ok(binary(minus_nr(1., 0), BinaryOperator::Star, minus_nr(2., 3)))
+            Ok(binary(minus_nr(1., 0), wspn(BinaryOperator::Star, 2, 3), minus_nr(2., 3)))
         );
     }
 
@@ -370,7 +372,7 @@ mod tests {
         // Test infinite loops and extra tokens
         assert_eq!(
             parse_str("1+2 3"),
-            Ok(make::simple_binary(BinaryOperator::Plus))
+            Ok(make::simple_binary(wspn(BinaryOperator::Plus, 1, 2)))
         );
         assert!(matches!(parse_str("1+"), Err(SyntaxError::Unexpected(_))));
     }
@@ -388,9 +390,9 @@ mod tests {
         assert_eq!(
             parse_str("(1+2)*(1+2)"),
             Ok(binary(
-                Expr::Grouping(Box::new(simple_binary(BinaryOperator::Plus))),
-                BinaryOperator::Star,
-                Expr::Grouping(Box::new(simple_binary(BinaryOperator::Plus))),
+                Expr::Grouping(Box::new(simple_binary(wspn(BinaryOperator::Plus, 2, 3)))),
+                wspn(BinaryOperator::Star, 5, 6),
+                Expr::Grouping(Box::new(simple_binary(wspn(BinaryOperator::Plus, 8, 9)))),
             ))
         );
         assert!(matches!(
@@ -467,7 +469,7 @@ mod tests {
                 parse_str("a=1+2"),
                 Ok(Expr::Assign(
                     WithSpan::new_unchecked("a".into(), 0, 1),
-                    Box::new(make::simple_binary(BinaryOperator::Plus))
+                    Box::new(make::simple_binary(wspn(BinaryOperator::Plus, 3, 4)))
                 ))
             );
         }
@@ -517,7 +519,7 @@ mod tests {
                         Box::new(Expr::Variable(WithSpan::new_unchecked("a".into(), 0, 1))),
                         vec![Expr::Number(3.)]
                     )),
-                    BinaryOperator::Plus,
+                    wspn(BinaryOperator::Plus, 4, 5),
                     Box::new(Expr::Call(
                         Box::new(Expr::Variable(WithSpan::new_unchecked("a".into(), 5, 6))),
                         vec![Expr::Number(3.)]
