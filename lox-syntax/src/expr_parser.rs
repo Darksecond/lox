@@ -155,13 +155,15 @@ fn parse_unary(it: &mut Parser) -> Result<Expr, SyntaxError> {
     Ok(Expr::Unary(operator, Box::new(right)))
 }
 
-fn parse_logical_op(it: &mut Parser) -> Result<LogicalOperator, SyntaxError> {
+fn parse_logical_op(it: &mut Parser) -> Result<WithSpan<LogicalOperator>, SyntaxError> {
     let tc = it.advance();
-    match &tc.value {
-        &Token::And => Ok(LogicalOperator::And),
-        &Token::Or => Ok(LogicalOperator::Or),
-        _ => Err(SyntaxError::ExpectedUnaryOperator(tc.clone())),
-    }
+    let operator = match &tc.value {
+        &Token::And => LogicalOperator::And,
+        &Token::Or => LogicalOperator::Or,
+        _ => return Err(SyntaxError::ExpectedUnaryOperator(tc.clone())),
+    };
+
+    Ok(WithSpan::new(operator, tc.span))
 }
 
 fn parse_unary_op(it: &mut Parser) -> Result<WithSpan<UnaryOperator>, SyntaxError> {
@@ -408,7 +410,7 @@ mod tests {
             parse_str("true or false"),
             Ok(Expr::Logical(
                 Box::new(Expr::Boolean(true)),
-                LogicalOperator::Or,
+                wspn(LogicalOperator::Or, 5, 7),
                 Box::new(Expr::Boolean(false)),
             ))
         );
@@ -416,7 +418,7 @@ mod tests {
             parse_str("true and false"),
             Ok(Expr::Logical(
                 Box::new(Expr::Boolean(true)),
-                LogicalOperator::And,
+                wspn(LogicalOperator::And, 5, 8),
                 Box::new(Expr::Boolean(false)),
             ))
         );
@@ -429,13 +431,13 @@ mod tests {
             Ok(Expr::Logical(
                 Box::new(Expr::Logical(
                     Box::new(Expr::Number(1.)),
-                    LogicalOperator::And,
+                    wspn(LogicalOperator::And, 2, 5),
                     Box::new(Expr::Number(2.)),
                 )),
-                LogicalOperator::Or,
+                wspn(LogicalOperator::Or, 8, 10),
                 Box::new(Expr::Logical(
                     Box::new(Expr::Number(3.)),
-                    LogicalOperator::And,
+                    wspn(LogicalOperator::And, 13, 16),
                     Box::new(Expr::Number(4.)),
                 )),
             ))

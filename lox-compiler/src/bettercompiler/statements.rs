@@ -225,7 +225,7 @@ fn compile_expr(compiler: &mut Compiler, expr: &Expr) -> Result<(), CompilerErro
         Expr::Assign(ref identifier, ref expr) => {
             compile_assign(compiler, identifier.as_ref(), expr)
         }
-        Expr::Logical(ref left, operator, ref right) => {
+        Expr::Logical(ref left, ref operator, ref right) => {
             compile_logical(compiler, operator, left, right)
         }
         Expr::Call(ref identifier, ref args) => compile_call(compiler, identifier, args),
@@ -292,11 +292,11 @@ fn compile_call(
 
 fn compile_logical(
     compiler: &mut Compiler,
-    operator: LogicalOperator,
+    operator: &WithSpan<LogicalOperator>,
     left: &Expr,
     right: &Expr,
 ) -> Result<(), CompilerError> {
-    match operator {
+    match operator.value {
         LogicalOperator::And => compile_logical_and(compiler, left, right),
         LogicalOperator::Or => compile_logical_or(compiler, left, right),
     }

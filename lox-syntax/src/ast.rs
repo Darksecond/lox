@@ -40,7 +40,7 @@ pub enum Expr {
     String(String),
     Unary(WithSpan<UnaryOperator>, Box<Expr>),
     Variable(WithSpan<Identifier>),
-    Logical(Box<Expr>, LogicalOperator, Box<Expr>),
+    Logical(Box<Expr>, WithSpan<LogicalOperator>, Box<Expr>),
     Assign(WithSpan<Identifier>, Box<Expr>),
     Call(Box<Expr>, Vec<Expr>),
     Get(Box<Expr>, WithSpan<Identifier>),
