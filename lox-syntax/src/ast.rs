@@ -38,7 +38,7 @@ pub enum Expr {
     This,
     Super(WithSpan<Identifier>),
     String(String),
-    Unary(UnaryOperator, Box<Expr>),
+    Unary(WithSpan<UnaryOperator>, Box<Expr>),
     Variable(WithSpan<Identifier>),
     Logical(Box<Expr>, LogicalOperator, Box<Expr>),
     Assign(WithSpan<Identifier>, Box<Expr>),

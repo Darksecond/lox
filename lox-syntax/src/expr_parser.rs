@@ -164,11 +164,11 @@ fn parse_logical_op(it: &mut Parser) -> Result<LogicalOperator, SyntaxError> {
     }
 }
 
-fn parse_unary_op(it: &mut Parser) -> Result<UnaryOperator, SyntaxError> {
+fn parse_unary_op(it: &mut Parser) -> Result<WithSpan<UnaryOperator>, SyntaxError> {
     let tc = it.advance();
     match &tc.value {
-        &Token::Bang => Ok(UnaryOperator::Bang),
-        &Token::Minus => Ok(UnaryOperator::Minus),
+        &Token::Bang => Ok(WithSpan::new(UnaryOperator::Bang, tc.span)),
+        &Token::Minus => Ok(WithSpan::new(UnaryOperator::Minus, tc.span)),
         _ => Err(SyntaxError::ExpectedUnaryOperator(tc.clone())),
     }
 }
@@ -225,6 +225,10 @@ mod tests {
         parse(&mut parser)
     }
 
+    fn wspn<T>(value: T, start: u32, end: u32) -> WithSpan<T> {
+        unsafe { WithSpan::new_unchecked(value, start, end) }
+    }
+
     mod make {
         use super::*;
         pub fn nr(value: f64) -> Expr {
@@ -238,8 +242,8 @@ mod tests {
         pub fn binary(left: Expr, operator: BinaryOperator, right: Expr) -> Expr {
             Expr::Binary(Box::new(left), operator, Box::new(right))
         }
-        pub fn minus_nr(value: f64) -> Expr {
-            Expr::Unary(UnaryOperator::Minus, Box::new(nr(value)))
+        pub fn minus_nr(value: f64, start: u32) -> Expr {
+            Expr::Unary(wspn(UnaryOperator::Minus, start, start+1), Box::new(nr(value)))
         }
     }
 
@@ -271,31 +275,31 @@ mod tests {
     fn test_unary() {
         assert_eq!(
             parse_str("-nil"),
-            Ok(Expr::Unary(UnaryOperator::Minus, Box::new(Expr::Nil)))
+            Ok(Expr::Unary(wspn(UnaryOperator::Minus, 0, 1), Box::new(Expr::Nil)))
         );
         assert_eq!(
             parse_str("!nil"),
-            Ok(Expr::Unary(UnaryOperator::Bang, Box::new(Expr::Nil)))
+            Ok(Expr::Unary(wspn(UnaryOperator::Bang, 0, 1), Box::new(Expr::Nil)))
         );
         assert_eq!(
             parse_str("!!nil"),
             Ok(Expr::Unary(
-                UnaryOperator::Bang,
-                Box::new(Expr::Unary(UnaryOperator::Bang, Box::new(Expr::Nil)))
+                wspn(UnaryOperator::Bang, 0, 1),
+                Box::new(Expr::Unary(wspn(UnaryOperator::Bang, 1, 2), Box::new(Expr::Nil)))
             ))
         );
         assert_eq!(
             parse_str("!-nil"),
             Ok(Expr::Unary(
-                UnaryOperator::Bang,
-                Box::new(Expr::Unary(UnaryOperator::Minus, Box::new(Expr::Nil)))
+                wspn(UnaryOperator::Bang, 0, 1),
+                Box::new(Expr::Unary(wspn(UnaryOperator::Minus, 1, 2), Box::new(Expr::Nil)))
             ))
         );
         assert_eq!(
             parse_str("-!nil"),
             Ok(Expr::Unary(
-                UnaryOperator::Minus,
-                Box::new(Expr::Unary(UnaryOperator::Bang, Box::new(Expr::Nil)))
+                wspn(UnaryOperator::Minus, 0, 1),
+                Box::new(Expr::Unary(wspn(UnaryOperator::Bang, 1, 2), Box::new(Expr::Nil)))
             ))
         );
     }
@@ -357,7 +361,7 @@ mod tests {
         );
         assert_eq!(
             parse_str("-1*-2"),
-            Ok(binary(minus_nr(1.), BinaryOperator::Star, minus_nr(2.)))
+            Ok(binary(minus_nr(1., 0), BinaryOperator::Star, minus_nr(2., 3)))
         );
     }
 
@@ -498,7 +502,7 @@ mod tests {
             assert_eq!(
                 parse_str("-a(3)"),
                 Ok(Expr::Unary(
-                    UnaryOperator::Minus,
+                    wspn(UnaryOperator::Minus, 0, 1),
                     Box::new(Expr::Call(
                         Box::new(Expr::Variable(WithSpan::new_unchecked("a".into(), 1, 2))),
                         vec![Expr::Number(3.)]

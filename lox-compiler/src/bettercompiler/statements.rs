@@ -230,7 +230,7 @@ fn compile_expr(compiler: &mut Compiler, expr: &Expr) -> Result<(), CompilerErro
         }
         Expr::Call(ref identifier, ref args) => compile_call(compiler, identifier, args),
         Expr::Grouping(ref expr) => compile_expr(compiler, expr),
-        Expr::Unary(operator, ref expr) => compile_unary(compiler, operator, expr),
+        Expr::Unary(ref operator, ref expr) => compile_unary(compiler, operator.clone(), expr),
         Expr::Set(ref expr, ref identifier, ref value) => {
             compiler_set(compiler, expr, identifier.as_ref(), value)
         }
@@ -265,11 +265,11 @@ fn compiler_set(
 
 fn compile_unary(
     compiler: &mut Compiler,
-    operator: UnaryOperator,
+    operator: WithSpan<UnaryOperator>,
     expr: &Expr,
 ) -> Result<(), CompilerError> {
     compile_expr(compiler, expr)?;
-    match operator {
+    match operator.value {
         UnaryOperator::Minus => compiler.add_instruction(Instruction::Negate),
         UnaryOperator::Bang => compiler.add_instruction(Instruction::Not),
     };
