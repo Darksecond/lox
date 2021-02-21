@@ -79,7 +79,7 @@ fn compile_class(
     Ok(())
 }
 
-fn compile_return<E: AsRef<Expr>>(
+fn compile_return<E: AsRef<WithSpan<Expr>>>(
     compiler: &mut Compiler,
     expr: Option<E>,
 ) -> Result<(), CompilerError> {
@@ -138,7 +138,7 @@ fn compile_function(
 
 fn compile_while(
     compiler: &mut Compiler,
-    condition: &Expr,
+    condition: &WithSpan<Expr>,
     body: &Stmt,
 ) -> Result<(), CompilerError> {
     let loop_start = compiler.instruction_index();
@@ -155,7 +155,7 @@ fn compile_while(
 
 fn compile_if<S: AsRef<Stmt>>(
     compiler: &mut Compiler,
-    condition: &Expr,
+    condition: &WithSpan<Expr>,
     then_stmt: &Stmt,
     else_stmt: Option<S>,
 ) -> Result<(), CompilerError> {
@@ -177,7 +177,7 @@ fn compile_if<S: AsRef<Stmt>>(
     Ok(())
 }
 
-fn compile_expression_statement(compiler: &mut Compiler, expr: &Expr) -> Result<(), CompilerError> {
+fn compile_expression_statement(compiler: &mut Compiler, expr: &WithSpan<Expr>) -> Result<(), CompilerError> {
     compile_expr(compiler, expr)?;
     compiler.add_instruction(Instruction::Pop);
     Ok(())
@@ -187,7 +187,7 @@ fn compile_block(compiler: &mut Compiler, ast: &Ast) -> Result<(), CompilerError
     compiler.with_scope(|compiler| compile_ast(compiler, ast))
 }
 
-fn compile_var_declaration<T: AsRef<Expr>, I: AsRef<str>>(
+fn compile_var_declaration<T: AsRef<WithSpan<Expr>>, I: AsRef<str>>(
     compiler: &mut Compiler,
     identifier: WithSpan<I>,
     expr: Option<T>,
@@ -206,14 +206,14 @@ fn compile_var_declaration<T: AsRef<Expr>, I: AsRef<str>>(
     Ok(())
 }
 
-fn compile_print(compiler: &mut Compiler, expr: &Expr) -> Result<(), CompilerError> {
+fn compile_print(compiler: &mut Compiler, expr: &WithSpan<Expr>) -> Result<(), CompilerError> {
     compile_expr(compiler, expr)?;
     compiler.add_instruction(Instruction::Print);
     Ok(())
 }
 
-fn compile_expr(compiler: &mut Compiler, expr: &Expr) -> Result<(), CompilerError> {
-    match *expr {
+fn compile_expr(compiler: &mut Compiler, expr: &WithSpan<Expr>) -> Result<(), CompilerError> {
+    match expr.value {
         Expr::Number(num) => compile_number(compiler, num),
         Expr::String(ref string) => compile_string(compiler, string),
         Expr::Binary(ref left, ref operator, ref right) => {
@@ -241,7 +241,7 @@ fn compile_expr(compiler: &mut Compiler, expr: &Expr) -> Result<(), CompilerErro
 
 fn compiler_get(
     compiler: &mut Compiler,
-    expr: &Expr,
+    expr: &WithSpan<Expr>,
     identifier: WithSpan<&String>,
 ) -> Result<(), CompilerError> {
     compile_expr(compiler, expr)?;
@@ -252,9 +252,9 @@ fn compiler_get(
 
 fn compiler_set(
     compiler: &mut Compiler,
-    expr: &Expr,
+    expr: &WithSpan<Expr>,
     identifier: WithSpan<&String>,
-    value: &Expr,
+    value: &WithSpan<Expr>,
 ) -> Result<(), CompilerError> {
     compile_expr(compiler, expr)?;
     compile_expr(compiler, value)?;
@@ -266,7 +266,7 @@ fn compiler_set(
 fn compile_unary(
     compiler: &mut Compiler,
     operator: WithSpan<UnaryOperator>,
-    expr: &Expr,
+    expr: &WithSpan<Expr>,
 ) -> Result<(), CompilerError> {
     compile_expr(compiler, expr)?;
     match operator.value {
@@ -279,8 +279,8 @@ fn compile_unary(
 
 fn compile_call(
     compiler: &mut Compiler,
-    identifier: &Expr,
-    args: &Vec<Expr>,
+    identifier: &WithSpan<Expr>,
+    args: &Vec<WithSpan<Expr>>,
 ) -> Result<(), CompilerError> {
     compile_expr(compiler, identifier)?;
     for arg in args {
@@ -293,8 +293,8 @@ fn compile_call(
 fn compile_logical(
     compiler: &mut Compiler,
     operator: &WithSpan<LogicalOperator>,
-    left: &Expr,
-    right: &Expr,
+    left: &WithSpan<Expr>,
+    right: &WithSpan<Expr>,
 ) -> Result<(), CompilerError> {
     match operator.value {
         LogicalOperator::And => compile_logical_and(compiler, left, right),
@@ -305,8 +305,8 @@ fn compile_logical(
 //TODO Implement this better, using one less jump, we can easily introduce a JumpIfTrue instruction.
 fn compile_logical_or(
     compiler: &mut Compiler,
-    left: &Expr,
-    right: &Expr,
+    left: &WithSpan<Expr>,
+    right: &WithSpan<Expr>,
 ) -> Result<(), CompilerError> {
     compile_expr(compiler, left)?;
     let else_jump = compiler.add_instruction(Instruction::JumpIfFalse(0));
@@ -320,8 +320,8 @@ fn compile_logical_or(
 
 fn compile_logical_and(
     compiler: &mut Compiler,
-    left: &Expr,
-    right: &Expr,
+    left: &WithSpan<Expr>,
+    right: &WithSpan<Expr>,
 ) -> Result<(), CompilerError> {
     compile_expr(compiler, left)?;
     let end_jump = compiler.add_instruction(Instruction::JumpIfFalse(0));
@@ -344,7 +344,7 @@ fn compile_boolean(compiler: &mut Compiler, boolean: bool) -> Result<(), Compile
 fn compile_assign(
     compiler: &mut Compiler,
     identifier: WithSpan<&String>,
-    expr: &Expr,
+    expr: &WithSpan<Expr>,
 ) -> Result<(), CompilerError> {
     compile_expr(compiler, expr)?;
     if let Some(local) = compiler.resolve_local(identifier.value)? {
@@ -399,8 +399,8 @@ fn compile_string(compiler: &mut Compiler, string: &str) -> Result<(), CompilerE
 fn compile_binary(
     compiler: &mut Compiler,
     operator: &WithSpan<BinaryOperator>,
-    left: &Expr,
-    right: &Expr,
+    left: &WithSpan<Expr>,
+    right: &WithSpan<Expr>,
 ) -> Result<(), CompilerError> {
     compile_expr(compiler, left)?;
     compile_expr(compiler, right)?;

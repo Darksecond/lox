@@ -90,7 +90,7 @@ fn parse_params(it: &mut Parser) -> Result<Vec<WithSpan<Identifier>>, SyntaxErro
 fn parse_var_declaration(it: &mut Parser) -> Result<Stmt, SyntaxError> {
     it.expect(TokenKind::Var)?;
     let name = expect_identifier(it)?;
-    let mut initializer: Option<Expr> = None;
+    let mut initializer = None;
 
     if it.optionally(TokenKind::Equal)? {
         initializer = Some(parse_expr(it)?);
@@ -101,7 +101,7 @@ fn parse_var_declaration(it: &mut Parser) -> Result<Stmt, SyntaxError> {
     Ok(Stmt::Var(name, initializer.map(Box::new)))
 }
 
-fn parse_expr(it: &mut Parser) -> Result<Expr, SyntaxError> {
+fn parse_expr(it: &mut Parser) -> Result<WithSpan<Expr>, SyntaxError> {
     super::expr_parser::parse(it).map_err(|e| e.into())
 }
 
@@ -119,7 +119,7 @@ fn parse_for_statement(it: &mut Parser) -> Result<Stmt, SyntaxError> {
     let condition = if !it.check(TokenKind::Semicolon) {
         parse_expr(it)?
     } else {
-        Expr::Boolean(true)
+        WithSpan::empty(Expr::Boolean(true))
     };
     it.expect(TokenKind::Semicolon)?;
     let increment = if !it.check(TokenKind::RightParen) {
@@ -145,7 +145,7 @@ fn parse_for_statement(it: &mut Parser) -> Result<Stmt, SyntaxError> {
 
 fn parse_return_statement(it: &mut Parser) -> Result<Stmt, SyntaxError> {
     it.expect(TokenKind::Return)?;
-    let mut expr: Option<Expr> = None;
+    let mut expr = None;
     if !it.check(TokenKind::Semicolon) {
         expr = Some(parse_expr(it)?);
     }
@@ -211,6 +211,8 @@ pub fn parse(it: &mut Parser) -> Result<Vec<Stmt>, SyntaxError> {
 
 #[cfg(test)]
 mod tests {
+    use std::ops::Range;
+
     use super::super::tokenizer::*;
     use super::*;
     fn parse_str(data: &str) -> Result<Vec<Stmt>, SyntaxError> {
@@ -218,18 +220,21 @@ mod tests {
         let mut parser = crate::parser::Parser::new(&tokens);
         parse(&mut parser)
     }
+    pub fn ws<T>(value: T, range: Range<u32>) -> WithSpan<T> {
+        unsafe { WithSpan::new_unchecked(value, range.start, range.end) }
+    }
 
     #[test]
     fn test_expr_stmt() {
         assert_eq!(
             parse_str("nil;"),
-            Ok(vec![Stmt::Expression(Box::new(Expr::Nil)),])
+            Ok(vec![Stmt::Expression(Box::new(ws(Expr::Nil, 0..3))),])
         );
         assert_eq!(
             parse_str("nil;nil;"),
             Ok(vec![
-                Stmt::Expression(Box::new(Expr::Nil)),
-                Stmt::Expression(Box::new(Expr::Nil)),
+                Stmt::Expression(Box::new(ws(Expr::Nil, 0..3))),
+                Stmt::Expression(Box::new(ws(Expr::Nil, 4..7))),
             ])
         );
     }
@@ -238,15 +243,12 @@ mod tests {
     fn test_print_stmt() {
         assert_eq!(
             parse_str("print nil;"),
-            Ok(vec![Stmt::Print(Box::new(Expr::Nil)),])
+            Ok(vec![Stmt::Print(Box::new(ws(Expr::Nil, 6..9))),])
         );
     }
 
     fn make_span_string(string: &str, offset: u32) -> WithSpan<String> {
-        use crate::position::{BytePos, Span};
-        let start = BytePos(offset);
-        let end = BytePos(string.len() as u32 + offset);
-        WithSpan::new(string.to_string(), Span { start, end })
+        unsafe { WithSpan::new_unchecked(string.into(), offset, offset+string.len() as u32) }
     }
 
     #[test]
@@ -259,7 +261,7 @@ mod tests {
             parse_str("var beverage = nil;"),
             Ok(vec![Stmt::Var(
                 make_span_string("beverage", 4),
-                Some(Box::new(Expr::Nil))
+                Some(Box::new(ws(Expr::Nil, 15..18)))
             ),])
         );
 
@@ -268,10 +270,10 @@ mod tests {
                 parse_str("var beverage = x = nil;"),
                 Ok(vec![Stmt::Var(
                     make_span_string("beverage", 4),
-                    Some(Box::new(Expr::Assign(
+                    Some(Box::new(ws(Expr::Assign(
                         WithSpan::new_unchecked("x".into(), 15, 16),
-                        Box::new(Expr::Nil)
-                    )))
+                        Box::new(ws(Expr::Nil, 19..22))
+                    ), 15..22)))
                 ),])
             );
         }
@@ -284,17 +286,17 @@ mod tests {
         assert_eq!(
             parse_str("if(nil) print nil;"),
             Ok(vec![Stmt::If(
-                Box::new(Expr::Nil),
-                Box::new(Stmt::Print(Box::new(Expr::Nil))),
+                Box::new(ws(Expr::Nil, 3..6)),
+                Box::new(Stmt::Print(Box::new(ws(Expr::Nil, 14..17)))),
                 None,
             ),])
         );
         assert_eq!(
             parse_str("if(nil) print nil; else print false;"),
             Ok(vec![Stmt::If(
-                Box::new(Expr::Nil),
-                Box::new(Stmt::Print(Box::new(Expr::Nil))),
-                Some(Box::new(Stmt::Print(Box::new(Expr::Boolean(false))))),
+                Box::new(ws(Expr::Nil, 3..6)),
+                Box::new(Stmt::Print(Box::new(ws(Expr::Nil, 14..17)))),
+                Some(Box::new(Stmt::Print(Box::new(ws(Expr::Boolean(false), 30..35))))),
             ),])
         );
     }
@@ -305,14 +307,14 @@ mod tests {
         assert_eq!(
             parse_str("{nil;}"),
             Ok(vec![Stmt::Block(vec![Stmt::Expression(Box::new(
-                Expr::Nil
+                ws(Expr::Nil, 1..4)
             )),])])
         );
         assert_eq!(
             parse_str("{nil;nil;}"),
             Ok(vec![Stmt::Block(vec![
-                Stmt::Expression(Box::new(Expr::Nil)),
-                Stmt::Expression(Box::new(Expr::Nil)),
+                Stmt::Expression(Box::new(ws(Expr::Nil, 1..4))),
+                Stmt::Expression(Box::new(ws(Expr::Nil, 5..8))),
             ])])
         );
     }
@@ -322,8 +324,8 @@ mod tests {
         assert_eq!(
             parse_str("while(nil)false;"),
             Ok(vec![Stmt::While(
-                Box::new(Expr::Nil),
-                Box::new(Stmt::Expression(Box::new(Expr::Boolean(false)))),
+                Box::new(ws(Expr::Nil, 6..9)),
+                Box::new(Stmt::Expression(Box::new(ws(Expr::Boolean(false), 10..15)))),
             )])
         );
     }
@@ -333,7 +335,7 @@ mod tests {
         assert_eq!(parse_str("return;"), Ok(vec![Stmt::Return(None),]));
         assert_eq!(
             parse_str("return nil;"),
-            Ok(vec![Stmt::Return(Some(Box::new(Expr::Nil)))])
+            Ok(vec![Stmt::Return(Some(Box::new(ws(Expr::Nil, 7..10))))])
         );
     }
 
@@ -361,7 +363,7 @@ mod tests {
                 Ok(vec![Stmt::Function(
                     WithSpan::new_unchecked("test".into(), 4, 8),
                     vec![],
-                    vec![Stmt::Expression(Box::new(Expr::Nil,)),]
+                    vec![Stmt::Expression(Box::new(ws(Expr::Nil, 11..14))),]
                 ),])
             );
         }
@@ -414,34 +416,34 @@ mod tests {
         fn block(what: Vec<Stmt>) -> Stmt {
             Stmt::Block(what)
         }
-        fn var_i_zero() -> Stmt {
-            Stmt::Var(make_span_string("i", 8), Some(Box::new(Expr::Number(0.))))
+        fn var_i_zero(start: u32) -> Stmt {
+            Stmt::Var(make_span_string("i", 8), Some(Box::new(ws(Expr::Number(0.), start..start+1))))
         }
         fn nil() -> Expr {
             Expr::Nil
         }
-        fn while_stmt(e: Expr, s: Stmt) -> Stmt {
+        fn while_stmt(e: WithSpan<Expr>, s: Stmt) -> Stmt {
             Stmt::While(Box::new(e), Box::new(s))
         }
 
         assert_eq!(
             parse_str("for(;;){}"),
-            Ok(vec![while_stmt(Expr::Boolean(true), Stmt::Block(vec![])),])
+            Ok(vec![while_stmt(ws(Expr::Boolean(true), 0..0), Stmt::Block(vec![])),])
         );
         assert_eq!(
             parse_str("for(var i=0;;){}"),
             Ok(vec![block(vec![
-                var_i_zero(),
-                while_stmt(Expr::Boolean(true), Stmt::Block(vec![])),
+                var_i_zero(10),
+                while_stmt(ws(Expr::Boolean(true), 0..0), Stmt::Block(vec![])),
             ])])
         );
         assert_eq!(
             parse_str("for(nil;nil;nil){}"),
             Ok(vec![block(vec![
-                Stmt::Expression(Box::new(nil())),
+                Stmt::Expression(Box::new(ws(nil(), 4..7))),
                 while_stmt(
-                    Expr::Nil,
-                    Stmt::Block(vec![Stmt::Block(vec![]), Stmt::Expression(Box::new(nil())),])
+                    ws(Expr::Nil, 8..11),
+                    Stmt::Block(vec![Stmt::Block(vec![]), Stmt::Expression(Box::new(ws(nil(), 12..15))),])
                 ),
             ])])
         );

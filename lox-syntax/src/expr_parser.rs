@@ -42,7 +42,7 @@ impl<'a> From<TokenKind> for Precedence {
     }
 }
 
-fn parse_expr(it: &mut Parser, precedence: Precedence) -> Result<Expr, SyntaxError> {
+fn parse_expr(it: &mut Parser, precedence: Precedence) -> Result<WithSpan<Expr>, SyntaxError> {
     let mut expr = parse_prefix(it)?;
     while !it.is_eof() {
         let next_precedence = Precedence::from(it.peek());
@@ -54,7 +54,7 @@ fn parse_expr(it: &mut Parser, precedence: Precedence) -> Result<Expr, SyntaxErr
     Ok(expr)
 }
 
-fn parse_infix(it: &mut Parser, left: Expr) -> Result<Expr, SyntaxError> {
+fn parse_infix(it: &mut Parser, left: WithSpan<Expr>) -> Result<WithSpan<Expr>, SyntaxError> {
     match it.peek() {
         TokenKind::BangEqual
         | TokenKind::EqualEqual
@@ -74,7 +74,7 @@ fn parse_infix(it: &mut Parser, left: Expr) -> Result<Expr, SyntaxError> {
     }
 }
 
-fn parse_prefix(it: &mut Parser) -> Result<Expr, SyntaxError> {
+fn parse_prefix(it: &mut Parser) -> Result<WithSpan<Expr>, SyntaxError> {
     match it.peek() {
         TokenKind::Number
         | TokenKind::Nil
@@ -83,30 +83,34 @@ fn parse_prefix(it: &mut Parser) -> Result<Expr, SyntaxError> {
         | TokenKind::False
         | TokenKind::Identifier
         | TokenKind::Super
-        | TokenKind::String => parse_primary(it).map(|e| e.value),
+        | TokenKind::String => parse_primary(it),
         TokenKind::Bang | TokenKind::Minus => parse_unary(it),
-        TokenKind::LeftParen => parse_grouping(it).map(|e| e.value),
+        TokenKind::LeftParen => parse_grouping(it),
         _ => Err(SyntaxError::Unexpected(it.peek_token().clone())),
     }
 }
 
-fn parse_get(it: &mut Parser, left: Expr) -> Result<Expr, SyntaxError> {
+fn parse_get(it: &mut Parser, left: WithSpan<Expr>) -> Result<WithSpan<Expr>, SyntaxError> {
     it.expect(TokenKind::Dot)?;
     let tc = it.advance();
     match &tc.value {
-        &Token::Identifier(ref i) => Ok(Expr::Get(Box::new(left), WithSpan::new(i.clone(), tc.span))),
+        &Token::Identifier(ref i) => {
+            let span = Span::union(&left, tc);
+            Ok(WithSpan::new(Expr::Get(Box::new(left), WithSpan::new(i.clone(), tc.span)), span))
+        },
         _ => Err(SyntaxError::Expected(TokenKind::Identifier, tc.clone())),
     }
 }
 
-fn parse_call(it: &mut Parser, left: Expr) -> Result<Expr, SyntaxError> {
+fn parse_call(it: &mut Parser, left: WithSpan<Expr>) -> Result<WithSpan<Expr>, SyntaxError> {
     it.expect(TokenKind::LeftParen)?;
     let args = parse_arguments(it)?;
-    it.expect(TokenKind::RightParen)?;
-    Ok(Expr::Call(Box::new(left), args))
+    let most_right = it.expect(TokenKind::RightParen)?;
+    let span = Span::union(&left, most_right);
+    Ok(WithSpan::new(Expr::Call(Box::new(left), args), span))
 }
 
-fn parse_arguments(it: &mut Parser) -> Result<Vec<Expr>, SyntaxError> {
+fn parse_arguments(it: &mut Parser) -> Result<Vec<WithSpan<Expr>>, SyntaxError> {
     let mut args = Vec::new();
     if !it.check(TokenKind::RightParen) {
         args.push(parse_expr(it, Precedence::None)?);
@@ -118,21 +122,23 @@ fn parse_arguments(it: &mut Parser) -> Result<Vec<Expr>, SyntaxError> {
     Ok(args)
 }
 
-fn parse_assign(it: &mut Parser, left: Expr) -> Result<Expr, SyntaxError> {
+fn parse_assign(it: &mut Parser, left: WithSpan<Expr>) -> Result<WithSpan<Expr>, SyntaxError> {
     it.expect(TokenKind::Equal)?;
     let right = parse_expr(it, Precedence::None)?;
-    match left {
-        Expr::Variable(i) => Ok(Expr::Assign(i, Box::new(right))),
-        Expr::Get(l, i) => Ok(Expr::Set(l, i, Box::new(right))),
+    let span = Span::union(&left, &right);
+    match &left.value {
+        Expr::Variable(i) => Ok(WithSpan::new(Expr::Assign(i.clone(), Box::new(right)), span)),
+        Expr::Get(l, i) => Ok(WithSpan::new(Expr::Set(l.clone(), i.clone(), Box::new(right)), span)),
         e => Err(SyntaxError::InvalidLeftValue(WithSpan::empty(e.clone()))), //TODO
     }
 }
 
-fn parse_logical(it: &mut Parser, left: Expr) -> Result<Expr, SyntaxError> {
+fn parse_logical(it: &mut Parser, left: WithSpan<Expr>) -> Result<WithSpan<Expr>, SyntaxError> {
     let precedence = Precedence::from(it.peek());
     let operator = parse_logical_op(it)?;
     let right = parse_expr(it, precedence)?;
-    Ok(Expr::Logical(Box::new(left), operator, Box::new(right)))
+    let span = Span::union(&left, &right);
+    Ok(WithSpan::new(Expr::Logical(Box::new(left), operator, Box::new(right)), span))
 }
 
 fn parse_grouping(it: &mut Parser) -> Result<WithSpan<Expr>, SyntaxError> {
@@ -140,21 +146,23 @@ fn parse_grouping(it: &mut Parser) -> Result<WithSpan<Expr>, SyntaxError> {
     let expr = parse_expr(it, Precedence::None)?;
     let right_paren = it.expect(TokenKind::RightParen)?;
 
-    let span = Span::union(left_paren.span, right_paren.span);
+    let span = Span::union(left_paren, right_paren);
     Ok(WithSpan::new(Expr::Grouping(Box::new(expr)), span))
 }
 
-fn parse_binary(it: &mut Parser, left: Expr) -> Result<Expr, SyntaxError> {
+fn parse_binary(it: &mut Parser, left: WithSpan<Expr>) -> Result<WithSpan<Expr>, SyntaxError> {
     let precedence = Precedence::from(it.peek());
     let operator = parse_binary_op(it)?;
     let right = parse_expr(it, precedence)?;
-    Ok(Expr::Binary(Box::new(left), operator, Box::new(right)))
+    let span = Span::union(&left, &right);
+    Ok(WithSpan::new(Expr::Binary(Box::new(left), operator, Box::new(right)), span))
 }
 
-fn parse_unary(it: &mut Parser) -> Result<Expr, SyntaxError> {
+fn parse_unary(it: &mut Parser) -> Result<WithSpan<Expr>, SyntaxError> {
     let operator = parse_unary_op(it)?;
     let right = parse_expr(it, Precedence::Unary)?;
-    Ok(Expr::Unary(operator, Box::new(right)))
+    let span = Span::union(&operator, &right);
+    Ok(WithSpan::new(Expr::Unary(operator, Box::new(right)), span))
 }
 
 fn parse_logical_op(it: &mut Parser) -> Result<WithSpan<LogicalOperator>, SyntaxError> {
@@ -214,377 +222,378 @@ fn parse_primary(it: &mut Parser) -> Result<WithSpan<Expr>, SyntaxError> {
 fn parse_super(it: &mut Parser, keyword: &WithSpan<Token>) -> Result<WithSpan<Expr>, SyntaxError> {
     it.expect(TokenKind::Dot)?;
     let name = expect_identifier(it)?;
-    let span = Span::union(keyword.span, name.span);
+    let span = Span::union(keyword, &name);
     Ok(WithSpan::new(Expr::Super(name), span))
 }
 
-pub fn parse(it: &mut Parser) -> Result<Expr, SyntaxError> {
+pub fn parse(it: &mut Parser) -> Result<WithSpan<Expr>, SyntaxError> {
     parse_expr(it, Precedence::None)
 }
 
 #[cfg(test)]
 mod tests {
-    use super::super::tokenizer::*;
     use super::*;
-    fn parse_str(data: &str) -> Result<Expr, SyntaxError> {
+    fn parse_str(data: &str) -> Result<WithSpan<Expr>, SyntaxError> {
+        use super::super::tokenizer::*;
+
         let tokens = tokenize_with_context(data);
         let mut parser = crate::parser::Parser::new(&tokens);
         parse(&mut parser)
     }
 
-    fn wspn<T>(value: T, start: u32, end: u32) -> WithSpan<T> {
-        unsafe { WithSpan::new_unchecked(value, start, end) }
-    }
-
     mod make {
         use super::*;
-        pub fn nr(value: f64) -> Expr {
+        use std::ops::Range;
+
+        /// Make WithSpan
+        pub fn ws<T>(value: T, range: Range<u32>) -> WithSpan<T> {
+            unsafe { WithSpan::new_unchecked(value, range.start, range.end) }
+        }
+
+        /// Make Expr::Number
+        pub fn n(value: f64) -> Expr {
             Expr::Number(value)
         }
-        pub fn simple_binary(operator: WithSpan<BinaryOperator>) -> Expr {
-            let left = nr(1.);
-            let right = nr(2.);
-            Expr::Binary(Box::new(left), operator, Box::new(right))
+
+        /// Make WithSpan<Expr::Number>
+        pub fn wsn(value: f64, range: Range<u32>) -> WithSpan<Expr> {
+            ws(n(value), range)
         }
-        pub fn binary(left: Expr, operator: WithSpan<BinaryOperator>, right: Expr) -> Expr {
-            Expr::Binary(Box::new(left), operator, Box::new(right))
+
+        /// Make a Minus Number with span
+        pub fn wsmn(value: f64, range: Range<u32>) -> WithSpan<Expr> {
+            ws(Expr::Unary(ws(UnaryOperator::Minus, range.start..range.start+1), Box::new(ws(n(value), range.start+1..range.end))), range)
         }
-        pub fn minus_nr(value: f64, start: u32) -> Expr {
-            Expr::Unary(wspn(UnaryOperator::Minus, start, start+1), Box::new(nr(value)))
+
+        /// Make Expr::String
+        pub fn s(value: &str) -> Expr {
+            Expr::String(value.to_owned())
+        }
+
+        /// Make Expr::Variable
+        pub fn v(value: &str, range: Range<u32>) -> Expr {
+            Expr::Variable(ws(value.to_owned(), range))
+        }
+
+        /// Make WithSpan<Expr::Boolean>
+        pub fn wsb(value: bool, range: Range<u32>) -> WithSpan<Expr> {
+            ws(Expr::Boolean(value), range)
+        }
+
+        /// Make Expr::Unary
+        pub fn uo(operator: UnaryOperator, operator_range: Range<u32>, expr: Expr, expr_range: Range<u32>) -> Expr {
+            Expr::Unary(ws(operator, operator_range), Box::new(ws(expr, expr_range)))
+        }
+
+        /// Make WithSpan<Expr::Binary>
+        pub fn wsbo(left: WithSpan<Expr>, op: WithSpan<BinaryOperator>, right: WithSpan<Expr>) -> WithSpan<Expr> {
+            let span = Span::union(&left, &right);
+            WithSpan::new(Expr::Binary(Box::new(left), op, Box::new(right)), span)
+        }
+
+        /// Make WithSpan<Expr::Logical>
+        pub fn wslo(left: WithSpan<Expr>, op: WithSpan<LogicalOperator>, right: WithSpan<Expr>) -> WithSpan<Expr> {
+            let span = Span::union(&left, &right);
+            WithSpan::new(Expr::Logical(Box::new(left), op, Box::new(right)), span)
+        }
+
+        /// Make grouping with span
+        pub fn wsg(expr: WithSpan<Expr>, range: Range<u32>) -> WithSpan<Expr> {
+            ws(Expr::Grouping(Box::new(expr)), range)
+        }
+
+        /// Make assignment with span
+        pub fn wsa(left: WithSpan<Identifier>, right: WithSpan<Expr>) -> WithSpan<Expr> {
+            let span = Span::union(&left, &right);
+            WithSpan::new(Expr::Assign(left, Box::new(right)), span)
+        }
+
+        /// WithSpan<Identifier>
+        pub fn wsi(value: &str, range: Range<u32>) -> WithSpan<Identifier> {
+            ws(value.into(), range)
+        }
+
+        pub fn wscall(left: WithSpan<Expr>, args: Vec<WithSpan<Expr>>, range: Range<u32>) -> WithSpan<Expr> {
+            ws(Expr::Call(Box::new(left), args), range)
+        }
+
+        pub fn wsget(left: WithSpan<Expr>, right: WithSpan<Identifier>) -> WithSpan<Expr> {
+            let span = Span::union(&left, &right);
+            WithSpan::new(Expr::Get(Box::new(left), right), span)
+        }
+
+        pub fn wsset(left: WithSpan<Expr>, right: WithSpan<Identifier>, set: WithSpan<Expr>) -> WithSpan<Expr> {
+            let span = Span::union(&left, &set);
+            WithSpan::new(Expr::Set(Box::new(left), right, Box::new(set)), span)
+        }
+    }
+
+    mod help {
+        use super::*;
+        use std::ops::Range;
+
+        pub fn assert(expr: &str, expected: WithSpan<Expr>) {
+            assert_eq!(parse_str(expr), Ok(expected));
+        }
+
+        pub fn assert2(expr: &str, expected: Expr, range: Range<u32>) {
+            use super::make::ws;
+            assert_eq!(parse_str(expr), Ok(ws(expected, range)));
+        }
+
+        pub fn simple_binary2(op: BinaryOperator, op_len: u32, start: u32) -> Expr {
+            use super::make::*;
+
+            let left = ws(n(1.0), 0+start..1+start);
+            let op = ws(op, 1+start..1+start+op_len);
+            let right = ws(n(2.0),1+start+op_len..2+start+op_len);
+
+            Expr::Binary(Box::new(left), op, Box::new(right))
+        }
+
+        pub fn simple_binary(op: BinaryOperator, op_len: u32) -> Expr {
+            simple_binary2(op, op_len, 0)
         }
     }
 
     #[test]
     fn test_primary() {
-        assert_eq!(parse_str("nil"), Ok(Expr::Nil));
-        assert_eq!(parse_str("1.0"), Ok(Expr::Number(1.0)));
-        assert_eq!(parse_str("1"), Ok(Expr::Number(1.0)));
-        assert_eq!(parse_str("true"), Ok(Expr::Boolean(true)));
-        assert_eq!(parse_str("false"), Ok(Expr::Boolean(false)));
-        assert_eq!(
-            parse_str("\"test\""),
-            Ok(Expr::String(String::from("test")))
-        );
-        unsafe {
-            assert_eq!(
-                parse_str("test"),
-                Ok(Expr::Variable(WithSpan::new_unchecked("test".into(), 0, 4)))
-            );
-            assert_eq!(parse_str("this"), Ok(Expr::This));
-            assert_eq!(
-                parse_str("super.iets"),
-                Ok(Expr::Super(WithSpan::new_unchecked("iets".into(), 6, 10)))
-            );
-        }
+        use make::*;
+        use help::assert;
+        assert("nil", ws(Expr::Nil, 0..3));
+        assert("1.0", ws(n(1.0), 0..3));
+        assert("1", ws(n(1.0), 0..1));
+        assert("true", ws(Expr::Boolean(true), 0..4));
+        assert("false", ws(Expr::Boolean(false), 0..5));
+        assert("\"iets\"", ws(s("iets"), 0..6));
+        assert("iets", ws(v("iets", 0..4), 0..4));
+        assert("this", ws(Expr::This, 0..4));
+        assert("super.iets", ws(Expr::Super(ws("iets".into(), 6..10)), 0..10));
     }
 
     #[test]
     fn test_unary() {
-        assert_eq!(
-            parse_str("-nil"),
-            Ok(Expr::Unary(wspn(UnaryOperator::Minus, 0, 1), Box::new(Expr::Nil)))
-        );
-        assert_eq!(
-            parse_str("!nil"),
-            Ok(Expr::Unary(wspn(UnaryOperator::Bang, 0, 1), Box::new(Expr::Nil)))
-        );
-        assert_eq!(
-            parse_str("!!nil"),
-            Ok(Expr::Unary(
-                wspn(UnaryOperator::Bang, 0, 1),
-                Box::new(Expr::Unary(wspn(UnaryOperator::Bang, 1, 2), Box::new(Expr::Nil)))
-            ))
-        );
-        assert_eq!(
-            parse_str("!-nil"),
-            Ok(Expr::Unary(
-                wspn(UnaryOperator::Bang, 0, 1),
-                Box::new(Expr::Unary(wspn(UnaryOperator::Minus, 1, 2), Box::new(Expr::Nil)))
-            ))
-        );
-        assert_eq!(
-            parse_str("-!nil"),
-            Ok(Expr::Unary(
-                wspn(UnaryOperator::Minus, 0, 1),
-                Box::new(Expr::Unary(wspn(UnaryOperator::Bang, 1, 2), Box::new(Expr::Nil)))
-            ))
-        );
+        use make::*;
+        use help::assert2;
+        assert2("-nil", uo(UnaryOperator::Minus, 0..1, Expr::Nil, 1..4), 0..4);
+        assert2("!nil", uo(UnaryOperator::Bang, 0..1, Expr::Nil, 1..4), 0..4);
+        assert2("!!nil", uo(UnaryOperator::Bang, 0..1, uo(UnaryOperator::Bang, 1..2, Expr::Nil, 2..5), 1..5), 0..5);
+        assert2("!-nil", uo(UnaryOperator::Bang, 0..1, uo(UnaryOperator::Minus, 1..2, Expr::Nil, 2..5), 1..5), 0..5);
+        assert2("-!nil", uo(UnaryOperator::Minus, 0..1, uo(UnaryOperator::Bang, 1..2, Expr::Nil, 2..5), 1..5), 0..5);
     }
 
     #[test]
     fn test_binary() {
-        assert_eq!(
-            parse_str("1!=2"),
-            Ok(make::simple_binary(wspn(BinaryOperator::BangEqual, 1, 3)))
-        );
-        assert_eq!(
-            parse_str("1==2"),
-            Ok(make::simple_binary(wspn(BinaryOperator::EqualEqual, 1, 3)))
-        );
-        assert_eq!(
-            parse_str("1>2"),
-            Ok(make::simple_binary(wspn(BinaryOperator::Greater, 1, 2)))
-        );
-        assert_eq!(
-            parse_str("1>=2"),
-            Ok(make::simple_binary(wspn(BinaryOperator::GreaterEqual, 1, 3)))
-        );
-        assert_eq!(
-            parse_str("1<2"),
-            Ok(make::simple_binary(wspn(BinaryOperator::Less, 1, 2)))
-        );
-        assert_eq!(
-            parse_str("1<=2"),
-            Ok(make::simple_binary(wspn(BinaryOperator::LessEqual, 1, 3)))
-        );
-        assert_eq!(
-            parse_str("1+2"),
-            Ok(make::simple_binary(wspn(BinaryOperator::Plus, 1, 2)))
-        );
-        assert_eq!(
-            parse_str("1-2"),
-            Ok(make::simple_binary(wspn(BinaryOperator::Minus, 1, 2)))
-        );
-        assert_eq!(
-            parse_str("1*2"),
-            Ok(make::simple_binary(wspn(BinaryOperator::Star, 1, 2)))
-        );
-        assert_eq!(
-            parse_str("1/2"),
-            Ok(make::simple_binary(wspn(BinaryOperator::Slash, 1, 2)))
-        );
+        use help::{assert2, simple_binary};
+        assert2("1+2", simple_binary(BinaryOperator::Plus, 1), 0..3);
+        assert2("1-2", simple_binary(BinaryOperator::Minus, 1), 0..3);
+        assert2("1>2", simple_binary(BinaryOperator::Greater, 1), 0..3);
+        assert2("1<2", simple_binary(BinaryOperator::Less, 1), 0..3);
+        assert2("1*2", simple_binary(BinaryOperator::Star, 1), 0..3);
+        assert2("1/2", simple_binary(BinaryOperator::Slash, 1), 0..3);
+
+        assert2("1!=2", simple_binary(BinaryOperator::BangEqual, 2), 0..4);
+        assert2("1==2", simple_binary(BinaryOperator::EqualEqual, 2), 0..4);
+        assert2("1>=2", simple_binary(BinaryOperator::GreaterEqual, 2), 0..4);
+        assert2("1<=2", simple_binary(BinaryOperator::LessEqual, 2), 0..4);
     }
 
     #[test]
     fn test_binary_precedence() {
-        use self::make::*;
-        assert_eq!(
-            parse_str("1*2+3*4"),
-            Ok(binary(
-                binary(nr(1.), wspn(BinaryOperator::Star, 1, 2), nr(2.)),
-                wspn(BinaryOperator::Plus, 3, 4),
-                binary(nr(3.), wspn(BinaryOperator::Star, 5, 6), nr(4.))
-            ))
+        use help::assert;
+        use make::*;
+
+        let expr = wsbo(
+            wsbo(
+                wsn(1., 0..1),
+                ws(BinaryOperator::Star, 1..2),
+                wsn(2., 2..3)
+            ),
+            ws(BinaryOperator::Plus, 3..4),
+            wsbo(
+                wsn(3., 4..5),
+                ws(BinaryOperator::Star, 5..6),
+                wsn(4., 6..7)
+            )
         );
-        assert_eq!(
-            parse_str("-1*-2"),
-            Ok(binary(minus_nr(1., 0), wspn(BinaryOperator::Star, 2, 3), minus_nr(2., 3)))
+        assert("1*2+3*4", expr);
+
+        let expr = wsbo(
+            wsmn(1., 0..2),
+            ws(BinaryOperator::Star, 2..3),
+            wsmn(2., 3..5)
         );
+        assert("-1*-2", expr);
     }
 
     #[test]
     fn test_errors() {
+        use help::{assert2, simple_binary};
+
         // Test infinite loops and extra tokens
-        assert_eq!(
-            parse_str("1+2 3"),
-            Ok(make::simple_binary(wspn(BinaryOperator::Plus, 1, 2)))
-        );
+        assert2("1+2 3", simple_binary(BinaryOperator::Plus, 1), 0..3);
         assert!(matches!(parse_str("1+"), Err(SyntaxError::Unexpected(_))));
     }
 
     #[test]
     fn test_grouping() {
-        use self::make::*;
-        assert_eq!(parse_str("(1)"), Ok(Expr::Grouping(Box::new(make::nr(1.)))));
-        assert_eq!(
-            parse_str("((1))"),
-            Ok(Expr::Grouping(Box::new(Expr::Grouping(Box::new(
-                make::nr(1.)
-            )))))
-        );
-        assert_eq!(
-            parse_str("(1+2)*(1+2)"),
-            Ok(binary(
-                Expr::Grouping(Box::new(simple_binary(wspn(BinaryOperator::Plus, 2, 3)))),
-                wspn(BinaryOperator::Star, 5, 6),
-                Expr::Grouping(Box::new(simple_binary(wspn(BinaryOperator::Plus, 8, 9)))),
-            ))
-        );
-        assert!(matches!(
-            parse_str("(1"),
-            Err(SyntaxError::Expected(TokenKind::RightParen, _))
-        ));
+        use help::assert;
+        use make::*;
+
+        let expr = wsg(wsn(1., 1..2), 0..3);
+        assert("(1)", expr);
+
+        let expr = wsg(wsbo(
+            wsn(1., 1..2),
+            ws(BinaryOperator::Plus, 2..3),
+            wsn(2., 3..4)
+        ), 0..5);
+        assert("(1+2)", expr);
+
+        assert!(matches!(parse_str("(1"), Err(SyntaxError::Expected(TokenKind::RightParen, _))));
         assert!(matches!(parse_str("(1}"), Err(SyntaxError::Expected(TokenKind::RightParen, WithSpan{span: _, value: Token::RightBrace}))));
     }
 
     #[test]
     fn test_logical() {
-        assert_eq!(
-            parse_str("true or false"),
-            Ok(Expr::Logical(
-                Box::new(Expr::Boolean(true)),
-                wspn(LogicalOperator::Or, 5, 7),
-                Box::new(Expr::Boolean(false)),
-            ))
+        use help::assert;
+        use make::*;
+
+        let expr = wslo(
+            wsb(true, 0..4),
+            ws(LogicalOperator::Or, 5..7),
+            wsb(false, 8..13)
         );
-        assert_eq!(
-            parse_str("true and false"),
-            Ok(Expr::Logical(
-                Box::new(Expr::Boolean(true)),
-                wspn(LogicalOperator::And, 5, 8),
-                Box::new(Expr::Boolean(false)),
-            ))
+        assert("true or false", expr);
+
+        let expr = wslo(
+            wsb(true, 0..4),
+            ws(LogicalOperator::And, 5..8),
+            wsb(false, 9..14)
         );
+        assert("true and false", expr);
     }
 
     #[test]
     fn test_logical_precedence() {
-        assert_eq!(
-            parse_str("1 and 2 or 3 and 4"),
-            Ok(Expr::Logical(
-                Box::new(Expr::Logical(
-                    Box::new(Expr::Number(1.)),
-                    wspn(LogicalOperator::And, 2, 5),
-                    Box::new(Expr::Number(2.)),
-                )),
-                wspn(LogicalOperator::Or, 8, 10),
-                Box::new(Expr::Logical(
-                    Box::new(Expr::Number(3.)),
-                    wspn(LogicalOperator::And, 13, 16),
-                    Box::new(Expr::Number(4.)),
-                )),
-            ))
+        use help::assert;
+        use make::*;
+
+        let left = wslo(
+            wsn(1., 0..1),
+            ws(LogicalOperator::And, 2..5),
+            wsn(2., 6..7)
         );
+        let right = wslo(
+            wsn(3., 11..12),
+            ws(LogicalOperator::And, 13..16),
+            wsn(4., 17..18)
+        );
+        let expr = wslo(
+            left,
+            ws(LogicalOperator::Or, 8..10),
+            right,
+        );
+        assert("1 and 2 or 3 and 4", expr);
     }
 
     #[test]
     fn test_assignment() {
-        unsafe {
-            assert_eq!(
-                parse_str("a=3"),
-                Ok(Expr::Assign(
-                    WithSpan::new_unchecked("a".into(), 0, 1),
-                    Box::new(Expr::Number(3.))
-                ))
-            );
-            assert_eq!(
-                parse_str("a=b=3"),
-                Ok(Expr::Assign(
-                    WithSpan::new_unchecked("a".into(), 0, 1),
-                    Box::new(Expr::Assign(
-                        WithSpan::new_unchecked("b".into(), 2, 3),
-                        Box::new(Expr::Number(3.))
-                    ))
-                ))
-            );
-            assert!(matches!(parse_str("a="), Err(SyntaxError::Unexpected(_))));
-            assert!(matches!(parse_str("3=3"), Err(SyntaxError::InvalidLeftValue(WithSpan{span: _, value: Expr::Number(_)}))));
+        use help::{assert, simple_binary2};
+        use make::*;
 
-            assert_eq!(
-                parse_str("a=1+2"),
-                Ok(Expr::Assign(
-                    WithSpan::new_unchecked("a".into(), 0, 1),
-                    Box::new(make::simple_binary(wspn(BinaryOperator::Plus, 3, 4)))
-                ))
-            );
-        }
+        let expr = wsa(wsi("a", 0..1), wsn(3., 2..3));
+        assert("a=3", expr);
+        let expr = wsa(wsi("a", 0..1), wsa(wsi("b", 2..3), wsn(3., 4..5)));
+        assert("a=b=3", expr);
+        let expr = wsa(wsi("a", 0..1), ws(simple_binary2(BinaryOperator::Plus, 1, 2), 2..5));
+        assert("a=1+2", expr);
+
+        assert!(matches!(parse_str("a="), Err(SyntaxError::Unexpected(_))));
+        assert!(matches!(parse_str("3=3"), Err(SyntaxError::InvalidLeftValue(WithSpan{span: _, value: Expr::Number(_)}))));
     }
 
     #[test]
     fn test_call() {
-        unsafe {
-            assert_eq!(
-                parse_str("a()"),
-                Ok(Expr::Call(
-                    Box::new(Expr::Variable(WithSpan::new_unchecked("a".into(), 0, 1))),
-                    vec![]
-                ))
-            );
+        use help::assert;
+        use make::*;
+        
+        let expr = wscall(
+            ws(v("a", 0..1), 0..1),
+            vec![],
+            0..3
+        );
+        assert("a()", expr);
 
-            assert_eq!(
-                parse_str("a(3)"),
-                Ok(Expr::Call(
-                    Box::new(Expr::Variable(WithSpan::new_unchecked("a".into(), 0, 1))),
-                    vec![Expr::Number(3.)]
-                ))
-            );
-            assert_eq!(
-                parse_str("a(3,4)"),
-                Ok(Expr::Call(
-                    Box::new(Expr::Variable(WithSpan::new_unchecked("a".into(), 0, 1))),
-                    vec![Expr::Number(3.), Expr::Number(4.),]
-                ))
-            );
+        let expr = wscall(
+            ws(v("a", 0..1), 0..1),
+            vec![
+                wsn(3., 2..3)
+            ],
+            0..4
+        );
+        assert("a(3)", expr);
 
-            assert_eq!(
-                parse_str("-a(3)"),
-                Ok(Expr::Unary(
-                    wspn(UnaryOperator::Minus, 0, 1),
-                    Box::new(Expr::Call(
-                        Box::new(Expr::Variable(WithSpan::new_unchecked("a".into(), 1, 2))),
-                        vec![Expr::Number(3.)]
-                    ))
-                ))
-            );
+        let expr = wscall(
+            ws(v("a", 0..1), 0..1),
+            vec![
+                wsn(3., 2..3),
+                wsn(4., 4..5)
+            ],
+            0..6
+        );
+        assert("a(3,4)", expr);
 
-            assert_eq!(
-                parse_str("a(3)+a(3)"),
-                Ok(Expr::Binary(
-                    Box::new(Expr::Call(
-                        Box::new(Expr::Variable(WithSpan::new_unchecked("a".into(), 0, 1))),
-                        vec![Expr::Number(3.)]
-                    )),
-                    wspn(BinaryOperator::Plus, 4, 5),
-                    Box::new(Expr::Call(
-                        Box::new(Expr::Variable(WithSpan::new_unchecked("a".into(), 5, 6))),
-                        vec![Expr::Number(3.)]
-                    ))
-                ))
-            );
-        }
+        let expr = wscall(
+            ws(v("a", 1..2), 1..2),
+            vec![],
+            1..4
+        );
+        let expr = ws(Expr::Unary(ws(UnaryOperator::Minus, 0..1), Box::new(expr)), 0..4);
+        assert("-a()", expr);
+
+        let left = wscall(
+            ws(v("a", 0..1), 0..1),
+            vec![],
+            0..3
+        );
+        let right = wscall(
+            ws(v("b", 4..5), 4..5),
+            vec![],
+            4..7
+        );
+        let expr = wsbo(left, ws(BinaryOperator::Plus, 3..4), right);
+        assert("a()+b()", expr);
 
         assert!(matches!(parse_str("a(3,)"), Err(SyntaxError::Unexpected(WithSpan{span: _, value: Token::RightParen}))));
     }
 
     #[test]
     fn test_get() {
-        unsafe {
-            assert_eq!(
-                parse_str("a.b"),
-                Ok(Expr::Get(
-                    Box::new(Expr::Variable(WithSpan::new_unchecked("a".into(), 0, 1))),
-                    WithSpan::new_unchecked("b".into(), 2, 3),
-                ))
-            );
+        use help::assert;
+        use make::*;
 
-            assert_eq!(
-                parse_str("a.b.c"),
-                Ok(Expr::Get(
-                    Box::new(Expr::Get(
-                        Box::new(Expr::Variable(WithSpan::new_unchecked("a".into(), 0, 1))),
-                        WithSpan::new_unchecked("b".into(), 2, 3),
-                    )),
-                    WithSpan::new_unchecked("c".into(), 4, 5),
-                ))
-            );
-
-            assert_eq!(
-                parse_str("a.b(3).c"),
-                Ok(Expr::Get(
-                    Box::new(Expr::Call(
-                        Box::new(Expr::Get(
-                            Box::new(Expr::Variable(WithSpan::new_unchecked("a".into(), 0, 1))),
-                            WithSpan::new_unchecked("b".into(), 2, 3)
-                        )),
-                        vec![Expr::Number(3.0)]
-                    )),
-                    WithSpan::new_unchecked("c".into(), 7, 8)
-                ))
-            );
-        }
+        let left = wsget(
+            ws(v("a", 0..1), 0..1),
+            wsi("b", 2..3)
+        );
+        let expr = wsget(
+            left,
+            wsi("c", 4..5)
+        );
+        assert("a.b.c", expr);
     }
 
     #[test]
     fn test_set() {
-        unsafe {
-            assert_eq!(
-                parse_str("a.b=3"),
-                Ok(Expr::Set(
-                    Box::new(Expr::Variable(WithSpan::new_unchecked("a".into(), 0, 1))),
-                    WithSpan::new_unchecked("b".into(), 2, 3),
-                    Box::new(Expr::Number(3.))
-                ))
-            );
-        }
+        use help::assert;
+        use make::*;
+
+        let expr = wsset(
+            ws(v("a", 0..1), 0..1),
+            wsi("b", 2..3),
+            wsn(3., 4..5)
+        );
+        assert("a.b=3", expr);
     }
 }

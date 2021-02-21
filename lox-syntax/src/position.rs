@@ -1,5 +1,5 @@
 #[derive(Debug, Copy, Clone, PartialEq, PartialOrd, Eq, Ord, Default)]
-pub struct BytePos(pub u32); //TODO Make non-public
+pub struct BytePos(u32);
 
 impl BytePos {
     pub fn shift(self, ch: char) -> Self {
@@ -21,13 +21,29 @@ impl Span {
         }
     }
 
-    pub fn union(a: Self, b: Self) -> Self {
+    pub fn union_span(a: Self, b: Self) -> Self {
         use std::cmp;
 
         Span {
             start: cmp::min(a.start, b.start),
             end: cmp::max(a.end, b.end),
         }
+    }
+
+    pub fn union<A, B>(a: &WithSpan<A>, b: &WithSpan<B>) -> Self {
+        Self::union_span(a.into(), b.into())
+    }
+}
+
+impl<T> From<WithSpan<T>> for Span {
+    fn from(with_span: WithSpan<T>) -> Span {
+        with_span.span
+    }
+}
+
+impl<T> From<&WithSpan<T>> for Span {
+    fn from(with_span: &WithSpan<T>) -> Span {
+        with_span.span
     }
 }
 
@@ -62,6 +78,7 @@ impl<T> WithSpan<T> {
         }
     }
 
+    //TODO Move to AsRef trait impl?
     pub const fn as_ref(&self) -> WithSpan<&T> {
         WithSpan {
             span: self.span,

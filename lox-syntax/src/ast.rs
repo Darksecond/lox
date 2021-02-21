@@ -30,32 +30,32 @@ pub enum LogicalOperator {
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum Expr {
-    Binary(Box<Expr>, WithSpan<BinaryOperator>, Box<Expr>),
-    Grouping(Box<Expr>),
+    Binary(Box<WithSpan<Expr>>, WithSpan<BinaryOperator>, Box<WithSpan<Expr>>),
+    Grouping(Box<WithSpan<Expr>>),
     Number(f64),
     Boolean(bool),
     Nil,
     This,
     Super(WithSpan<Identifier>),
     String(String),
-    Unary(WithSpan<UnaryOperator>, Box<Expr>),
+    Unary(WithSpan<UnaryOperator>, Box<WithSpan<Expr>>),
     Variable(WithSpan<Identifier>),
-    Logical(Box<Expr>, WithSpan<LogicalOperator>, Box<Expr>),
-    Assign(WithSpan<Identifier>, Box<Expr>),
-    Call(Box<Expr>, Vec<Expr>),
-    Get(Box<Expr>, WithSpan<Identifier>),
-    Set(Box<Expr>, WithSpan<Identifier>, Box<Expr>),
+    Logical(Box<WithSpan<Expr>>, WithSpan<LogicalOperator>, Box<WithSpan<Expr>>),
+    Assign(WithSpan<Identifier>, Box<WithSpan<Expr>>),
+    Call(Box<WithSpan<Expr>>, Vec<WithSpan<Expr>>),
+    Get(Box<WithSpan<Expr>>, WithSpan<Identifier>),
+    Set(Box<WithSpan<Expr>>, WithSpan<Identifier>, Box<WithSpan<Expr>>),
 }
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum Stmt {
-    Expression(Box<Expr>),
-    Print(Box<Expr>),
-    Var(WithSpan<Identifier>, Option<Box<Expr>>),
-    If(Box<Expr>, Box<Stmt>, Option<Box<Stmt>>),
+    Expression(Box<WithSpan<Expr>>),
+    Print(Box<WithSpan<Expr>>),
+    Var(WithSpan<Identifier>, Option<Box<WithSpan<Expr>>>),
+    If(Box<WithSpan<Expr>>, Box<Stmt>, Option<Box<Stmt>>),
     Block(Vec<Stmt>),
-    While(Box<Expr>, Box<Stmt>),
-    Return(Option<Box<Expr>>),
+    While(Box<WithSpan<Expr>>, Box<Stmt>),
+    Return(Option<Box<WithSpan<Expr>>>),
     Function(WithSpan<Identifier>, Vec<WithSpan<Identifier>>, Vec<Stmt>),
     Class(
         WithSpan<Identifier>,
