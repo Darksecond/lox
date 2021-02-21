@@ -214,7 +214,7 @@ impl<'a> Vm<'a> {
                     self.close_upvalues(i);
                 }
 
-                self.stack.split_off(frame.base_counter);
+                self.stack.truncate(frame.base_counter);
 
                 if self.frames.len() == 0 {
                     // We are done interpreting, don't push a result as it'll be nil
