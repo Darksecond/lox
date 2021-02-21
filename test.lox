@@ -9,3 +9,4 @@ scone.topping("berries", "cream");
 
 // Next up:
 // https://www.craftinginterpreters.com/methods-and-initializers.html#this
+//TODO Add tests for methods

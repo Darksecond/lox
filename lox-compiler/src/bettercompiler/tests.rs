@@ -767,10 +767,10 @@ fn test_empty_class_global() {
 
     assert_instructions(
         module.chunk(0),
-        vec![Class(0), DefineGlobal(1), Nil, Return],
+        vec![Class(0), DefineGlobal(1), GetGlobal(2), Pop, Nil, Return],
     );
 
-    assert_constants(&module, vec![make_class("Foo"), "Foo".into()]);
+    assert_constants(&module, vec![make_class("Foo"), "Foo".into(), "Foo".into()]);
 }
 
 #[test]
@@ -779,7 +779,7 @@ fn test_empty_class_local() {
 
     let module = compile_code("{class Foo {}}");
 
-    assert_instructions(module.chunk(0), vec![Class(0), Pop, Nil, Return]);
+    assert_instructions(module.chunk(0), vec![Class(0), GetLocal(1), Pop, Pop, Nil, Return]);
 
     assert_constants(&module, vec![make_class("Foo")]);
 }
