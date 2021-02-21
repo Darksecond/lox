@@ -1,11 +1,11 @@
-print 15/5;
-print 15/3;
-print 15/7;
-
-print "Hello, World!";
-
-fun test() {
-    print "My Test Function";
+class Scone {
+  topping(first, second) {
+    print "scone with " + first + " and " + second;
+  }
 }
 
-test();
+var scone = Scone();
+scone.topping("berries", "cream");
+
+// Next up:
+// https://www.craftinginterpreters.com/methods-and-initializers.html#this

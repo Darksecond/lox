@@ -56,10 +56,13 @@ impl Trace for Instance {
 #[derive(Debug)]
 pub struct Class {
     pub name: String,
+    pub methods: HashMap<String, Gc<Closure>>,
 }
 
 impl Trace for Class {
-    fn trace(&self) {}
+    fn trace(&self) {
+        self.methods.trace();
+    }
 }
 
 #[derive(Debug)]
@@ -114,10 +117,24 @@ impl From<&crate::bytecode::Function> for Function {
 }
 
 #[derive(Debug, Copy, Clone)]
+pub struct BoundMethod {
+    pub receiver: Gc<RefCell<Instance>>,
+    pub method: Gc<Closure>,
+}
+
+impl Trace for BoundMethod {
+    fn trace(&self) {
+        self.receiver.trace();
+        self.method.trace();
+    }
+}
+
+#[derive(Debug, Copy, Clone)]
 pub enum Value {
     Number(f64),
     String(Gc<String>),
     Closure(Gc<Closure>),
+    BoundMethod(Gc<BoundMethod>),
     NativeFunction(Gc<NativeFunction>),
     Boolean(bool),
     Class(Gc<RefCell<Class>>),
@@ -131,6 +148,7 @@ impl Trace for Value {
             Value::String(string) => string.trace(),
             Value::NativeFunction(function) => function.trace(),
             Value::Closure(closure) => closure.trace(),
+            Value::BoundMethod(bound_method) => bound_method.trace(),
             Value::Class(class) => class.trace(),
             Value::Instance(instance) => instance.trace(),
             Value::Number(_) => (),
@@ -156,6 +174,7 @@ impl Value {
             (Value::String(_), Value::String(_)) => true,
             (Value::NativeFunction(_), Value::NativeFunction(_)) => true,
             (Value::Closure(_), Value::Closure(_)) => true,
+            (Value::BoundMethod(_), Value::BoundMethod(_)) => true,
             (Value::Nil, Value::Nil) => true,
             _ => false,
         }

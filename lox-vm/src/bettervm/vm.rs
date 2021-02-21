@@ -154,12 +154,32 @@ impl<'a> Vm<'a> {
                 if let Constant::Class(class) = self.module.constant(index) {
                     let class = gc::manage(RefCell::new(Class {
                         name: class.name.clone(),
+                        methods: HashMap::new(),
                     }));
                     self.push(Value::Class(class.as_gc()));
                 } else {
                     return Err(VmError::UnexpectedConstant);
                 }
             }
+            //TODO Rewrite if's to improve error handling
+            //TODO Pretty sure it leaves the stack clean, but double check
+            Instruction::Method(index) => {
+                if let Constant::String(identifier) = self.module.constant(index) {
+                    if let Value::Class(class) = self.peek_n(1)? {
+                        if let Value::Closure(closure) = self.peek_n(0)? {
+                            class.borrow_mut().methods.insert(identifier.to_owned(), *closure);
+                        } else {
+                            return Err(VmError::UnexpectedConstant);
+                        }
+                    } else {
+                        return Err(VmError::UnexpectedConstant);
+                    }
+
+                    self.pop()?;
+                } else {
+                    return Err(VmError::UnexpectedConstant);
+                }
+            },
             Instruction::SetProperty(index) => {
                 if let Constant::String(property) = self.module.constant(index) {
                     if let Value::Instance(instance) = self.peek_n(1)? {
@@ -184,6 +204,12 @@ impl<'a> Vm<'a> {
                         let instance = gc::root(instance);
                         if let Some(value) = instance.borrow().fields.get(property) {
                             self.push(*value);
+                        } else if let Some(method) = instance.borrow().class.borrow().methods.get(property) {
+                            let bind = gc::manage(BoundMethod {
+                                receiver: instance.as_gc(),
+                                method: *method,
+                            });
+                            self.push(Value::BoundMethod(bind.as_gc()));
                         } else {
                             return Err(VmError::UndefinedProperty);
                         };
@@ -203,7 +229,8 @@ impl<'a> Vm<'a> {
                 Value::Class(class) => println!("{}", class.borrow().name),
                 Value::Instance(instance) => {
                     println!("{} instance", instance.borrow().class.borrow().name)
-                }
+                },
+                Value::BoundMethod(bind) => println!("<{} bound method>", bind.method.function.name),
             },
             Instruction::Nil => self.push(Value::Nil),
             Instruction::Return => {
@@ -418,6 +445,13 @@ impl<'a> Vm<'a> {
                 }));
                 self.push(Value::Instance(instance.as_gc()));
             }
+            Value::BoundMethod(bind) => {
+                let callee = bind.method;
+                if callee.function.arity != arity {
+                    return Err(VmError::IncorrectArity);
+                }
+                self.begin_frame(callee);
+            },
             _ => return Err(VmError::InvalidCallee),
         }
 

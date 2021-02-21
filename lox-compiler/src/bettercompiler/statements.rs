@@ -31,7 +31,7 @@ fn compile_stmt(compiler: &mut Compiler, stmt: &Stmt) -> Result<(), CompilerErro
         }
         Stmt::While(ref expr, ref stmt) => compile_while(compiler, expr, stmt),
         Stmt::Function(ref identifier, ref args, ref stmts) => {
-            compile_function(compiler, identifier.as_ref(), args, stmts)
+            compile_function(compiler, &identifier.as_ref(), args, stmts)
         }
         Stmt::Return(ref expr) => compile_return(compiler, expr.as_ref()),
         Stmt::Class(ref identifier, ref extends, ref stmts) => {
@@ -64,7 +64,7 @@ fn compile_class(
     compiler: &mut Compiler,
     identifier: WithSpan<&String>,
     _extends: Option<&WithSpan<String>>,
-    _stmts: &[Stmt],
+    stmts: &[Stmt],
 ) -> Result<(), CompilerError> {
     declare_variable(compiler, identifier.value)?;
     let constant = compiler.add_constant(Constant::Class(Class {
@@ -73,9 +73,37 @@ fn compile_class(
     compiler.add_instruction(Instruction::Class(constant));
     define_variable(compiler, identifier.value);
 
-    //TODO Extends
-    //TODO Methods
+    compile_variable(compiler, identifier)?;
 
+    //TODO Extends
+
+    // Methods
+    for stmt in stmts {
+        match stmt {
+            Stmt::Function(identifier, args, block) => {
+                compile_method(compiler, identifier.as_ref(), args, block)?;
+            },
+            _ => unimplemented!(), //TODO
+        }
+    }
+
+    compiler.add_instruction(Instruction::Pop);
+
+    Ok(())
+}
+
+fn compile_method(
+    compiler: &mut Compiler,
+    identifier: WithSpan<&String>,
+    args: &Vec<WithSpan<Identifier>>,
+    block: &Vec<Stmt>,
+) -> Result<(), CompilerError> {
+
+    compile_closure(compiler, &identifier, args, block)?;
+
+    let constant = compiler.add_constant(identifier.value.as_str());
+    compiler.add_instruction(Instruction::Method(constant));
+    
     Ok(())
 }
 
@@ -92,30 +120,25 @@ fn compile_return<E: AsRef<WithSpan<Expr>>>(
     Ok(())
 }
 
-fn compile_function(
-    compiler: &mut Compiler,
-    identifier: WithSpan<&String>,
-    args: &Vec<WithSpan<Identifier>>,
-    block: &Vec<Stmt>,
+fn compile_closure(
+    compiler: &mut Compiler, 
+    identifier: &WithSpan<&String>, 
+    args: &Vec<WithSpan<Identifier>>, 
+    block: &Vec<Stmt>
 ) -> Result<(), CompilerError> {
-    declare_variable(compiler, identifier.value)?;
-    if compiler.is_scoped() {
-        compiler.mark_local_initialized();
-    }
-
     let (chunk_index, upvalues) =
-        compiler.with_scoped_context(ContextType::Function, |compiler| {
-            for arg in args {
-                declare_variable(compiler, &arg.value)?;
-                define_variable(compiler, &arg.value);
-            }
+    compiler.with_scoped_context(ContextType::Function, |compiler| {
+        for arg in args {
+            declare_variable(compiler, &arg.value)?;
+            define_variable(compiler, &arg.value);
+        }
 
-            compile_block(compiler, block)?;
+        compile_block(compiler, block)?;
 
-            compiler.add_instruction(Instruction::Nil);
-            compiler.add_instruction(Instruction::Return);
-            Ok(())
-        })?;
+        compiler.add_instruction(Instruction::Nil);
+        compiler.add_instruction(Instruction::Return);
+        Ok(())
+    })?;
 
     let function = Function {
         name: identifier.value.into(),
@@ -130,6 +153,22 @@ fn compile_function(
 
     let constant = compiler.add_constant(Constant::Closure(closure));
     compiler.add_instruction(Instruction::Closure(constant));
+
+    Ok(())
+}
+
+fn compile_function(
+    compiler: &mut Compiler,
+    identifier: &WithSpan<&String>,
+    args: &Vec<WithSpan<Identifier>>,
+    block: &Vec<Stmt>,
+) -> Result<(), CompilerError> {
+    declare_variable(compiler, identifier.value)?;
+    if compiler.is_scoped() {
+        compiler.mark_local_initialized();
+    }
+
+    compile_closure(compiler, identifier, args, block)?;
 
     define_variable(compiler, identifier.value);
 

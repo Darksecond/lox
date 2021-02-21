@@ -47,6 +47,7 @@ pub enum Instruction {
 
     Class(ConstantIndex),
     Closure(ConstantIndex),
+    Method(ConstantIndex),
     // etc
 }
 
