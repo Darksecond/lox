@@ -15,6 +15,8 @@ use statements::compile_ast;
 pub enum CompilerError {
     LocalAlreadyDefined,
     LocalNotInitialized,
+    InvalidThis,
+    ReturnFromInitializer,
 
     Multiple(Vec<CompilerError>),
     WithSpan(WithSpan<Box<CompilerError>>),

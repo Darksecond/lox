@@ -417,6 +417,7 @@ impl<'a> Vm<'a> {
         }
     }
 
+    //TODO Reduce duplicate code paths
     fn call(&mut self, arity: usize) -> Result<(), VmError> {
         let callee = *self.peek_n(arity)?;
         match callee {
@@ -434,22 +435,32 @@ impl<'a> Vm<'a> {
                 self.push(result);
             }
             Value::Class(class) => {
-                if arity > 0 {
-                    unimplemented!("Calling a class with arguments is not yet supported");
-                }
-                self.pop()?; //TODO Temporary, remove when arguments are supported
+                // if arity > 0 {
+                //     unimplemented!("Calling a class with arguments is not yet supported");
+                // }
+                // self.pop()?; //TODO Temporary, remove when arguments are supported
 
                 let instance = gc::manage(RefCell::new(Instance {
                     class,
                     fields: HashMap::new(),
                 }));
-                self.push(Value::Instance(instance.as_gc()));
+                self.rset(arity+1, Value::Instance(instance.as_gc()));
+
+                if let Some(initializer) = class.borrow().methods.get("init") {
+                    if initializer.function.arity != arity {
+                        return Err(VmError::IncorrectArity);
+                    }
+                    self.begin_frame(*initializer);
+                } else if arity != 0 {
+                    return Err(VmError::IncorrectArity); // Arity must be 0 without initializer
+                }
             }
             Value::BoundMethod(bind) => {
                 let callee = bind.method;
                 if callee.function.arity != arity {
                     return Err(VmError::IncorrectArity);
                 }
+                self.rset(arity+1, Value::Instance(bind.receiver));
                 self.begin_frame(callee);
             },
             _ => return Err(VmError::InvalidCallee),
@@ -468,6 +479,11 @@ impl<'a> Vm<'a> {
 
     fn push(&mut self, value: Value) {
         self.stack.push(value)
+    }
+
+    fn rset(&mut self, index: usize, value: Value) {
+        let index = self.stack.len() - index;
+        self.stack[index] = value;
     }
 
     fn push_string(&mut self, string: &str) {

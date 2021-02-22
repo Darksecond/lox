@@ -2,7 +2,7 @@ use super::locals::*;
 use super::CompilerError;
 use crate::bytecode::*;
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, PartialEq)]
 pub enum ContextType {
     Function,
     Initializer,
@@ -141,7 +141,12 @@ impl Compiler {
         self.begin_context(context_type);
 
         //TODO Move to begin_context
-        self.add_local(""); //TODO call local 'this' for method/initializer and maybe toplevel?
+
+        if context_type != ContextType::Function {
+            self.add_local("this");
+        } else {
+            self.add_local("");
+        }
         self.mark_local_initialized();
 
         let result = f(self);

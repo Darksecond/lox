@@ -33,7 +33,12 @@ fn compile_stmt(compiler: &mut Compiler, stmt: &Stmt) -> Result<(), CompilerErro
         Stmt::Function(ref identifier, ref args, ref stmts) => {
             compile_function(compiler, &identifier.as_ref(), args, stmts)
         }
-        Stmt::Return(ref expr) => compile_return(compiler, expr.as_ref()),
+        Stmt::Return(ref expr) => {
+            if compiler.context_type() == ContextType::Initializer {
+                return Err(CompilerError::ReturnFromInitializer)
+            }
+            compile_return(compiler, expr.as_ref())
+        },
         Stmt::Class(ref identifier, ref extends, ref stmts) => {
             compile_class(compiler, identifier.as_ref(), extends.as_ref(), stmts)
         }
@@ -99,7 +104,9 @@ fn compile_method(
     block: &Vec<Stmt>,
 ) -> Result<(), CompilerError> {
 
-    compile_closure(compiler, &identifier, args, block)?;
+    let context_type = if identifier.value == "init" { ContextType::Initializer } else { ContextType::Method };
+
+    compile_closure(compiler, &identifier, args, block, context_type)?;
 
     let constant = compiler.add_constant(identifier.value.as_str());
     compiler.add_instruction(Instruction::Method(constant));
@@ -113,6 +120,8 @@ fn compile_return<E: AsRef<WithSpan<Expr>>>(
 ) -> Result<(), CompilerError> {
     if let Some(expr) = expr {
         compile_expr(compiler, expr.as_ref())?;
+    } else if compiler.context_type() == ContextType::Initializer {
+        compiler.add_instruction(Instruction::GetLocal(0));
     } else {
         compile_nil(compiler)?;
     }
@@ -124,10 +133,11 @@ fn compile_closure(
     compiler: &mut Compiler, 
     identifier: &WithSpan<&String>, 
     args: &Vec<WithSpan<Identifier>>, 
-    block: &Vec<Stmt>
+    block: &Vec<Stmt>,
+    context_type: ContextType
 ) -> Result<(), CompilerError> {
     let (chunk_index, upvalues) =
-    compiler.with_scoped_context(ContextType::Function, |compiler| {
+    compiler.with_scoped_context(context_type, |compiler| {
         for arg in args {
             declare_variable(compiler, &arg.value)?;
             define_variable(compiler, &arg.value);
@@ -135,8 +145,12 @@ fn compile_closure(
 
         compile_block(compiler, block)?;
 
-        compiler.add_instruction(Instruction::Nil);
-        compiler.add_instruction(Instruction::Return);
+        {
+            let expr: Option<Box<WithSpan<Expr>>> = None;
+            compile_return(compiler, expr.as_ref())?;
+        }
+        // compiler.add_instruction(Instruction::Nil);
+        // compiler.add_instruction(Instruction::Return);
         Ok(())
     })?;
 
@@ -168,7 +182,7 @@ fn compile_function(
         compiler.mark_local_initialized();
     }
 
-    compile_closure(compiler, identifier, args, block)?;
+    compile_closure(compiler, identifier, args, block, ContextType::Function)?;
 
     define_variable(compiler, identifier.value);
 
@@ -271,14 +285,25 @@ fn compile_expr(compiler: &mut Compiler, expr: &WithSpan<Expr>) -> Result<(), Co
         Expr::Grouping(ref expr) => compile_expr(compiler, expr),
         Expr::Unary(ref operator, ref expr) => compile_unary(compiler, operator.clone(), expr),
         Expr::Set(ref expr, ref identifier, ref value) => {
-            compiler_set(compiler, expr, identifier.as_ref(), value)
+            compile_set(compiler, expr, identifier.as_ref(), value)
         }
-        Expr::Get(ref expr, ref identifier) => compiler_get(compiler, expr, identifier.as_ref()),
+        Expr::Get(ref expr, ref identifier) => compile_get(compiler, expr, identifier.as_ref()),
+        Expr::This => compile_this(compiler),
         ref expr => unimplemented!("{:?}", expr),
     }
 }
 
-fn compiler_get(
+fn compile_this(compiler: &mut Compiler) -> Result<(), CompilerError> {
+    match compiler.context_type() {
+        ContextType::Method => (),
+        ContextType::Initializer => (),
+        _ => return Err(CompilerError::InvalidThis),
+    }
+
+    compile_variable(compiler, WithSpan::empty(&"this".to_string()))
+}
+
+fn compile_get(
     compiler: &mut Compiler,
     expr: &WithSpan<Expr>,
     identifier: WithSpan<&String>,
@@ -289,7 +314,7 @@ fn compiler_get(
     Ok(())
 }
 
-fn compiler_set(
+fn compile_set(
     compiler: &mut Compiler,
     expr: &WithSpan<Expr>,
     identifier: WithSpan<&String>,
