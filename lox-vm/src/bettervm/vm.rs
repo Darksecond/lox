@@ -435,11 +435,6 @@ impl<'a> Vm<'a> {
                 self.push(result);
             }
             Value::Class(class) => {
-                // if arity > 0 {
-                //     unimplemented!("Calling a class with arguments is not yet supported");
-                // }
-                // self.pop()?; //TODO Temporary, remove when arguments are supported
-
                 let instance = gc::manage(RefCell::new(Instance {
                     class,
                     fields: HashMap::new(),
