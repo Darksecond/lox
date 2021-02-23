@@ -149,8 +149,6 @@ fn compile_closure(
             let expr: Option<Box<WithSpan<Expr>>> = None;
             compile_return(compiler, expr.as_ref())?;
         }
-        // compiler.add_instruction(Instruction::Nil);
-        // compiler.add_instruction(Instruction::Return);
         Ok(())
     })?;
 
