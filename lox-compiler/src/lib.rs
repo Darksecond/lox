@@ -9,7 +9,7 @@ pub use lox_syntax::SyntaxError;
 
 #[derive(Debug)]
 pub enum Error {
-    CompileError(CompilerError),
+    CompileError(Vec<CompilerError>),
     ParseError(SyntaxError),
 }
 

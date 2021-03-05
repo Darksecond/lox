@@ -22,15 +22,18 @@ pub enum CompilerError {
     WithSpan(WithSpan<Box<CompilerError>>),
 }
 
-pub fn compile(ast: &Ast) -> Result<Module, CompilerError> {
+pub fn compile(ast: &Ast) -> Result<Module, Vec<CompilerError>> {
     let mut compiler = Compiler::new();
 
-    compiler.with_context(ContextType::TopLevel, |compiler| {
-        compile_ast(compiler, ast)?;
+    let _ = compiler.with_context(ContextType::TopLevel, |compiler| {
+        compile_ast(compiler, ast);
         compiler.add_instruction(Instruction::Nil);
         compiler.add_instruction(Instruction::Return);
-        Ok(())
-    })?;
+    });
 
-    Ok(compiler.into_module())
+    if compiler.has_errors() {
+        Err(compiler.into_errors())
+    } else {
+        Ok(compiler.into_module())
+    }
 }

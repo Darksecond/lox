@@ -20,6 +20,7 @@ struct CompilerContext {
 pub struct Compiler {
     module: Module,
     contexts: Vec<CompilerContext>,
+    errors: Vec<CompilerError>,
 }
 
 impl CompilerContext {
@@ -104,6 +105,7 @@ impl Compiler {
         Compiler {
             module: Module::new(),
             contexts: vec![],
+            errors: vec![],
         }
     }
 
@@ -111,18 +113,40 @@ impl Compiler {
         self.module
     }
 
+    pub fn into_errors(self) -> Vec<CompilerError> {
+        self.errors
+    }
+
     pub fn context_type(&self) -> ContextType {
         self.current_context().context_type
     }
 
-    pub fn with_scope<F>(&mut self, f: F) -> Result<(), CompilerError>
+    pub fn add_error(&mut self, error: CompilerError) {
+        self.errors.push(error);
+    }
+
+    pub fn has_errors(&self) -> bool {
+        !self.errors.is_empty()
+    }
+
+    pub fn in_method_or_initializer_nested(&self) -> bool {
+        for context in self.contexts.iter().rev() {
+            match context.context_type {
+                ContextType::Method => return true,
+                ContextType::Initializer => return true,
+                _ => (),
+            }
+        }
+        false
+    }
+
+    pub fn with_scope<F>(&mut self, f: F)
     where
-        F: FnOnce(&mut Self) -> Result<(), CompilerError>,
+        F: FnOnce(&mut Self),
     {
         self.begin_scope();
-        let result = f(self);
+        f(self);
         self.end_scope();
-        result
     }
 
     pub fn is_scoped(&mut self) -> bool {
@@ -134,9 +158,9 @@ impl Compiler {
         &mut self,
         context_type: ContextType,
         f: F,
-    ) -> Result<(ChunkIndex, Vec<Upvalue>), CompilerError>
+    ) -> (ChunkIndex, Vec<Upvalue>)
     where
-        F: FnOnce(&mut Self) -> Result<(), CompilerError>,
+        F: FnOnce(&mut Self),
     {
         self.begin_context(context_type);
 
@@ -149,19 +173,17 @@ impl Compiler {
         }
         self.mark_local_initialized();
 
-        let result = f(self);
-        let ctx_result = self.end_context();
-        result?;
-        Ok(ctx_result)
+        f(self);
+        self.end_context()
     }
 
     pub fn with_scoped_context<F>(
         &mut self,
         context_type: ContextType,
         f: F,
-    ) -> Result<(ChunkIndex, Vec<Upvalue>), CompilerError>
+    ) -> (ChunkIndex, Vec<Upvalue>)
     where
-        F: FnOnce(&mut Self) -> Result<(), CompilerError>,
+        F: FnOnce(&mut Self),
     {
         self.with_context(context_type, |compiler| {
             compiler.begin_scope();
@@ -202,28 +224,41 @@ impl Compiler {
         self.current_context_mut().locals.mark_initialized()
     }
 
-    pub fn resolve_local(&self, name: &str) -> Result<Option<StackIndex>, CompilerError> {
-        self.current_context().resolve_local(name)
+    pub fn resolve_local(&mut self, name: &str) -> Option<StackIndex> {
+        match self.current_context().resolve_local(name) {
+            Err(error) => {
+                self.add_error(error);
+                None
+            },
+            Ok(local) => local,
+        }
     }
 
     pub fn add_constant<C: Into<Constant>>(&mut self, constant: C) -> ConstantIndex {
         self.module.add_constant(constant.into())
     }
 
-    pub fn resolve_upvalue(&mut self, name: &str) -> Result<Option<StackIndex>, CompilerError> {
+    pub fn resolve_upvalue(&mut self, name: &str) -> Option<StackIndex> {
         for i in (0..(self.contexts.len() - 1)).rev() {
             // Skip the current context
-            if let Some(local) = self.contexts[i].resolve_local(name)? {
-                //TODO expect() this instead?, locals should *never* be uninitialized when resolving upvalues
-                self.contexts[i].locals.mark_captured(local);
-                let mut upvalue = self.contexts[i + 1].add_upvalue(Upvalue::Local(local));
-                for j in (i + 2)..self.contexts.len() {
-                    upvalue = self.contexts[j].add_upvalue(Upvalue::Upvalue(upvalue));
-                }
-                return Ok(Some(upvalue));
+            match self.contexts[i].resolve_local(name) {
+                Err(error) => {
+                    self.add_error(error);
+                    return None;
+                },
+                Ok(Some(local)) => {
+                    //TODO expect() this instead?, locals should *never* be uninitialized when resolving upvalues
+                    self.contexts[i].locals.mark_captured(local);
+                    let mut upvalue = self.contexts[i + 1].add_upvalue(Upvalue::Local(local));
+                    for j in (i + 2)..self.contexts.len() {
+                        upvalue = self.contexts[j].add_upvalue(Upvalue::Upvalue(upvalue));
+                    }
+                    return Some(upvalue);
+                },
+                Ok(None) => (),
             }
         }
 
-        Ok(None)
+        None
     }
 }
