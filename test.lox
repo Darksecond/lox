@@ -4,3 +4,5 @@ fun three() {
 }
 
 print 3 + three();
+
+print "Hello, World!";

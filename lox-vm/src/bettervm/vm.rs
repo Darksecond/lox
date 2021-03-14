@@ -1,7 +1,7 @@
 use super::memory::*;
 use crate::bettergc::{gc, Gc, Root, UniqueRoot};
 use crate::bytecode::{Chunk, Module};
-use std::cell::RefCell;
+use std::{cell::RefCell, io::{Stdout, Write, stdout}};
 use std::collections::HashMap;
 
 #[derive(PartialEq)]
@@ -31,15 +31,16 @@ struct CallFrame<'a> {
     closure: Root<Closure>,
 }
 
-pub struct Vm<'a> {
+pub struct Vm<'a, W> where W: Write {
     module: &'a Module,
     frames: Vec<CallFrame<'a>>,
     stack: UniqueRoot<Vec<Value>>,
     globals: UniqueRoot<HashMap<String, Value>>,
     upvalues: Vec<Root<RefCell<Upvalue>>>,
+    stdout: W,
 }
 
-impl<'a> Vm<'a> {
+impl<'a> Vm<'a, Stdout> {
     pub fn new(module: &'a Module) -> Self {
         Vm {
             module,
@@ -47,6 +48,20 @@ impl<'a> Vm<'a> {
             stack: gc::unique(vec![]),
             globals: gc::unique(HashMap::new()),
             upvalues: vec![],
+            stdout: stdout(),
+        }
+    }
+}
+
+impl<'a, W> Vm<'a, W> where W: Write {
+    pub fn with_stdout(module: &'a Module, stdout: W) -> Self {
+        Vm {
+            module,
+            frames: vec![],
+            stack: gc::unique(vec![]),
+            globals: gc::unique(HashMap::new()),
+            upvalues: vec![],
+            stdout,
         }
     }
 
@@ -217,20 +232,20 @@ impl<'a> Vm<'a> {
                 }
             }
             Instruction::Print => match self.pop()? {
-                Value::Number(n) => println!("{}", n),
-                Value::Nil => println!("nil"),
-                Value::Boolean(boolean) => println!("{}", boolean),
-                Value::String(string) => println!("{}", string),
-                Value::NativeFunction(function) => println!("<native fun {}>", function.name),
-                Value::Closure(closure) => println!(
+                Value::Number(n) => writeln!(self.stdout, "{}", n).expect("Could not write to stdout"),
+                Value::Nil => writeln!(self.stdout, "nil").expect("Could not write to stdout"),
+                Value::Boolean(boolean) => writeln!(self.stdout, "{}", boolean).expect("Could not write to stdout"),
+                Value::String(string) => writeln!(self.stdout, "{}", string).expect("Could not write to stdout"),
+                Value::NativeFunction(function) => writeln!(self.stdout, "<native fun {}>", function.name).expect("Could not write to stdout"),
+                Value::Closure(closure) => writeln!(self.stdout, 
                     "<fun {}({}) @ {}>",
                     closure.function.name, closure.function.arity, closure.function.chunk_index
-                ),
-                Value::Class(class) => println!("{}", class.borrow().name),
+                ).expect("Could not write to stdout"),
+                Value::Class(class) => writeln!(self.stdout, "{}", class.borrow().name).expect("Could not write to stdout"),
                 Value::Instance(instance) => {
-                    println!("{} instance", instance.borrow().class.borrow().name)
+                    writeln!(self.stdout, "{} instance", instance.borrow().class.borrow().name).expect("Could not write to stdout")
                 },
-                Value::BoundMethod(bind) => println!("<{} bound method>", bind.method.function.name),
+                Value::BoundMethod(bind) => writeln!(self.stdout, "<{} bound method>", bind.method.function.name).expect("Could not write to stdout"),
             },
             Instruction::Nil => self.push(Value::Nil),
             Instruction::Return => {
