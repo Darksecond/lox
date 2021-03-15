@@ -136,6 +136,7 @@ fn compile_closure(
             define_variable(compiler, &arg.value);
         }
 
+        // compile_block(compiler, block);
         compile_ast(compiler, block);
 
         {

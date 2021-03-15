@@ -1,8 +1,16 @@
+var x;
 
-fun three() {
-  return 3;
+{
+  var a = 3;
+  fun f() {
+     fun g() {
+        print a; 
+     }
+
+     return g;
+  }
+
+  x = f();
 }
 
-print 3 + three();
-
-print "Hello, World!";
+x();

@@ -624,7 +624,7 @@ fn test_double_upvalue() {
         module.chunk(0),
         vec![Constant(0), Closure(2), Pop, CloseUpvalue, Nil, Return],
     );
-    assert_instructions(module.chunk(1), vec![Closure(1), Pop, Nil, Return]);
+    assert_instructions(module.chunk(1), vec![Closure(1), Nil, Return]);
     assert_instructions(module.chunk(2), vec![GetUpvalue(0), Print, Nil, Return]);
 
     assert_constants(
@@ -690,7 +690,7 @@ fn test_multiple_double_upvalue() {
             Return,
         ],
     );
-    assert_instructions(module.chunk(1), vec![Closure(2), Pop, Nil, Return]);
+    assert_instructions(module.chunk(1), vec![Closure(2), Nil, Return]);
     assert_instructions(
         module.chunk(2),
         vec![GetUpvalue(0), Print, GetUpvalue(1), Print, Nil, Return],
