@@ -228,6 +228,8 @@ impl<'a, W> Vm<'a, W> where W: Write {
                         } else {
                             return Err(VmError::UndefinedProperty);
                         };
+                    } else {
+                        return Err(VmError::UnexpectedValue);
                     }
                 }
             }
@@ -236,16 +238,13 @@ impl<'a, W> Vm<'a, W> where W: Write {
                 Value::Nil => writeln!(self.stdout, "nil").expect("Could not write to stdout"),
                 Value::Boolean(boolean) => writeln!(self.stdout, "{}", boolean).expect("Could not write to stdout"),
                 Value::String(string) => writeln!(self.stdout, "{}", string).expect("Could not write to stdout"),
-                Value::NativeFunction(function) => writeln!(self.stdout, "<native fun {}>", function.name).expect("Could not write to stdout"),
-                Value::Closure(closure) => writeln!(self.stdout, 
-                    "<fun {}({}) @ {}>",
-                    closure.function.name, closure.function.arity, closure.function.chunk_index
-                ).expect("Could not write to stdout"),
+                Value::NativeFunction(_function) => writeln!(self.stdout, "<native fn>").expect("Could not write to stdout"),
+                Value::Closure(closure) => writeln!(self.stdout, "<fn {}>", closure.function.name).expect("Could not write to stdout"),
                 Value::Class(class) => writeln!(self.stdout, "{}", class.borrow().name).expect("Could not write to stdout"),
                 Value::Instance(instance) => {
                     writeln!(self.stdout, "{} instance", instance.borrow().class.borrow().name).expect("Could not write to stdout")
                 },
-                Value::BoundMethod(bind) => writeln!(self.stdout, "<{} bound method>", bind.method.function.name).expect("Could not write to stdout"),
+                Value::BoundMethod(bind) => writeln!(self.stdout, "<fn {}>", bind.method.function.name).expect("Could not write to stdout"),
             },
             Instruction::Nil => self.push(Value::Nil),
             Instruction::Return => {

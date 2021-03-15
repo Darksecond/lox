@@ -17,3 +17,6 @@ fn main() {
 
     lox_vm::bettervm::execute(&module).unwrap();
 }
+
+#[cfg(test)]
+mod tests;

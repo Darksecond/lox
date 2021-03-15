@@ -12,3 +12,7 @@ Also a lot of the internal VM structures are (slightly) different from the refer
 
 Better error reporting is very much a TODO still, especially in the parser where it doesn't provide any position information at all currently.
 Also constants are not yet deduplicated in the compiler.
+
+# Test suite
+
+Tests are copied from https://github.com/munificent/craftinginterpreters/tree/master/test.

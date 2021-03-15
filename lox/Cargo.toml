@@ -10,3 +10,6 @@ lox-bytecode = { path = "../lox-bytecode" }
 lox-vm = { path = "../lox-vm" }
 lox-compiler = { path = "../lox-compiler" }
 serde_json = "1.0"
+
+[dev-dependencies]
+regex = "1"
