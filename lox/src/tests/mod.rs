@@ -1203,7 +1203,6 @@ mod variable {
     use super::harness;
 
     #[test]
-    // #[ignore = "to be fixed"]
     fn collide_with_parameter() {
         harness(include_str!("variable/collide_with_parameter.lox"));
     }
