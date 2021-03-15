@@ -267,19 +267,19 @@ impl<'a, W> Vm<'a, W> where W: Write {
             Instruction::Add => match (self.pop()?, self.pop()?) {
                 (Value::Number(b), Value::Number(a)) => self.push(Value::Number(a + b)),
                 (Value::String(b), Value::String(a)) => self.push_string(&format!("{}{}", a, b)),
-                (b, a) => unimplemented!("{:?} + {:?}", a, b),
+                _ => return Err(VmError::UnexpectedValue),
             },
             Instruction::Subtract => match (self.pop()?, self.pop()?) {
                 (Value::Number(b), Value::Number(a)) => self.push(Value::Number(a - b)),
-                (b, a) => unimplemented!("{:?} - {:?}", a, b),
+                _ => return Err(VmError::UnexpectedValue),
             },
             Instruction::Multiply => match (self.pop()?, self.pop()?) {
                 (Value::Number(b), Value::Number(a)) => self.push(Value::Number(a * b)),
-                (b, a) => unimplemented!("{:?} * {:?}", a, b),
+                _ => return Err(VmError::UnexpectedValue),
             },
             Instruction::Divide => match (self.pop()?, self.pop()?) {
                 (Value::Number(b), Value::Number(a)) => self.push(Value::Number(a / b)),
-                (b, a) => unimplemented!("{:?} / {:?}", a, b),
+                _ => return Err(VmError::UnexpectedValue),
             },
             Instruction::Pop => {
                 self.pop()?;
@@ -337,11 +337,11 @@ impl<'a, W> Vm<'a, W> where W: Write {
             }
             Instruction::Less => match (self.pop()?, self.pop()?) {
                 (Value::Number(b), Value::Number(a)) => self.push((a < b).into()),
-                (b, a) => unimplemented!("{:?} < {:?}", a, b),
+                _ => return Err(VmError::UnexpectedValue),
             },
             Instruction::Greater => match (self.pop()?, self.pop()?) {
                 (Value::Number(b), Value::Number(a)) => self.push((a > b).into()),
-                (b, a) => unimplemented!("{:?} > {:?}", a, b),
+                _ => return Err(VmError::UnexpectedValue),
             },
             Instruction::Equal => {
                 let b = self.pop()?;
@@ -355,7 +355,10 @@ impl<'a, W> Vm<'a, W> where W: Write {
                         (Value::Closure(_), Value::Closure(_)) => unimplemented!(),
                         (Value::NativeFunction(_), Value::NativeFunction(_)) => unimplemented!(),
                         (Value::Nil, Value::Nil) => self.push(true.into()),
-                        _ => (),
+                        (Value::BoundMethod(_), Value::BoundMethod(_)) => unimplemented!(),
+                        (Value::Class(_), Value::Class(_)) => unimplemented!(),
+                        (Value::Instance(_), Value::Instance(_)) => unimplemented!(),
+                        _ => unimplemented!(),
                     };
                 } else {
                     self.push(false.into())
@@ -366,7 +369,7 @@ impl<'a, W> Vm<'a, W> where W: Write {
             }
             Instruction::Negate => match self.pop()? {
                 Value::Number(n) => self.push(Value::Number(-n)),
-                x => unimplemented!("{:?}", x),
+                _ => return Err(VmError::UnexpectedValue),
             },
             Instruction::Not => {
                 let is_falsey = self.pop()?.is_falsey();

@@ -176,6 +176,8 @@ impl Value {
             (Value::Closure(_), Value::Closure(_)) => true,
             (Value::BoundMethod(_), Value::BoundMethod(_)) => true,
             (Value::Nil, Value::Nil) => true,
+            (Value::Class(_), Value::Class(_)) => true,
+            (Value::Instance(_), Value::Instance(_)) => true,
             _ => false,
         }
     }
