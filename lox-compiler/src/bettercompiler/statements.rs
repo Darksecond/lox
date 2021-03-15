@@ -28,7 +28,11 @@ fn compile_stmt(compiler: &mut Compiler, stmt: &Stmt) {
         }
         Stmt::Return(ref expr) => {
             if compiler.context_type() == ContextType::Initializer && expr.is_some() { // Do Allow for early returns from init
-                compiler.add_error(CompilerError::ReturnFromInitializer);
+                compiler.add_error(CompilerError::InvalidReturn);
+                return;
+            }
+            if compiler.context_type() == ContextType::TopLevel && expr.is_some() {
+                compiler.add_error(CompilerError::InvalidReturn);
                 return;
             }
             compile_return(compiler, expr.as_ref())

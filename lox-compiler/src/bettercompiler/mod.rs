@@ -16,7 +16,7 @@ pub enum CompilerError {
     LocalAlreadyDefined,
     LocalNotInitialized,
     InvalidThis,
-    ReturnFromInitializer,
+    InvalidReturn,
 
     Multiple(Vec<CompilerError>),
     WithSpan(WithSpan<Box<CompilerError>>),

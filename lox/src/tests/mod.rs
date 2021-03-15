@@ -1008,7 +1008,6 @@ mod r#return {
         harness(include_str!("return/after_while.lox"));
     }
     #[test]
-    #[ignore = "to be fixed"]
     fn at_top_level() {
         harness(include_str!("return/at_top_level.lox"));
     }
