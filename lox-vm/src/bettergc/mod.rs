@@ -148,6 +148,10 @@ impl<T: 'static + Trace + ?Sized> Gc<T> {
     fn allocation(&self) -> &Allocation<T> {
         unsafe { &self.ptr.as_ref() }
     }
+
+    pub fn ptr_eq(a: &Gc<T>, b: &Gc<T>) -> bool{
+        a.ptr == b.ptr
+    }
 }
 impl<T: 'static + Trace + ?Sized> Copy for Gc<T> {}
 impl<T: 'static + Trace + ?Sized> Clone for Gc<T> {

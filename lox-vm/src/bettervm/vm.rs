@@ -352,12 +352,12 @@ impl<'a, W> Vm<'a, W> where W: Write {
                         (Value::Number(b), Value::Number(a)) => self.push((a == b).into()),
                         (Value::Boolean(b), Value::Boolean(a)) => self.push((a == b).into()),
                         (Value::String(b), Value::String(a)) => self.push((*a == *b).into()),
-                        (Value::Closure(_), Value::Closure(_)) => unimplemented!(),
-                        (Value::NativeFunction(_), Value::NativeFunction(_)) => unimplemented!(),
+                        (Value::Closure(b), Value::Closure(a)) => self.push((Gc::ptr_eq(&a, &b)).into()),
+                        (Value::NativeFunction(b), Value::NativeFunction(a)) => self.push((Gc::ptr_eq(&a, &b)).into()),
                         (Value::Nil, Value::Nil) => self.push(true.into()),
-                        (Value::BoundMethod(_), Value::BoundMethod(_)) => unimplemented!(),
-                        (Value::Class(_), Value::Class(_)) => unimplemented!(),
-                        (Value::Instance(_), Value::Instance(_)) => unimplemented!(),
+                        (Value::BoundMethod(b), Value::BoundMethod(a)) => self.push((Gc::ptr_eq(&a, &b)).into()),
+                        (Value::Class(b), Value::Class(a)) => self.push((Gc::ptr_eq(&a, &b)).into()),
+                        (Value::Instance(b), Value::Instance(a)) => self.push((Gc::ptr_eq(&a, &b)).into()),
                         _ => unimplemented!(),
                     };
                 } else {

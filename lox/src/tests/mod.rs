@@ -559,16 +559,6 @@ mod function {
     fn recursion() {
         harness(include_str!("function/recursion.lox"));
     }
-    #[test]
-    #[ignore = "not an error"]
-    fn too_many_arguments() {
-        harness(include_str!("function/too_many_arguments.lox"));
-    }
-    #[test]
-    #[ignore = "not an error"]
-    fn too_many_parameters() {
-        harness(include_str!("function/too_many_parameters.lox"));
-    }
 }
 
 mod r#if {
@@ -717,18 +707,6 @@ mod method {
     fn refer_to_name() {
         harness(include_str!("method/refer_to_name.lox"));
     }
-
-    #[test]
-    #[ignore = "not an error"]
-    fn too_many_arguments() {
-        harness(include_str!("method/too_many_arguments.lox"));
-    }
-
-    #[test]
-    #[ignore = "not an error"]
-    fn too_many_parameters() {
-        harness(include_str!("method/too_many_parameters.lox"));
-    }
 }
 
 mod nil {
@@ -771,199 +749,166 @@ mod operator {
     use super::harness;
 
     #[test]
-    #[ignore = "to be fixed"]
     fn add_bool_nil() {
         harness(include_str!("operator/add_bool_nil.lox"));
     }
 
     #[test]
-    #[ignore = "to be fixed"]
     fn add_bool_num() {
         harness(include_str!("operator/add_bool_num.lox"));
     }
 
     #[test]
-    #[ignore = "to be fixed"]
     fn add_bool_string() {
         harness(include_str!("operator/add_bool_string.lox"));
     }
 
     #[test]
-    #[ignore = "to be fixed"]
     fn add_nil_nil() {
         harness(include_str!("operator/add_nil_nil.lox"));
     }
 
     #[test]
-    #[ignore = "to be fixed"]
     fn add_num_nil() {
         harness(include_str!("operator/add_num_nil.lox"));
     }
 
     #[test]
-    #[ignore = "to be fixed"]
     fn add_string_nil() {
         harness(include_str!("operator/add_string_nil.lox"));
     }
 
     #[test]
-    #[ignore = "to be fixed"]
     fn add() {
         harness(include_str!("operator/add.lox"));
     }
 
     #[test]
-    #[ignore = "to be fixed"]
     fn comparison() {
         harness(include_str!("operator/comparison.lox"));
     }
 
     #[test]
-    #[ignore = "to be fixed"]
     fn divide_nonnum_num() {
         harness(include_str!("operator/divide_nonnum_num.lox"));
     }
 
     #[test]
-    #[ignore = "to be fixed"]
     fn divide_num_nonnum() {
         harness(include_str!("operator/divide_num_nonnum.lox"));
     }
 
     #[test]
-    #[ignore = "to be fixed"]
     fn divide() {
         harness(include_str!("operator/divide.lox"));
     }
 
     #[test]
-    #[ignore = "to be fixed"]
     fn equals_class() {
         harness(include_str!("operator/equals_class.lox"));
     }
 
     #[test]
-    #[ignore = "to be fixed"]
     fn equals_method() {
         harness(include_str!("operator/equals_method.lox"));
     }
 
     #[test]
-    #[ignore = "to be fixed"]
     fn equals() {
         harness(include_str!("operator/equals.lox"));
     }
 
     #[test]
-    #[ignore = "to be fixed"]
     fn greater_nonnum_num() {
         harness(include_str!("operator/greater_nonnum_num.lox"));
     }
 
     #[test]
-    #[ignore = "to be fixed"]
     fn greater_num_nonnum() {
         harness(include_str!("operator/greater_num_nonnum.lox"));
     }
 
     #[test]
-    #[ignore = "to be fixed"]
     fn greater_or_equal_nonnum_num() {
         harness(include_str!("operator/greater_or_equal_nonnum_num.lox"));
     }
 
     #[test]
-    #[ignore = "to be fixed"]
     fn greater_or_equal_num_nonnum() {
         harness(include_str!("operator/greater_or_equal_num_nonnum.lox"));
     }
 
     #[test]
-    #[ignore = "to be fixed"]
     fn less_nonnum_num() {
         harness(include_str!("operator/less_nonnum_num.lox"));
     }
 
     #[test]
-    #[ignore = "to be fixed"]
     fn less_num_nonnum() {
         harness(include_str!("operator/less_num_nonnum.lox"));
     }
 
     #[test]
-    #[ignore = "to be fixed"]
     fn less_or_equal_nonnum_num() {
         harness(include_str!("operator/less_or_equal_nonnum_num.lox"));
     }
 
     #[test]
-    #[ignore = "to be fixed"]
     fn less_or_equal_num_nonnum() {
         harness(include_str!("operator/less_or_equal_num_nonnum.lox"));
     }
 
     #[test]
-    #[ignore = "to be fixed"]
     fn multiply_nonnum_num() {
         harness(include_str!("operator/multiply_nonnum_num.lox"));
     }
 
     #[test]
-    #[ignore = "to be fixed"]
     fn multiply_num_nonnum() {
         harness(include_str!("operator/multiply_num_nonnum.lox"));
     }
 
     #[test]
-    #[ignore = "to be fixed"]
     fn multiply() {
         harness(include_str!("operator/multiply.lox"));
     }
 
     #[test]
-    #[ignore = "to be fixed"]
     fn negate_nonnum() {
         harness(include_str!("operator/negate_nonnum.lox"));
     }
 
     #[test]
-    #[ignore = "to be fixed"]
     fn negate() {
         harness(include_str!("operator/negate.lox"));
     }
 
     #[test]
-    #[ignore = "to be fixed"]
     fn not_class() {
         harness(include_str!("operator/not_class.lox"));
     }
 
     #[test]
-    #[ignore = "to be fixed"]
     fn not_equals() {
         harness(include_str!("operator/not_equals.lox"));
     }
 
     #[test]
-    #[ignore = "to be fixed"]
     fn not() {
         harness(include_str!("operator/not.lox"));
     }
 
     #[test]
-    #[ignore = "to be fixed"]
     fn subtract_nonnum_num() {
         harness(include_str!("operator/subtract_nonnum_num.lox"));
     }
 
     #[test]
-    #[ignore = "to be fixed"]
     fn subtract_num_nonnum() {
         harness(include_str!("operator/subtract_num_nonnum.lox"));
     }
 
     #[test]
-    #[ignore = "to be fixed"]
     fn subtract() {
         harness(include_str!("operator/subtract.lox"));
     }
