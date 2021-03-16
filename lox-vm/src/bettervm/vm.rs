@@ -85,7 +85,9 @@ impl<'a, W> Vm<'a, W> where W: Write {
             closure: closure,
         });
 
-        while self.interpret_next()? == InterpretResult::More {}
+        while self.interpret_next()? == InterpretResult::More {
+            gc::collect();
+        }
 
         Ok(())
     }
