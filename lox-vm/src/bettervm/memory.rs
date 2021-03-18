@@ -1,3 +1,5 @@
+use lox_bytecode::bytecode::{Chunk, Constant, ConstantIndex, Module};
+
 use crate::bettergc::{Gc, Trace};
 use crate::bytecode::ChunkIndex;
 use std::cell::RefCell;
@@ -95,23 +97,32 @@ impl Trace for NativeFunction {
 
 //TODO Drop this entirely and merge this into Closure
 //     We'll wait and see how methods will be implemented before we do this though
-#[derive(Debug)]
 pub struct Function {
     pub name: String,
     pub chunk_index: ChunkIndex,
+    pub import: Gc<Import>,
     pub arity: usize,
+}
+
+impl std::fmt::Debug for Function {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Function")
+        .field("name", &self.name)
+        .finish()
+    }
 }
 
 impl Trace for Function {
     fn trace(&self) {}
 }
 
-impl From<&crate::bytecode::Function> for Function {
-    fn from(value: &crate::bytecode::Function) -> Self {
-        Function {
+impl Function {
+    pub fn new(value: &crate::bytecode::Function, import: Gc<Import>) -> Self {
+        Self {
             name: value.name.clone(),
             chunk_index: value.chunk_index,
             arity: value.arity,
+            import,
         }
     }
 }
@@ -129,6 +140,47 @@ impl Trace for BoundMethod {
     }
 }
 
+#[derive(Debug)]
+pub struct Import {
+    module: Module,
+    pub globals: RefCell<HashMap<String, Value>>,
+}
+
+impl Trace for Import {
+    fn trace(&self) {
+        self.globals.trace();
+    }
+}
+
+impl Import {
+    pub fn new(module: Module) -> Self {
+        Self {
+            module,
+            globals: RefCell::new(HashMap::new()),
+        }
+    }
+
+    pub fn chunk(&self, index: usize) -> &Chunk {
+        self.module.chunk(index)
+    }
+
+    pub fn constant(&self, index: ConstantIndex) -> &Constant {
+        self.module.constant(index)
+    }
+
+    pub fn set_global(&self, key: &str, value: Value) -> () {
+        self.globals.borrow_mut().insert(key.to_string(), value);
+    }
+
+    pub fn has_global(&self, key: &str) -> bool {
+        self.globals.borrow().contains_key(key)
+    }
+
+    pub fn global(&self, key: &str) -> Option<Value> {
+        self.globals.borrow().get(key).cloned()
+    }
+}
+
 #[derive(Debug, Copy, Clone)]
 pub enum Value {
     Number(f64),
@@ -139,6 +191,7 @@ pub enum Value {
     Boolean(bool),
     Class(Gc<RefCell<Class>>),
     Instance(Gc<RefCell<Instance>>),
+    Import(Gc<Import>),
     Nil,
 }
 
@@ -154,6 +207,7 @@ impl Trace for Value {
             Value::Number(_) => (),
             Value::Nil => (),
             Value::Boolean(_) => (),
+            Value::Import(import) => import.trace(),
         }
     }
 }
@@ -178,6 +232,7 @@ impl Value {
             (Value::Nil, Value::Nil) => true,
             (Value::Class(_), Value::Class(_)) => true,
             (Value::Instance(_), Value::Instance(_)) => true,
+            (Value::Import(_), Value::Import(_)) => true,
             _ => false,
         }
     }
