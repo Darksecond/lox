@@ -114,6 +114,14 @@ pub struct Module {
     constants: Vec<Constant>,
 }
 
+impl std::fmt::Debug for Module {
+    
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Module").finish()
+    }
+
+}
+
 impl Module {
     pub fn new() -> Module {
         Module {

@@ -24,7 +24,7 @@ where
     });
 }
 
-pub fn execute(module: &Module) -> Result<(), VmError> {
+pub fn execute(module: Module) -> Result<(), VmError> {
     let mut vm = Vm::new(module);
     set_stdlib(&mut vm);
 

@@ -1,6 +1,8 @@
+use lox_bytecode::bytecode::Chunk;
+
 use super::memory::*;
 use crate::bettergc::{gc, Gc, Root, UniqueRoot};
-use crate::bytecode::{Chunk, Module};
+use crate::bytecode::{Module};
 use std::{cell::RefCell, io::{Stdout, Write, stdout}};
 use std::collections::HashMap;
 
@@ -24,52 +26,56 @@ pub enum VmError {
     UndefinedProperty,
 }
 
-struct CallFrame<'a> {
+struct CallFrame {
     program_counter: usize,
     base_counter: usize,
-    chunk: &'a Chunk,
     closure: Root<Closure>,
 }
 
-pub struct Vm<'a, W> where W: Write {
-    module: &'a Module,
-    frames: Vec<CallFrame<'a>>,
+impl CallFrame {
+    fn chunk(&self) -> &Chunk {
+        self.closure.function.import.chunk(self.closure.function.chunk_index)
+    }
+}
+
+pub struct Vm<W> where W: Write {
+    imports: UniqueRoot<HashMap<String, Gc<Import>>>,
+    frames: Vec<CallFrame>,
     stack: UniqueRoot<Vec<Value>>,
-    globals: UniqueRoot<HashMap<String, Value>>,
     upvalues: Vec<Root<RefCell<Upvalue>>>,
     stdout: W,
 }
 
-impl<'a> Vm<'a, Stdout> {
-    pub fn new(module: &'a Module) -> Self {
-        Vm {
-            module,
-            frames: vec![],
-            stack: gc::unique(vec![]),
-            globals: gc::unique(HashMap::new()),
-            upvalues: vec![],
-            stdout: stdout(),
-        }
+impl Vm<Stdout> {
+    pub fn new(module: Module) -> Self {
+        Vm::with_stdout(module, stdout())
     }
 }
 
-impl<'a, W> Vm<'a, W> where W: Write {
-    pub fn with_stdout(module: &'a Module, stdout: W) -> Self {
-        Vm {
-            module,
+impl<W> Vm<W> where W: Write {
+    pub fn with_stdout(module: Module, stdout: W) -> Self {
+        let mut vm = Vm {
             frames: vec![],
             stack: gc::unique(vec![]),
-            globals: gc::unique(HashMap::new()),
             upvalues: vec![],
             stdout,
-        }
+            imports: gc::unique(HashMap::new()),
+        };
+
+        vm.prepare_interpret(module);
+
+        vm
     }
 
-    pub fn interpret(&mut self) -> Result<(), VmError> {
+    fn prepare_interpret(&mut self, module: Module) {
+        let import = gc::manage(Import::new(module));
+        self.imports.insert("_root".into(), import.as_gc());
+
         let function = gc::manage(Function {
             arity: 0,
             chunk_index: 0,
             name: "top".into(),
+            import: import.as_gc(),
         });
         let closure = gc::manage(Closure {
             upvalues: vec![],
@@ -81,10 +87,19 @@ impl<'a, W> Vm<'a, W> where W: Write {
             //TODO Use begin/end_frame because it needs to do cleanup of the stack
             program_counter: 0,
             base_counter: 0,
-            chunk: self.module.chunk(0),
-            closure: closure,
+            closure,
         });
+    }
 
+    fn current_import(&self) -> Result<Gc<Import>, VmError> {
+        Ok(self.current_frame()?.closure.function.import)
+    }
+
+    fn current_chunk(&self) -> Result<&Chunk, VmError> {
+        Ok(self.current_frame()?.chunk())
+    }
+
+    pub fn interpret(&mut self) -> Result<(), VmError> {
         while self.interpret_next()? == InterpretResult::More {
             gc::collect();
         }
@@ -95,12 +110,11 @@ impl<'a, W> Vm<'a, W> where W: Write {
     pub fn set_native_fn(&mut self, identifier: &str, code: fn(&[Value]) -> Value) {
         let native_function = NativeFunction {
             name: identifier.to_string(),
-            code: code,
+            code,
         };
 
         let root = gc::manage(native_function);
-        self.globals
-            .insert(identifier.to_string(), Value::NativeFunction(root.as_gc()));
+        self.current_import().unwrap().set_global(identifier, Value::NativeFunction(root.as_gc()))
     }
 
     fn interpret_next(&mut self) -> Result<InterpretResult, VmError> {
@@ -110,27 +124,27 @@ impl<'a, W> Vm<'a, W> where W: Write {
 
         let instr = {
             let frame = self.current_frame()?;
-            frame.chunk.instructions()[frame.program_counter - 1]
+            self.current_chunk()?.instructions()[frame.program_counter - 1]
         };
 
         if false {
             // DEBUG
             println!("stack: {:?}", self.stack);
             println!("");
-            println!("globals: {:?}", self.globals);
+            println!("globals: {:?}", self.current_import()?.globals.borrow());
             println!("{:?}", instr);
             println!("");
         }
 
         match instr {
-            Instruction::Constant(index) => match self.module.constant(index) {
+            Instruction::Constant(index) => match self.current_import()?.constant(index) {
                 Constant::Number(n) => self.push(Value::Number(*n)),
                 Constant::String(string) => self.push_string(string),
                 Constant::Class(_) => unimplemented!(),
                 Constant::Closure(_) => unimplemented!(),
             },
             Instruction::Closure(index) => {
-                if let Constant::Closure(closure) = self.module.constant(index) {
+                if let Constant::Closure(closure) = self.current_import()?.constant(index) {
                     let upvalues = closure
                         .upvalues
                         .iter()
@@ -157,7 +171,7 @@ impl<'a, W> Vm<'a, W> where W: Write {
                         })
                         .collect();
 
-                    let function_root = gc::manage(Function::from(&closure.function));
+                    let function_root = gc::manage(Function::new(&closure.function, self.current_import()?));
                     let closure_root = gc::manage(Closure {
                         function: function_root.as_gc(),
                         upvalues: upvalues,
@@ -168,7 +182,7 @@ impl<'a, W> Vm<'a, W> where W: Write {
                 }
             }
             Instruction::Class(index) => {
-                if let Constant::Class(class) = self.module.constant(index) {
+                if let Constant::Class(class) = self.current_import()?.constant(index) {
                     let class = gc::manage(RefCell::new(Class {
                         name: class.name.clone(),
                         methods: HashMap::new(),
@@ -181,7 +195,7 @@ impl<'a, W> Vm<'a, W> where W: Write {
             //TODO Rewrite if's to improve error handling
             //TODO Pretty sure it leaves the stack clean, but double check
             Instruction::Method(index) => {
-                if let Constant::String(identifier) = self.module.constant(index) {
+                if let Constant::String(identifier) = self.current_import()?.constant(index) {
                     if let Value::Class(class) = self.peek_n(1)? {
                         if let Value::Closure(closure) = self.peek_n(0)? {
                             class.borrow_mut().methods.insert(identifier.to_owned(), *closure);
@@ -198,7 +212,7 @@ impl<'a, W> Vm<'a, W> where W: Write {
                 }
             },
             Instruction::SetProperty(index) => {
-                if let Constant::String(property) = self.module.constant(index) {
+                if let Constant::String(property) = self.current_import()?.constant(index) {
                     if let Value::Instance(instance) = self.peek_n(1)? {
                         instance
                             .borrow_mut()
@@ -216,7 +230,7 @@ impl<'a, W> Vm<'a, W> where W: Write {
                 }
             }
             Instruction::GetProperty(index) => {
-                if let Constant::String(property) = self.module.constant(index) {
+                if let Constant::String(property) = self.current_import()?.constant(index) {
                     if let Value::Instance(instance) = self.pop()? {
                         let instance = gc::root(instance);
                         if let Some(value) = instance.borrow().fields.get(property) {
@@ -247,6 +261,7 @@ impl<'a, W> Vm<'a, W> where W: Write {
                     writeln!(self.stdout, "{} instance", instance.borrow().class.borrow().name).expect("Could not write to stdout")
                 },
                 Value::BoundMethod(bind) => writeln!(self.stdout, "<fn {}>", bind.method.function.name).expect("Could not write to stdout"),
+                Value::Import(_) => writeln!(self.stdout, "<import>").expect("Could not write to stdout"),
             },
             Instruction::Nil => self.push(Value::Nil),
             Instruction::Return => {
@@ -287,16 +302,16 @@ impl<'a, W> Vm<'a, W> where W: Write {
                 self.pop()?;
             }
             Instruction::DefineGlobal(index) => {
-                if let Constant::String(identifier) = self.module.constant(index) {
+                if let Constant::String(identifier) = self.current_import()?.constant(index) {
                     let value = self.pop()?;
-                    self.globals.insert(identifier.to_string(), value);
+                    self.current_import()?.set_global(identifier, value);
                 } else {
                     return Err(VmError::StringConstantExpected);
                 }
             }
             Instruction::GetGlobal(index) => {
-                if let Constant::String(identifier) = self.module.constant(index) {
-                    let value = self.globals.get(identifier).cloned();
+                if let Constant::String(identifier) = self.current_import()?.constant(index) {
+                    let value = self.current_import()?.global(identifier);
                     if let Some(value) = value {
                         self.push(value);
                     } else {
@@ -307,10 +322,10 @@ impl<'a, W> Vm<'a, W> where W: Write {
                 }
             }
             Instruction::SetGlobal(index) => {
-                if let Constant::String(identifier) = self.module.constant(index) {
+                if let Constant::String(identifier) = self.current_import()?.constant(index) {
                     let value = *self.peek()?;
-                    if self.globals.contains_key(identifier) {
-                        self.globals.insert(identifier.to_string(), value);
+                    if self.current_import()?.has_global(identifier) {
+                        self.current_import()?.set_global(identifier, value);
                     } else {
                         return Err(VmError::GlobalNotDefined);
                     }
@@ -487,7 +502,7 @@ impl<'a, W> Vm<'a, W> where W: Write {
         self.frames.last().ok_or(VmError::FrameEmpty)
     }
 
-    fn current_frame_mut(&mut self) -> Result<&mut CallFrame<'a>, VmError> {
+    fn current_frame_mut(&mut self) -> Result<&mut CallFrame, VmError> {
         self.frames.last_mut().ok_or(VmError::FrameEmpty)
     }
 
@@ -532,7 +547,6 @@ impl<'a, W> Vm<'a, W> where W: Write {
         self.frames.push(CallFrame {
             program_counter: 0,
             base_counter: self.stack.len() - closure.function.arity - 1,
-            chunk: self.module.chunk(closure.function.chunk_index),
             closure: gc::root(closure),
         });
     }

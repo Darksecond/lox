@@ -33,7 +33,7 @@ fn main() -> Result<(), String> {
 
         let data = std::fs::read_to_string(path).unwrap();
         let module = lox_compiler::compile(&data).unwrap();
-        lox_vm::bettervm::execute(&module).unwrap();
+        lox_vm::bettervm::execute(module).unwrap();
 
 
         Ok(())
