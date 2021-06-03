@@ -13,6 +13,7 @@ statement -> exprStmt
            | forStmt
            | returnStmt
            | block
+           | importStmt
            ;
 
 forStmt -> "for" "(" ( varDecl | exprStmt | ";" ) expression? ";" expression? ")" statement ;
@@ -21,6 +22,7 @@ whileStmt -> "while" "(" expression ")" statement ;
 block -> "{" declaration* "}" ;
 exprStmt -> expression ";" ;
 printStmt -> "print" expression ";" ;
+importStmt -> "import" STRING ("for" parameters)? ";" ;
 ifStmt -> "if" "(" expression ")" statement ( "else" statement )? ;
 
 classDecl -> "class" IDENTIFIER ( "<" IDENTIFIER )? "{" function* "}" ;
