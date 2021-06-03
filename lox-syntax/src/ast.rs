@@ -62,6 +62,7 @@ pub enum Stmt {
         Option<WithSpan<Identifier>>,
         Vec<Stmt>,
     ),
+    Import(WithSpan<String>, Option<Vec<WithSpan<String>>>),
 }
 
 pub type Ast = Vec<Stmt>;

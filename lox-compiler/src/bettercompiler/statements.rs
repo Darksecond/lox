@@ -40,6 +40,7 @@ fn compile_stmt(compiler: &mut Compiler, stmt: &Stmt) {
         Stmt::Class(ref identifier, ref extends, ref stmts) => {
             compile_class(compiler, identifier.as_ref(), extends.as_ref(), stmts)
         }
+        Stmt::Import(_, _) => unimplemented!(),
     }
 }
 

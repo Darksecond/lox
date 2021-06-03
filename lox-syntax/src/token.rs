@@ -45,6 +45,7 @@ pub enum Token {
     True,
     Var,
     While,
+    Import,
 
     // Other.
     Eof,
@@ -99,6 +100,7 @@ pub enum TokenKind {
     True,
     Var,
     While,
+    Import,
 
     // Other.
     Eof,
@@ -153,6 +155,7 @@ impl From<&Token> for TokenKind {
             Token::True => TokenKind::True,
             Token::Var => TokenKind::Var,
             Token::While => TokenKind::While,
+            Token::Import => TokenKind::Import,
             Token::Eof => TokenKind::Eof,
             Token::UnterminatedString => TokenKind::UnterminatedString,
             Token::Unknown(_) => TokenKind::Unknown,

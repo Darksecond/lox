@@ -167,6 +167,7 @@ impl<'a> Lexer<'a> {
         keywords.insert("true", Token::True);
         keywords.insert("var", Token::Var);
         keywords.insert("while", Token::While);
+        keywords.insert("import", Token::Import);
 
         match keywords.get(identifier) {
             None => None,

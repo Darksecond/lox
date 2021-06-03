@@ -31,6 +31,7 @@ fn parse_statement(it: &mut Parser) -> Result<Stmt, SyntaxError> {
         TokenKind::While => parse_while_statement(it),
         TokenKind::Return => parse_return_statement(it),
         TokenKind::For => parse_for_statement(it),
+        TokenKind::Import => parse_import_statement(it),
         _ => parse_expr_statement(it),
     }
 }
@@ -141,6 +142,20 @@ fn parse_for_statement(it: &mut Parser) -> Result<Stmt, SyntaxError> {
     };
 
     Ok(body)
+}
+
+fn parse_import_statement(it: &mut Parser) -> Result<Stmt, SyntaxError> {
+    it.expect(TokenKind::Import)?;
+    let name = expect_string(it)?;
+    let params = if it.check(TokenKind::For) {
+        it.expect(TokenKind::For)?;
+        Some(parse_params(it)?)
+    } else {
+        None
+    };
+    it.expect(TokenKind::Semicolon)?;
+
+    Ok(Stmt::Import(name, params))
 }
 
 fn parse_return_statement(it: &mut Parser) -> Result<Stmt, SyntaxError> {
@@ -337,6 +352,21 @@ mod tests {
             parse_str("return nil;"),
             Ok(vec![Stmt::Return(Some(Box::new(ws(Expr::Nil, 7..10))))])
         );
+    }
+
+    #[test]
+    fn test_import_stmt() {
+        assert_eq!(parse_str("import \"mymodule\";"), Ok(vec![Stmt::Import(
+            ws("mymodule".into(), 7..17), 
+            None
+        )]));
+
+        assert_eq!(parse_str("import \"mymodule\" for message;"), Ok(vec![Stmt::Import(
+            ws("mymodule".into(), 7..17), 
+            Some(vec![
+                ws("message".into(), 22..29),
+            ])
+        )]));
     }
 
     #[test]

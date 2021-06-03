@@ -1,16 +1,2 @@
-var x;
-
-{
-  var a = 3;
-  fun f() {
-     fun g() {
-        print a; 
-     }
-
-     return g;
-  }
-
-  x = f();
-}
-
-x();
+import "my/module" for message, otherMessage;
+print message;
