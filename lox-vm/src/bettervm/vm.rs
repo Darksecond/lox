@@ -143,6 +143,10 @@ impl<W> Vm<W> where W: Write {
                 Constant::Class(_) => unimplemented!(),
                 Constant::Closure(_) => unimplemented!(),
             },
+
+            Instruction::Import(_) => unimplemented!(),
+            Instruction::ImportGlobal(_) => unimplemented!(),
+            
             Instruction::Closure(index) => {
                 if let Constant::Closure(closure) = self.current_import()?.constant(index) {
                     let upvalues = closure

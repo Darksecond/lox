@@ -760,6 +760,48 @@ fn test_scoped_upvalue() {
 }
 
 #[test]
+fn test_simple_import() {
+    use crate::bytecode::Instruction::*;
+
+    let module = compile_code("import \"foo\";");
+
+    assert_instructions(
+        module.chunk(0),
+        vec![Import(0), Pop, Nil, Return],
+    );
+
+    assert_constants(&module, vec!["foo".into()]);
+}
+
+#[test]
+fn test_complex_import() {
+    use crate::bytecode::Instruction::*;
+
+    let module = compile_code("import \"foo\" for x;");
+
+    assert_instructions(
+        module.chunk(0),
+        vec![Import(0), ImportGlobal(1), DefineGlobal(2), Pop, Nil, Return],
+    );
+
+    assert_constants(&module, vec!["foo".into(), "x".into(), "x".into()]);
+}
+
+#[test]
+fn test_complex_local_import() {
+    use crate::bytecode::Instruction::*;
+
+    let module = compile_code("{import \"foo\" for x; print x;}");
+
+    assert_instructions(
+        module.chunk(0),
+        vec![Import(0), ImportGlobal(1), Pop, GetLocal(1), Print, Pop, Nil, Return],
+    );
+
+    assert_constants(&module, vec!["foo".into(), "x".into()]);
+}
+
+#[test]
 fn test_empty_class_global() {
     use crate::bytecode::Instruction::*;
 

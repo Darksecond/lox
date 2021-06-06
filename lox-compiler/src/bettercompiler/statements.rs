@@ -40,7 +40,7 @@ fn compile_stmt(compiler: &mut Compiler, stmt: &Stmt) {
         Stmt::Class(ref identifier, ref extends, ref stmts) => {
             compile_class(compiler, identifier.as_ref(), extends.as_ref(), stmts)
         }
-        Stmt::Import(_, _) => unimplemented!(),
+        Stmt::Import(path, identifiers) => compile_import(compiler, path, identifiers.as_ref()),
     }
 }
 
@@ -62,6 +62,24 @@ fn define_variable(compiler: &mut Compiler, identifier: &str) {
         let constant = compiler.add_constant(identifier);
         compiler.add_instruction(Instruction::DefineGlobal(constant));
     }
+}
+
+fn compile_import(compiler: &mut Compiler, path: &WithSpan<String>, identifiers: Option<&Vec<WithSpan<String>>>) {
+    let constant = compiler.add_constant(path.value.as_str());
+    compiler.add_instruction(Instruction::Import(constant));
+
+    if let Some(identifiers) = identifiers {
+        for identifier in identifiers {
+            declare_variable(compiler, &identifier.value);
+            
+            let constant = compiler.add_constant(identifier.value.as_str());
+            compiler.add_instruction(Instruction::ImportGlobal(constant));
+
+            define_variable(compiler, &identifier.value);
+        }
+    }
+
+    compiler.add_instruction(Instruction::Pop);
 }
 
 fn compile_class(
