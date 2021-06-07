@@ -12,6 +12,7 @@ pub enum Upvalue {
 }
 
 impl Upvalue {
+    #[inline]
     pub fn is_open_with_index(&self, index: usize) -> bool {
         match self {
             Self::Open(i) => {
@@ -25,6 +26,7 @@ impl Upvalue {
         }
     }
 
+    #[inline]
     pub fn is_open(&self) -> bool {
         match self {
             Self::Open(_) => true,
@@ -34,6 +36,7 @@ impl Upvalue {
 }
 
 impl Trace for Upvalue {
+    #[inline]
     fn trace(&self) {
         match self {
             Upvalue::Closed(value) => value.trace(),
@@ -49,6 +52,7 @@ pub struct Instance {
 }
 
 impl Trace for Instance {
+    #[inline]
     fn trace(&self) {
         self.class.trace();
         self.fields.trace();
@@ -62,6 +66,7 @@ pub struct Class {
 }
 
 impl Trace for Class {
+    #[inline]
     fn trace(&self) {
         self.methods.trace();
     }
@@ -74,6 +79,7 @@ pub struct Closure {
 }
 
 impl Trace for Closure {
+    #[inline]
     fn trace(&self) {
         self.function.trace();
         self.upvalues.trace();
@@ -92,6 +98,7 @@ impl std::fmt::Debug for NativeFunction {
 }
 
 impl Trace for NativeFunction {
+    #[inline]
     fn trace(&self) {}
 }
 
@@ -113,6 +120,7 @@ impl std::fmt::Debug for Function {
 }
 
 impl Trace for Function {
+    #[inline]
     fn trace(&self) {}
 }
 
@@ -134,6 +142,7 @@ pub struct BoundMethod {
 }
 
 impl Trace for BoundMethod {
+    #[inline]
     fn trace(&self) {
         self.receiver.trace();
         self.method.trace();
@@ -147,6 +156,7 @@ pub struct Import {
 }
 
 impl Trace for Import {
+    #[inline]
     fn trace(&self) {
         self.globals.trace();
     }
@@ -160,10 +170,12 @@ impl Import {
         }
     }
 
+    #[inline]
     pub fn chunk(&self, index: usize) -> &Chunk {
         self.module.chunk(index)
     }
 
+    #[inline]
     pub fn constant(&self, index: ConstantIndex) -> &Constant {
         self.module.constant(index)
     }
@@ -196,6 +208,7 @@ pub enum Value {
 }
 
 impl Trace for Value {
+    #[inline]
     fn trace(&self) {
         match self {
             Value::String(string) => string.trace(),
@@ -213,6 +226,7 @@ impl Trace for Value {
 }
 
 impl Value {
+    #[inline]
     pub fn is_falsey(&self) -> bool {
         match self {
             Value::Boolean(boolean) => !boolean,
@@ -221,6 +235,7 @@ impl Value {
         }
     }
 
+    #[inline]
     pub fn is_same_type(a: &Value, b: &Value) -> bool {
         match (b, a) {
             (Value::Number(_), Value::Number(_)) => true,

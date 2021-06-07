@@ -145,16 +145,19 @@ impl Heap {
 }
 
 impl<T: 'static + Trace + ?Sized> Gc<T> {
+    #[inline]
     fn allocation(&self) -> &Allocation<T> {
         unsafe { &self.ptr.as_ref() }
     }
 
+    #[inline]
     pub fn ptr_eq(a: &Gc<T>, b: &Gc<T>) -> bool{
         a.ptr == b.ptr
     }
 }
 impl<T: 'static + Trace + ?Sized> Copy for Gc<T> {}
 impl<T: 'static + Trace + ?Sized> Clone for Gc<T> {
+    #[inline]
     fn clone(&self) -> Gc<T> {
         *self
     }
@@ -162,6 +165,7 @@ impl<T: 'static + Trace + ?Sized> Clone for Gc<T> {
 impl<T: 'static + Trace + ?Sized> Deref for Gc<T> {
     type Target = T;
 
+    #[inline]
     fn deref(&self) -> &T {
         &self.allocation().data
     }
@@ -179,12 +183,14 @@ impl<T: fmt::Display + 'static + Trace + ?Sized> fmt::Display for Gc<T> {
     }
 }
 impl<T: 'static + Trace + ?Sized> Trace for Gc<T> {
+    #[inline]
     fn trace(&self) {
         self.allocation().trace();
     }
 }
 
 impl<T: 'static + Trace + ?Sized> Trace for Root<T> {
+    #[inline]
     fn trace(&self) {
         self.allocation().trace();
     }
@@ -196,10 +202,12 @@ impl<T: 'static + Trace + ?Sized> Clone for Root<T> {
     }
 }
 impl<T: 'static + Trace + ?Sized> Root<T> {
+    #[inline]
     fn allocation(&self) -> &Allocation<T> {
         unsafe { &self.ptr.as_ref() }
     }
 
+    #[inline]
     pub fn as_gc(&self) -> Gc<T> {
         Gc { ptr: self.ptr }
     }
@@ -212,6 +220,7 @@ impl<T: 'static + Trace + ?Sized> Drop for Root<T> {
 impl<T: 'static + Trace + ?Sized> Deref for Root<T> {
     type Target = T;
 
+    #[inline]
     fn deref(&self) -> &T {
         &self.allocation().data
     }
@@ -224,14 +233,18 @@ impl<T: fmt::Debug + 'static + Trace + ?Sized> fmt::Debug for Root<T> {
 }
 
 impl<T: 'static + Trace + ?Sized> Trace for UniqueRoot<T> {
+    #[inline]
     fn trace(&self) {
         self.allocation().trace();
     }
 }
 impl<T: 'static + Trace + ?Sized> UniqueRoot<T> {
+    #[inline]
     fn allocation_mut(&mut self) -> &mut Allocation<T> {
         unsafe { self.ptr.as_mut() }
     }
+
+    #[inline]
     fn allocation(&self) -> &Allocation<T> {
         unsafe { &self.ptr.as_ref() }
     }
@@ -244,11 +257,13 @@ impl<T: 'static + Trace + ?Sized> Drop for UniqueRoot<T> {
 impl<T: 'static + Trace + ?Sized> Deref for UniqueRoot<T> {
     type Target = T;
 
+    #[inline]
     fn deref(&self) -> &T {
         &self.allocation().data
     }
 }
 impl<T: 'static + Trace + ?Sized> DerefMut for UniqueRoot<T> {
+    #[inline]
     fn deref_mut(&mut self) -> &mut T {
         &mut self.allocation_mut().data
     }
@@ -264,11 +279,13 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::hash::Hash;
 impl<T: Trace> Trace for RefCell<T> {
+    #[inline]
     fn trace(&self) {
         self.borrow().trace();
     }
 }
 impl<T: Trace> Trace for Vec<T> {
+    #[inline]
     fn trace(&self) {
         for el in self {
             el.trace();
@@ -276,6 +293,7 @@ impl<T: Trace> Trace for Vec<T> {
     }
 }
 impl<T: Trace> Trace for &Vec<T> {
+    #[inline]
     fn trace(&self) {
         for el in *self {
             el.trace();
@@ -283,6 +301,7 @@ impl<T: Trace> Trace for &Vec<T> {
     }
 }
 impl<K: Eq + Hash, T: Trace> Trace for HashMap<K, T> {
+    #[inline]
     fn trace(&self) {
         for val in self.values() {
             val.trace();
@@ -291,5 +310,6 @@ impl<K: Eq + Hash, T: Trace> Trace for HashMap<K, T> {
 }
 
 impl Trace for String {
+    #[inline]
     fn trace(&self) {}
 }

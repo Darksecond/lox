@@ -118,11 +118,9 @@ pub struct Module {
 }
 
 impl std::fmt::Debug for Module {
-    
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Module").finish()
     }
-
 }
 
 impl Module {
@@ -133,9 +131,11 @@ impl Module {
         }
     }
 
+    #[inline]
     pub fn chunk(&self, index: ChunkIndex) -> &Chunk {
         &self.chunks[index]
     }
+
     pub fn chunk_mut(&mut self, index: ChunkIndex) -> &mut Chunk {
         &mut self.chunks[index]
     }
@@ -154,6 +154,7 @@ impl Module {
         &self.constants
     }
 
+    #[inline]
     pub fn constant(&self, index: ConstantIndex) -> &Constant {
         &self.constants[index]
     }
@@ -192,6 +193,7 @@ impl Chunk {
         };
     }
 
+    #[inline]
     pub fn instructions(&self) -> &[Instruction] {
         &self.instructions
     }

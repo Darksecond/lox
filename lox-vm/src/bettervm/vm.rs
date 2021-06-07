@@ -30,11 +30,16 @@ struct CallFrame {
     program_counter: usize,
     base_counter: usize,
     closure: Root<Closure>,
+    chunk: *const Chunk,
 }
 
 impl CallFrame {
+    #[inline]
     fn chunk(&self) -> &Chunk {
-        self.closure.function.import.chunk(self.closure.function.chunk_index)
+        // We use unsafe here because it's way faster
+        // This is safe, because we have `Root<Closure>` which eventually has a `Gc<Import>`.
+        unsafe { &*self.chunk }
+        // self.closure.function.import.chunk(self.closure.function.chunk_index)
     }
 }
 
@@ -83,20 +88,18 @@ impl<W> Vm<W> where W: Write {
         });
         self.push(Value::Closure(closure.as_gc()));
 
+        let chunk: *const Chunk = closure.function.import.chunk(closure.function.chunk_index);
         self.frames.push(CallFrame {
             //TODO Use begin/end_frame because it needs to do cleanup of the stack
             program_counter: 0,
             base_counter: 0,
             closure,
+            chunk,
         });
     }
 
     fn current_import(&self) -> Result<Gc<Import>, VmError> {
         Ok(self.current_frame()?.closure.function.import)
-    }
-
-    fn current_chunk(&self) -> Result<&Chunk, VmError> {
-        Ok(self.current_frame()?.chunk())
     }
 
     pub fn interpret(&mut self) -> Result<(), VmError> {
@@ -120,24 +123,26 @@ impl<W> Vm<W> where W: Write {
     fn interpret_next(&mut self) -> Result<InterpretResult, VmError> {
         use crate::bytecode::{Constant, Instruction};
 
+        let current_import = self.current_import()?;
+
         self.current_frame_mut()?.program_counter += 1;
 
         let instr = {
             let frame = self.current_frame()?;
-            self.current_chunk()?.instructions()[frame.program_counter - 1]
+            frame.chunk().instructions()[frame.program_counter - 1]
         };
 
         if false {
             // DEBUG
             println!("stack: {:?}", self.stack);
             println!("");
-            println!("globals: {:?}", self.current_import()?.globals.borrow());
+            println!("globals: {:?}", current_import.globals.borrow());
             println!("{:?}", instr);
             println!("");
         }
 
         match instr {
-            Instruction::Constant(index) => match self.current_import()?.constant(index) {
+            Instruction::Constant(index) => match current_import.constant(index) {
                 Constant::Number(n) => self.push(Value::Number(*n)),
                 Constant::String(string) => self.push_string(string),
                 Constant::Class(_) => unimplemented!(),
@@ -148,7 +153,7 @@ impl<W> Vm<W> where W: Write {
             Instruction::ImportGlobal(_) => unimplemented!(),
             
             Instruction::Closure(index) => {
-                if let Constant::Closure(closure) = self.current_import()?.constant(index) {
+                if let Constant::Closure(closure) = current_import.constant(index) {
                     let upvalues = closure
                         .upvalues
                         .iter()
@@ -175,7 +180,7 @@ impl<W> Vm<W> where W: Write {
                         })
                         .collect();
 
-                    let function_root = gc::manage(Function::new(&closure.function, self.current_import()?));
+                    let function_root = gc::manage(Function::new(&closure.function, current_import));
                     let closure_root = gc::manage(Closure {
                         function: function_root.as_gc(),
                         upvalues: upvalues,
@@ -186,7 +191,7 @@ impl<W> Vm<W> where W: Write {
                 }
             }
             Instruction::Class(index) => {
-                if let Constant::Class(class) = self.current_import()?.constant(index) {
+                if let Constant::Class(class) = current_import.constant(index) {
                     let class = gc::manage(RefCell::new(Class {
                         name: class.name.clone(),
                         methods: HashMap::new(),
@@ -199,7 +204,7 @@ impl<W> Vm<W> where W: Write {
             //TODO Rewrite if's to improve error handling
             //TODO Pretty sure it leaves the stack clean, but double check
             Instruction::Method(index) => {
-                if let Constant::String(identifier) = self.current_import()?.constant(index) {
+                if let Constant::String(identifier) = current_import.constant(index) {
                     if let Value::Class(class) = self.peek_n(1)? {
                         if let Value::Closure(closure) = self.peek_n(0)? {
                             class.borrow_mut().methods.insert(identifier.to_owned(), *closure);
@@ -216,7 +221,7 @@ impl<W> Vm<W> where W: Write {
                 }
             },
             Instruction::SetProperty(index) => {
-                if let Constant::String(property) = self.current_import()?.constant(index) {
+                if let Constant::String(property) = current_import.constant(index) {
                     if let Value::Instance(instance) = self.peek_n(1)? {
                         instance
                             .borrow_mut()
@@ -234,7 +239,7 @@ impl<W> Vm<W> where W: Write {
                 }
             }
             Instruction::GetProperty(index) => {
-                if let Constant::String(property) = self.current_import()?.constant(index) {
+                if let Constant::String(property) = current_import.constant(index) {
                     if let Value::Instance(instance) = self.pop()? {
                         let instance = gc::root(instance);
                         if let Some(value) = instance.borrow().fields.get(property) {
@@ -306,16 +311,16 @@ impl<W> Vm<W> where W: Write {
                 self.pop()?;
             }
             Instruction::DefineGlobal(index) => {
-                if let Constant::String(identifier) = self.current_import()?.constant(index) {
+                if let Constant::String(identifier) = current_import.constant(index) {
                     let value = self.pop()?;
-                    self.current_import()?.set_global(identifier, value);
+                    current_import.set_global(identifier, value);
                 } else {
                     return Err(VmError::StringConstantExpected);
                 }
             }
             Instruction::GetGlobal(index) => {
-                if let Constant::String(identifier) = self.current_import()?.constant(index) {
-                    let value = self.current_import()?.global(identifier);
+                if let Constant::String(identifier) = current_import.constant(index) {
+                    let value = current_import.global(identifier);
                     if let Some(value) = value {
                         self.push(value);
                     } else {
@@ -326,10 +331,10 @@ impl<W> Vm<W> where W: Write {
                 }
             }
             Instruction::SetGlobal(index) => {
-                if let Constant::String(identifier) = self.current_import()?.constant(index) {
+                if let Constant::String(identifier) = current_import.constant(index) {
                     let value = *self.peek()?;
-                    if self.current_import()?.has_global(identifier) {
-                        self.current_import()?.set_global(identifier, value);
+                    if current_import.has_global(identifier) {
+                        current_import.set_global(identifier, value);
                     } else {
                         return Err(VmError::GlobalNotDefined);
                     }
@@ -529,7 +534,7 @@ impl<W> Vm<W> where W: Write {
     }
 
     fn pop_n(&mut self, n: usize) -> Result<Vec<Value>, VmError> {
-        let mut result = vec![];
+        let mut result = Vec::with_capacity(n);
         while result.len() < n {
             result.push(self.pop()?);
         }
@@ -548,10 +553,12 @@ impl<W> Vm<W> where W: Write {
     }
 
     fn begin_frame(&mut self, closure: Gc<Closure>) {
+        let chunk: *const Chunk = closure.function.import.chunk(closure.function.chunk_index);
         self.frames.push(CallFrame {
             program_counter: 0,
             base_counter: self.stack.len() - closure.function.arity - 1,
             closure: gc::root(closure),
+            chunk,
         });
     }
 }
