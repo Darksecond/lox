@@ -74,15 +74,15 @@ impl Trace for Class {
 
 #[derive(Debug)]
 pub struct Closure {
-    pub function: Gc<Function>,
+    pub function: Function,
     pub upvalues: Vec<Gc<RefCell<Upvalue>>>,
 }
 
 impl Trace for Closure {
     #[inline]
     fn trace(&self) {
-        self.function.trace();
         self.upvalues.trace();
+        self.function.import.trace();
     }
 }
 
@@ -103,7 +103,6 @@ impl Trace for NativeFunction {
 }
 
 //TODO Drop this entirely and merge this into Closure
-//     We'll wait and see how methods will be implemented before we do this though
 pub struct Function {
     pub name: String,
     pub chunk_index: ChunkIndex,
@@ -117,11 +116,6 @@ impl std::fmt::Debug for Function {
         .field("name", &self.name)
         .finish()
     }
-}
-
-impl Trace for Function {
-    #[inline]
-    fn trace(&self) {}
 }
 
 impl Function {

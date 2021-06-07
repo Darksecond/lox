@@ -50,9 +50,12 @@ impl<T: 'static + Trace + ?Sized> Allocation<T> {
         self.header.marked.set(false);
     }
 
+    #[inline]
     fn root(&self) {
         self.header.roots.fetch_add(1, Ordering::Relaxed);
     }
+
+    #[inline]
     fn unroot(&self) {
         self.header.roots.fetch_sub(1, Ordering::Relaxed);
     }
@@ -99,6 +102,7 @@ impl Heap {
         root
     }
 
+    #[inline]
     pub fn root<T: 'static + Trace + ?Sized>(&mut self, obj: Gc<T>) -> Root<T> {
         obj.allocation().root();
         Root { ptr: obj.ptr }
@@ -196,6 +200,7 @@ impl<T: 'static + Trace + ?Sized> Trace for Root<T> {
     }
 }
 impl<T: 'static + Trace + ?Sized> Clone for Root<T> {
+    #[inline]
     fn clone(&self) -> Root<T> {
         self.allocation().root();
         Root { ptr: self.ptr }
@@ -213,6 +218,7 @@ impl<T: 'static + Trace + ?Sized> Root<T> {
     }
 }
 impl<T: 'static + Trace + ?Sized> Drop for Root<T> {
+    #[inline]
     fn drop(&mut self) {
         self.allocation().unroot();
     }

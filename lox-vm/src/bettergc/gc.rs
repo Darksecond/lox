@@ -1,17 +1,18 @@
 use super::*;
 use std::cell::RefCell;
+use core::sync::atomic::AtomicUsize;
 
 static THRESHOLD_ADJ: f32 = 1.4;
 
 struct GcStats {
-    bytes_allocated: usize,
-    threshold: usize,
+    bytes_allocated: AtomicUsize,
+    threshold: AtomicUsize,
 }
 
-thread_local!(static STATS: RefCell<GcStats> = RefCell::new(GcStats {
-    bytes_allocated: 0,
-    threshold: 100,
-}));
+thread_local!(static STATS: GcStats = GcStats {
+    bytes_allocated: AtomicUsize::new(0),
+    threshold: AtomicUsize::new(100),
+});
 
 thread_local!(static HEAP: RefCell<Heap> = RefCell::new(Heap::new()));
 
@@ -35,25 +36,28 @@ pub fn collect() {
     }
 }
 
+#[inline]
 fn force_collect() {
     STATS.with(|stats| {
-        let mut stats = stats.borrow_mut();
-
-        stats.bytes_allocated -= HEAP.with(|heap| heap.borrow_mut().collect());
-        stats.threshold = (stats.bytes_allocated as f32 * THRESHOLD_ADJ) as usize;
+        let bytes_collected = HEAP.with(|heap| heap.borrow_mut().collect());
+        stats.bytes_allocated.fetch_sub(bytes_collected, Ordering::Relaxed);
+        let bytes_allocated = stats.bytes_allocated.load(Ordering::Relaxed);
+        stats.threshold.store((bytes_allocated as f32 * THRESHOLD_ADJ) as usize, Ordering::Relaxed);
     })
 }
 
+#[inline]
 fn should_collect() -> bool {
     STATS.with(|stats| {
-        let stats = stats.borrow();
-        stats.bytes_allocated > stats.threshold
+        let bytes_allocated = stats.bytes_allocated.load(Ordering::Relaxed);
+        let threshold = stats.threshold.load(Ordering::Relaxed);
+        bytes_allocated > threshold
     })
 }
 
+#[inline]
 fn add_bytes<T>() {
     STATS.with(|stats| {
-        let mut stats = stats.borrow_mut();
-        stats.bytes_allocated += std::mem::size_of::<T>();
+        stats.bytes_allocated.fetch_add(std::mem::size_of::<T>(), Ordering::Relaxed);
     })
 }

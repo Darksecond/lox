@@ -1,7 +1,7 @@
 use lox_bytecode::bytecode::Chunk;
 
 use super::memory::*;
-use crate::bettergc::{gc, Gc, Root, UniqueRoot};
+use crate::bettergc::{Gc, Trace, UniqueRoot, gc};
 use crate::bytecode::{Module};
 use std::{cell::RefCell, io::{Stdout, Write, stdout}};
 use std::collections::HashMap;
@@ -29,8 +29,14 @@ pub enum VmError {
 struct CallFrame {
     program_counter: usize,
     base_counter: usize,
-    closure: Root<Closure>,
+    closure: Gc<Closure>,
     chunk: *const Chunk,
+}
+
+impl Trace for CallFrame {
+    fn trace(&self) {
+        self.closure.trace();
+    }
 }
 
 impl CallFrame {
@@ -39,15 +45,14 @@ impl CallFrame {
         // We use unsafe here because it's way faster
         // This is safe, because we have `Root<Closure>` which eventually has a `Gc<Import>`.
         unsafe { &*self.chunk }
-        // self.closure.function.import.chunk(self.closure.function.chunk_index)
     }
 }
 
 pub struct Vm<W> where W: Write {
     imports: UniqueRoot<HashMap<String, Gc<Import>>>,
-    frames: Vec<CallFrame>,
+    frames: UniqueRoot<Vec<CallFrame>>,
     stack: UniqueRoot<Vec<Value>>,
-    upvalues: Vec<Root<RefCell<Upvalue>>>,
+    upvalues: UniqueRoot<Vec<Gc<RefCell<Upvalue>>>>,
     stdout: W,
 }
 
@@ -60,12 +65,14 @@ impl Vm<Stdout> {
 impl<W> Vm<W> where W: Write {
     pub fn with_stdout(module: Module, stdout: W) -> Self {
         let mut vm = Vm {
-            frames: vec![],
+            frames: gc::unique(vec![]),
             stack: gc::unique(vec![]),
-            upvalues: vec![],
+            upvalues: gc::unique(vec![]),
             stdout,
             imports: gc::unique(HashMap::new()),
         };
+
+        //TODO reserve frames/upvalues/stack
 
         vm.prepare_interpret(module);
 
@@ -76,15 +83,15 @@ impl<W> Vm<W> where W: Write {
         let import = gc::manage(Import::new(module));
         self.imports.insert("_root".into(), import.as_gc());
 
-        let function = gc::manage(Function {
+        let function = Function {
             arity: 0,
             chunk_index: 0,
             name: "top".into(),
             import: import.as_gc(),
-        });
+        };
         let closure = gc::manage(Closure {
             upvalues: vec![],
-            function: function.as_gc(),
+            function,
         });
         self.push(Value::Closure(closure.as_gc()));
 
@@ -93,7 +100,7 @@ impl<W> Vm<W> where W: Write {
             //TODO Use begin/end_frame because it needs to do cleanup of the stack
             program_counter: 0,
             base_counter: 0,
-            closure,
+            closure: closure.as_gc(),
             chunk,
         });
     }
@@ -169,7 +176,7 @@ impl<W> Vm<W> where W: Write {
                                         upvalue
                                     } else {
                                         let root = gc::manage(RefCell::new(Upvalue::Open(index)));
-                                        self.upvalues.push(root.clone());
+                                        self.upvalues.push(root.as_gc());
                                         root.as_gc()
                                     }
                                 }
@@ -180,9 +187,8 @@ impl<W> Vm<W> where W: Write {
                         })
                         .collect();
 
-                    let function_root = gc::manage(Function::new(&closure.function, current_import));
                     let closure_root = gc::manage(Closure {
-                        function: function_root.as_gc(),
+                        function: Function::new(&closure.function, current_import),
                         upvalues: upvalues,
                     });
                     self.push(Value::Closure(closure_root.as_gc()));
@@ -422,9 +428,9 @@ impl<W> Vm<W> where W: Write {
 
     fn close_upvalues(&mut self, index: usize) {
         let value = self.stack[index]; //TODO Result
-        for root in &self.upvalues {
-            if root.borrow().is_open_with_index(index) {
-                root.replace(Upvalue::Closed(value));
+        for upvalue in self.upvalues.iter() {
+            if upvalue.borrow().is_open_with_index(index) {
+                upvalue.replace(Upvalue::Closed(value));
             }
         }
 
@@ -437,9 +443,9 @@ impl<W> Vm<W> where W: Write {
     }
 
     fn find_open_upvalue_with_index(&self, index: usize) -> Option<Gc<RefCell<Upvalue>>> {
-        for root in self.upvalues.iter().rev() {
-            if root.borrow().is_open_with_index(index) {
-                return Some(root.as_gc());
+        for upvalue in self.upvalues.iter().rev() {
+            if upvalue.borrow().is_open_with_index(index) {
+                return Some(*upvalue);
             }
         }
 
@@ -557,7 +563,7 @@ impl<W> Vm<W> where W: Write {
         self.frames.push(CallFrame {
             program_counter: 0,
             base_counter: self.stack.len() - closure.function.arity - 1,
-            closure: gc::root(closure),
+            closure,
             chunk,
         });
     }

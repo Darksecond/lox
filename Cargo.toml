@@ -7,3 +7,8 @@ members = [
     "lox-vm",
     "lox-syntax"
 ]
+
+# For flamegraph
+[profile.release]
+debug = true
+lto = true
