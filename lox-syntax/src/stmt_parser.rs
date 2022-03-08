@@ -2,10 +2,11 @@ use super::ast::*;
 use super::token::*;
 use crate::common::*;
 use crate::parser::Parser;
+use crate::position::Span;
 use crate::position::WithSpan;
 use crate::SyntaxError;
 
-fn parse_program(it: &mut Parser) -> Result<Vec<Stmt>, SyntaxError> {
+fn parse_program(it: &mut Parser) -> Result<Vec<WithSpan<Stmt>>, SyntaxError> {
     let mut statements = Vec::new();
     while !it.is_eof() {
         statements.push(parse_declaration(it)?);
@@ -14,7 +15,7 @@ fn parse_program(it: &mut Parser) -> Result<Vec<Stmt>, SyntaxError> {
     Ok(statements)
 }
 
-fn parse_declaration(it: &mut Parser) -> Result<Stmt, SyntaxError> {
+fn parse_declaration(it: &mut Parser) -> Result<WithSpan<Stmt>, SyntaxError> {
     match it.peek() {
         TokenKind::Var => parse_var_declaration(it),
         TokenKind::Fun => parse_function_declaration(it),
@@ -23,7 +24,7 @@ fn parse_declaration(it: &mut Parser) -> Result<Stmt, SyntaxError> {
     }
 }
 
-fn parse_statement(it: &mut Parser) -> Result<Stmt, SyntaxError> {
+fn parse_statement(it: &mut Parser) -> Result<WithSpan<Stmt>, SyntaxError> {
     match it.peek() {
         TokenKind::Print => parse_print_statement(it),
         TokenKind::If => parse_if_statement(it),
@@ -36,8 +37,8 @@ fn parse_statement(it: &mut Parser) -> Result<Stmt, SyntaxError> {
     }
 }
 
-fn parse_class_declaration(it: &mut Parser) -> Result<Stmt, SyntaxError> {
-    it.expect(TokenKind::Class)?;
+fn parse_class_declaration(it: &mut Parser) -> Result<WithSpan<Stmt>, SyntaxError> {
+    let begin_span = it.expect(TokenKind::Class)?;
     let name = expect_identifier(it)?;
     let superclass = if it.optionally(TokenKind::Less)? {
         let name = expect_identifier(it)?;
@@ -46,21 +47,24 @@ fn parse_class_declaration(it: &mut Parser) -> Result<Stmt, SyntaxError> {
         None
     };
     it.expect(TokenKind::LeftBrace)?;
-    let mut functions: Vec<Stmt> = vec![];
+    let mut functions: Vec<WithSpan<Stmt>> = vec![];
     while !it.check(TokenKind::RightBrace) {
         functions.push(parse_function(it)?);
     }
-    it.expect(TokenKind::RightBrace)?;
+    let end_span = it.expect(TokenKind::RightBrace)?;
 
-    Ok(Stmt::Class(name.clone(), superclass, functions))
+    Ok(WithSpan::new(Stmt::Class(name.clone(), superclass, functions), Span::union(begin_span, end_span)))
 }
 
-fn parse_function_declaration(it: &mut Parser) -> Result<Stmt, SyntaxError> {
-    it.expect(TokenKind::Fun)?;
-    parse_function(it)
+fn parse_function_declaration(it: &mut Parser) -> Result<WithSpan<Stmt>, SyntaxError> {
+    let begin_span = it.expect(TokenKind::Fun)?;
+    let fun = parse_function(it)?;
+
+    let span = Span::union(begin_span, &fun);
+    Ok(WithSpan::new(fun.value, span))
 }
 
-fn parse_function(it: &mut Parser) -> Result<Stmt, SyntaxError> {
+fn parse_function(it: &mut Parser) -> Result<WithSpan<Stmt>, SyntaxError> {
     let name = expect_identifier(it)?;
     it.expect(TokenKind::LeftParen)?;
     let params = if !it.check(TokenKind::RightParen) {
@@ -70,12 +74,12 @@ fn parse_function(it: &mut Parser) -> Result<Stmt, SyntaxError> {
     };
     it.expect(TokenKind::RightParen)?;
     it.expect(TokenKind::LeftBrace)?;
-    let mut body: Vec<Stmt> = Vec::new();
+    let mut body: Vec<WithSpan<Stmt>> = Vec::new();
     while !it.check(TokenKind::RightBrace) {
         body.push(parse_declaration(it)?);
     }
-    it.expect(TokenKind::RightBrace)?;
-    Ok(Stmt::Function(name.clone(), params, body))
+    let end_span = it.expect(TokenKind::RightBrace)?;
+    Ok(WithSpan::new(Stmt::Function(name.clone(), params, body), Span::union(&name, end_span)))
 }
 
 fn parse_params(it: &mut Parser) -> Result<Vec<WithSpan<Identifier>>, SyntaxError> {
@@ -88,8 +92,8 @@ fn parse_params(it: &mut Parser) -> Result<Vec<WithSpan<Identifier>>, SyntaxErro
     Ok(params)
 }
 
-fn parse_var_declaration(it: &mut Parser) -> Result<Stmt, SyntaxError> {
-    it.expect(TokenKind::Var)?;
+fn parse_var_declaration(it: &mut Parser) -> Result<WithSpan<Stmt>, SyntaxError> {
+    let begin_span = it.expect(TokenKind::Var)?;
     let name = expect_identifier(it)?;
     let mut initializer = None;
 
@@ -97,16 +101,16 @@ fn parse_var_declaration(it: &mut Parser) -> Result<Stmt, SyntaxError> {
         initializer = Some(parse_expr(it)?);
     }
 
-    it.expect(TokenKind::Semicolon)?;
+    let end_span = it.expect(TokenKind::Semicolon)?;
 
-    Ok(Stmt::Var(name, initializer.map(Box::new)))
+    Ok(WithSpan::new(Stmt::Var(name, initializer.map(Box::new)), Span::union(begin_span, end_span)))
 }
 
 fn parse_expr(it: &mut Parser) -> Result<WithSpan<Expr>, SyntaxError> {
     super::expr_parser::parse(it).map_err(|e| e.into())
 }
 
-fn parse_for_statement(it: &mut Parser) -> Result<Stmt, SyntaxError> {
+fn parse_for_statement(it: &mut Parser) -> Result<WithSpan<Stmt>, SyntaxError> {
     it.expect(TokenKind::For)?;
     it.expect(TokenKind::LeftParen)?;
     let initializer = match it.peek() {
@@ -130,22 +134,30 @@ fn parse_for_statement(it: &mut Parser) -> Result<Stmt, SyntaxError> {
     };
     it.expect(TokenKind::RightParen)?;
     let body = parse_statement(it)?;
+    
     // Add increment if it exists
     let body = match increment {
-        Some(expr) => Stmt::Block(vec![body, Stmt::Expression(Box::new(expr))]),
+        Some(expr) => {
+            let span = expr.span;
+            WithSpan::new(Stmt::Block(vec![body, WithSpan::new(Stmt::Expression(Box::new(expr)), span)]), span)
+        },
         None => body,
     };
-    let body = Stmt::While(Box::new(condition), Box::new(body));
+    let span = Span::union(&condition, &body);
+    let body = WithSpan::new(Stmt::While(Box::new(condition), Box::new(body)), span);
     let body = match initializer {
-        Some(stmt) => Stmt::Block(vec![stmt, body]),
+        Some(stmt) => {
+            let span = Span::union( &stmt, &body);
+            WithSpan::new(Stmt::Block(vec![stmt, body]), span)
+        },
         None => body,
     };
 
     Ok(body)
 }
 
-fn parse_import_statement(it: &mut Parser) -> Result<Stmt, SyntaxError> {
-    it.expect(TokenKind::Import)?;
+fn parse_import_statement(it: &mut Parser) -> Result<WithSpan<Stmt>, SyntaxError> {
+    let begin_span = it.expect(TokenKind::Import)?;
     let name = expect_string(it)?;
     let params = if it.check(TokenKind::For) {
         it.expect(TokenKind::For)?;
@@ -153,74 +165,79 @@ fn parse_import_statement(it: &mut Parser) -> Result<Stmt, SyntaxError> {
     } else {
         None
     };
-    it.expect(TokenKind::Semicolon)?;
+    let end_span = it.expect(TokenKind::Semicolon)?;
 
-    Ok(Stmt::Import(name, params))
+    Ok(WithSpan::new(Stmt::Import(name, params), Span::union(begin_span, end_span)))
 }
 
-fn parse_return_statement(it: &mut Parser) -> Result<Stmt, SyntaxError> {
-    it.expect(TokenKind::Return)?;
+fn parse_return_statement(it: &mut Parser) -> Result<WithSpan<Stmt>, SyntaxError> {
+    let begin_span = it.expect(TokenKind::Return)?;
     let mut expr = None;
     if !it.check(TokenKind::Semicolon) {
         expr = Some(parse_expr(it)?);
     }
-    it.expect(TokenKind::Semicolon)?;
-    Ok(Stmt::Return(expr.map(Box::new)))
+    let end_span = it.expect(TokenKind::Semicolon)?;
+    Ok(WithSpan::new(Stmt::Return(expr.map(Box::new)), Span::union(begin_span, end_span)))
 }
 
-fn parse_expr_statement(it: &mut Parser) -> Result<Stmt, SyntaxError> {
+fn parse_expr_statement(it: &mut Parser) -> Result<WithSpan<Stmt>, SyntaxError> {
     let expr = parse_expr(it)?;
-    it.expect(TokenKind::Semicolon)?;
+    let end_span = it.expect(TokenKind::Semicolon)?;
 
-    Ok(Stmt::Expression(Box::new(expr)))
+    let span = Span::union(&expr, end_span);
+    Ok(WithSpan::new(Stmt::Expression(Box::new(expr)), span))
 }
 
-fn parse_block_statement(it: &mut Parser) -> Result<Stmt, SyntaxError> {
-    it.expect(TokenKind::LeftBrace)?;
-    let mut statements: Vec<Stmt> = Vec::new();
+fn parse_block_statement(it: &mut Parser) -> Result<WithSpan<Stmt>, SyntaxError> {
+    let begin_span = it.expect(TokenKind::LeftBrace)?;
+    let mut statements: Vec<WithSpan<Stmt>> = Vec::new();
     while !it.check(TokenKind::RightBrace) {
         statements.push(parse_declaration(it)?);
     }
-    it.expect(TokenKind::RightBrace)?;
-    Ok(Stmt::Block(statements))
+    let end_span = it.expect(TokenKind::RightBrace)?;
+    Ok(WithSpan::new(Stmt::Block(statements), Span::union(begin_span, end_span)))
 }
 
-fn parse_while_statement(it: &mut Parser) -> Result<Stmt, SyntaxError> {
-    it.expect(TokenKind::While)?;
+fn parse_while_statement(it: &mut Parser) -> Result<WithSpan<Stmt>, SyntaxError> {
+   let begin_span =  it.expect(TokenKind::While)?;
     it.expect(TokenKind::LeftParen)?;
     let condition = parse_expr(it)?;
     it.expect(TokenKind::RightParen)?;
     let statement = parse_statement(it)?;
-    Ok(Stmt::While(Box::new(condition), Box::new(statement)))
+    let span = Span::union(begin_span, &statement);
+    Ok(WithSpan::new(Stmt::While(Box::new(condition), Box::new(statement)), span))
 }
 
-fn parse_if_statement(it: &mut Parser) -> Result<Stmt, SyntaxError> {
-    it.expect(TokenKind::If)?;
+fn parse_if_statement(it: &mut Parser) -> Result<WithSpan<Stmt>, SyntaxError> {
+    let begin_token = it.expect(TokenKind::If)?;
     it.expect(TokenKind::LeftParen)?;
     let condition = parse_expr(it)?;
     it.expect(TokenKind::RightParen)?;
     let if_stmt = parse_statement(it)?;
-    let mut else_stmt: Option<Stmt> = None;
+    let mut end_span = if_stmt.span;
+    let mut else_stmt: Option<WithSpan<Stmt>> = None;
 
     if it.optionally(TokenKind::Else)? {
-        else_stmt = Some(parse_statement(it)?);
+        let stmt = parse_statement(it)?;
+        end_span = stmt.span;
+        else_stmt = Some(stmt);
     }
 
-    Ok(Stmt::If(
+    Ok(WithSpan::new(Stmt::If(
         Box::new(condition),
         Box::new(if_stmt),
         else_stmt.map(Box::new),
-    ))
+    ), Span::union_span(begin_token.span, end_span)))
 }
 
-fn parse_print_statement(it: &mut Parser) -> Result<Stmt, SyntaxError> {
-    it.expect(TokenKind::Print)?;
+fn parse_print_statement(it: &mut Parser) -> Result<WithSpan<Stmt>, SyntaxError> {
+    let begin_token = it.expect(TokenKind::Print)?;
     let expr = parse_expr(it)?;
-    it.expect(TokenKind::Semicolon)?;
-    Ok(Stmt::Print(Box::new(expr)))
+    let end_token = it.expect(TokenKind::Semicolon)?;
+    Ok( WithSpan::new(Stmt::Print(Box::new(expr)), Span::union(begin_token, end_token)) )
 }
 
-pub fn parse(it: &mut Parser) -> Result<Vec<Stmt>, SyntaxError> {
+pub fn parse(it: &mut Parser) -> Result<Vec<WithSpan<Stmt>>, SyntaxError> {
     parse_program(it)
 }
 
@@ -230,7 +247,7 @@ mod tests {
 
     use super::super::tokenizer::*;
     use super::*;
-    fn parse_str(data: &str) -> Result<Vec<Stmt>, SyntaxError> {
+    fn parse_str(data: &str) -> Result<Vec<WithSpan<Stmt>>, SyntaxError> {
         let tokens = tokenize_with_context(data);
         let mut parser = crate::parser::Parser::new(&tokens);
         parse(&mut parser)
@@ -243,13 +260,15 @@ mod tests {
     fn test_expr_stmt() {
         assert_eq!(
             parse_str("nil;"),
-            Ok(vec![Stmt::Expression(Box::new(ws(Expr::Nil, 0..3))),])
+            Ok(vec![
+                ws(Stmt::Expression(Box::new(ws(Expr::Nil, 0..3))), 0..4)
+            ])
         );
         assert_eq!(
             parse_str("nil;nil;"),
             Ok(vec![
-                Stmt::Expression(Box::new(ws(Expr::Nil, 0..3))),
-                Stmt::Expression(Box::new(ws(Expr::Nil, 4..7))),
+                ws(Stmt::Expression(Box::new(ws(Expr::Nil, 0..3))), 0..4),
+                ws(Stmt::Expression(Box::new(ws(Expr::Nil, 4..7))), 4..8),
             ])
         );
     }
@@ -258,7 +277,9 @@ mod tests {
     fn test_print_stmt() {
         assert_eq!(
             parse_str("print nil;"),
-            Ok(vec![Stmt::Print(Box::new(ws(Expr::Nil, 6..9))),])
+            Ok(vec![
+                ws(Stmt::Print(Box::new(ws(Expr::Nil, 6..9))), 0..10),
+            ])
         );
     }
 
@@ -270,26 +291,32 @@ mod tests {
     fn test_var_decl() {
         assert_eq!(
             parse_str("var beverage;"),
-            Ok(vec![Stmt::Var(make_span_string("beverage", 4), None),])
+            Ok(vec![
+                ws(Stmt::Var(make_span_string("beverage", 4), None), 0..13),
+            ])
         );
         assert_eq!(
             parse_str("var beverage = nil;"),
-            Ok(vec![Stmt::Var(
-                make_span_string("beverage", 4),
-                Some(Box::new(ws(Expr::Nil, 15..18)))
-            ),])
+            Ok(vec![
+                ws(Stmt::Var(
+                    make_span_string("beverage", 4),
+                    Some(Box::new(ws(Expr::Nil, 15..18)))
+                ), 0..19),
+            ])
         );
 
         unsafe {
             assert_eq!(
                 parse_str("var beverage = x = nil;"),
-                Ok(vec![Stmt::Var(
-                    make_span_string("beverage", 4),
-                    Some(Box::new(ws(Expr::Assign(
-                        WithSpan::new_unchecked("x".into(), 15, 16),
-                        Box::new(ws(Expr::Nil, 19..22))
-                    ), 15..22)))
-                ),])
+                Ok(vec![
+                    ws(Stmt::Var(
+                        make_span_string("beverage", 4),
+                        Some(Box::new(ws(Expr::Assign(
+                            WithSpan::new_unchecked("x".into(), 15, 16),
+                            Box::new(ws(Expr::Nil, 19..22))
+                        ), 15..22)))
+                    ), 0..23),
+                ])
             );
         }
 
@@ -300,37 +327,51 @@ mod tests {
     fn test_if_stmt() {
         assert_eq!(
             parse_str("if(nil) print nil;"),
-            Ok(vec![Stmt::If(
-                Box::new(ws(Expr::Nil, 3..6)),
-                Box::new(Stmt::Print(Box::new(ws(Expr::Nil, 14..17)))),
-                None,
-            ),])
+            Ok(vec![
+                ws(Stmt::If(
+                    Box::new(ws(Expr::Nil, 3..6)),
+                    Box::new(ws(Stmt::Print(Box::new(ws(Expr::Nil, 14..17))), 8..18)),
+                    None,
+                ), 0..18),
+            ])
         );
         assert_eq!(
             parse_str("if(nil) print nil; else print false;"),
-            Ok(vec![Stmt::If(
-                Box::new(ws(Expr::Nil, 3..6)),
-                Box::new(Stmt::Print(Box::new(ws(Expr::Nil, 14..17)))),
-                Some(Box::new(Stmt::Print(Box::new(ws(Expr::Boolean(false), 30..35))))),
-            ),])
+            Ok(vec![
+                ws(Stmt::If(
+                    Box::new(ws(Expr::Nil, 3..6)),
+                    Box::new(ws(Stmt::Print(Box::new(ws(Expr::Nil, 14..17))), 8..18)),
+                    Some(Box::new(
+                        ws(Stmt::Print(Box::new(ws(Expr::Boolean(false), 30..35))), 24..36),
+                    )),
+                ), 0..36),
+            ])
         );
     }
 
     #[test]
     fn test_block_stmt() {
-        assert_eq!(parse_str("{}"), Ok(vec![Stmt::Block(vec![])]));
+        assert_eq!(parse_str("{}"), Ok(vec![
+            ws(Stmt::Block(vec![]), 0..2),
+        ]));
         assert_eq!(
             parse_str("{nil;}"),
-            Ok(vec![Stmt::Block(vec![Stmt::Expression(Box::new(
-                ws(Expr::Nil, 1..4)
-            )),])])
+            Ok(vec![
+                ws(Stmt::Block(vec![
+                    ws(Stmt::Expression(Box::new(
+                        ws(Expr::Nil, 1..4)
+                    )), 1..5),
+                ]), 0..6),
+            ])
         );
         assert_eq!(
             parse_str("{nil;nil;}"),
-            Ok(vec![Stmt::Block(vec![
-                Stmt::Expression(Box::new(ws(Expr::Nil, 1..4))),
-                Stmt::Expression(Box::new(ws(Expr::Nil, 5..8))),
-            ])])
+            Ok(vec![
+                ws(Stmt::Block(vec![
+                    ws(Stmt::Expression(Box::new(ws(Expr::Nil, 1..4))), 1..5),
+                    ws(Stmt::Expression(Box::new(ws(Expr::Nil, 5..8))), 5..9),
+                ]), 0..10),
+            ])
         );
     }
 
@@ -338,35 +379,45 @@ mod tests {
     fn test_while_stmt() {
         assert_eq!(
             parse_str("while(nil)false;"),
-            Ok(vec![Stmt::While(
-                Box::new(ws(Expr::Nil, 6..9)),
-                Box::new(Stmt::Expression(Box::new(ws(Expr::Boolean(false), 10..15)))),
-            )])
+            Ok(vec![
+                ws(Stmt::While(
+                    Box::new(ws(Expr::Nil, 6..9)),
+                    Box::new(ws(Stmt::Expression(Box::new(ws(Expr::Boolean(false), 10..15))), 10..16)),
+                ), 0..16),
+            ])
         );
     }
 
     #[test]
     fn test_return_stmt() {
-        assert_eq!(parse_str("return;"), Ok(vec![Stmt::Return(None),]));
+        assert_eq!(parse_str("return;"), Ok(vec![
+            ws(Stmt::Return(None), 0..7),
+        ]));
         assert_eq!(
             parse_str("return nil;"),
-            Ok(vec![Stmt::Return(Some(Box::new(ws(Expr::Nil, 7..10))))])
+            Ok(vec![
+                ws(Stmt::Return(Some(Box::new(ws(Expr::Nil, 7..10)))), 0..11),
+            ])
         );
     }
 
     #[test]
     fn test_import_stmt() {
-        assert_eq!(parse_str("import \"mymodule\";"), Ok(vec![Stmt::Import(
-            ws("mymodule".into(), 7..17), 
-            None
-        )]));
+        assert_eq!(parse_str("import \"mymodule\";"), Ok(vec![
+            ws(Stmt::Import(
+                ws("mymodule".into(), 7..17), 
+                None
+            ), 0..18),
+        ]));
 
-        assert_eq!(parse_str("import \"mymodule\" for message;"), Ok(vec![Stmt::Import(
-            ws("mymodule".into(), 7..17), 
-            Some(vec![
-                ws("message".into(), 22..29),
-            ])
-        )]));
+        assert_eq!(parse_str("import \"mymodule\" for message;"), Ok(vec![
+            ws(Stmt::Import(
+                ws("mymodule".into(), 7..17), 
+                Some(vec![
+                    ws("message".into(), 22..29),
+                ])
+            ), 0..30),
+        ]));
     }
 
     #[test]
@@ -374,27 +425,33 @@ mod tests {
         unsafe {
             assert_eq!(
                 parse_str("fun test(){}"),
-                Ok(vec![Stmt::Function(
-                    WithSpan::new_unchecked("test".into(), 4, 8),
-                    vec![],
-                    vec![]
-                ),])
+                Ok(vec![
+                    ws(Stmt::Function(
+                        WithSpan::new_unchecked("test".into(), 4, 8),
+                        vec![],
+                        vec![]
+                    ), 0..12),
+                ])
             );
             assert_eq!(
                 parse_str("fun test(a){}"),
-                Ok(vec![Stmt::Function(
-                    WithSpan::new_unchecked("test".into(), 4, 8),
-                    vec![WithSpan::new_unchecked("a".into(), 9, 10)],
-                    vec![]
-                ),])
+                Ok(vec![
+                    ws(Stmt::Function(
+                        WithSpan::new_unchecked("test".into(), 4, 8),
+                        vec![WithSpan::new_unchecked("a".into(), 9, 10)],
+                        vec![]
+                    ), 0..13),
+                ])
             );
             assert_eq!(
                 parse_str("fun test(){nil;}"),
-                Ok(vec![Stmt::Function(
-                    WithSpan::new_unchecked("test".into(), 4, 8),
-                    vec![],
-                    vec![Stmt::Expression(Box::new(ws(Expr::Nil, 11..14))),]
-                ),])
+                Ok(vec![
+                    ws(Stmt::Function(
+                        WithSpan::new_unchecked("test".into(), 4, 8),
+                        vec![],
+                        vec![ws(Stmt::Expression(Box::new(ws(Expr::Nil, 11..14))), 11..15),]
+                    ), 0..16),
+                ])
             );
         }
     }
@@ -404,23 +461,27 @@ mod tests {
         unsafe {
             assert_eq!(
                 parse_str("class test{}"),
-                Ok(vec![Stmt::Class(
-                    WithSpan::new_unchecked("test".into(), 6, 10),
-                    None,
-                    vec![]
-                )])
+                Ok(vec![
+                    ws(Stmt::Class(
+                        WithSpan::new_unchecked("test".into(), 6, 10),
+                        None,
+                        vec![]
+                    ), 0..12),
+                ])
             );
             assert_eq!(
                 parse_str("class test{a(){}}"),
-                Ok(vec![Stmt::Class(
-                    WithSpan::new_unchecked("test".into(), 6, 10),
-                    None,
-                    vec![Stmt::Function(
-                        WithSpan::new_unchecked("a".into(), 11, 12),
-                        vec![],
-                        vec![]
-                    )]
-                )])
+                Ok(vec![
+                    ws(Stmt::Class(
+                        WithSpan::new_unchecked("test".into(), 6, 10),
+                        None,
+                        vec![ws(Stmt::Function(
+                            WithSpan::new_unchecked("a".into(), 11, 12),
+                            vec![],
+                            vec![]
+                        ), 11..16), ]
+                    ), 0..17),
+                ])
             );
         }
     }
@@ -430,11 +491,13 @@ mod tests {
         unsafe {
             assert_eq!(
                 parse_str("class BostonCream < Doughnut {}"),
-                Ok(vec![Stmt::Class(
-                    WithSpan::new_unchecked("BostonCream".into(), 6, 17),
-                    Some(WithSpan::new_unchecked("Doughnut".into(), 20, 28)),
-                    vec![]
-                )])
+                Ok(vec![
+                    ws(Stmt::Class(
+                        WithSpan::new_unchecked("BostonCream".into(), 6, 17),
+                        Some(WithSpan::new_unchecked("Doughnut".into(), 20, 28)),
+                        vec![]
+                    ), 0..31),
+                ])
             );
         }
         assert!(matches!(parse_str("class BostonCream < {}"), Err(SyntaxError::Expected(TokenKind::Identifier, WithSpan{span:_, value: Token::LeftBrace}))));
@@ -443,39 +506,42 @@ mod tests {
 
     #[test]
     fn test_for() {
-        fn block(what: Vec<Stmt>) -> Stmt {
-            Stmt::Block(what)
+        fn block(what: Vec<WithSpan<Stmt>>, r: Range<u32>) -> WithSpan<Stmt> {
+            ws(Stmt::Block(what), r)
         }
-        fn var_i_zero(start: u32) -> Stmt {
-            Stmt::Var(make_span_string("i", 8), Some(Box::new(ws(Expr::Number(0.), start..start+1))))
+        fn var_i_zero(start: u32, r: Range<u32>) -> WithSpan<Stmt> {
+            ws(Stmt::Var(make_span_string("i", 8), Some(Box::new(ws(Expr::Number(0.), start..start+1)))), r)
         }
         fn nil() -> Expr {
             Expr::Nil
         }
-        fn while_stmt(e: WithSpan<Expr>, s: Stmt) -> Stmt {
-            Stmt::While(Box::new(e), Box::new(s))
+        fn while_stmt(e: WithSpan<Expr>, s: WithSpan<Stmt>, r: Range<u32>) -> WithSpan<Stmt> {
+            ws(Stmt::While(Box::new(e), Box::new(s)), r)
         }
 
         assert_eq!(
             parse_str("for(;;){}"),
-            Ok(vec![while_stmt(ws(Expr::Boolean(true), 0..0), Stmt::Block(vec![])),])
+            Ok(vec![
+                while_stmt(ws(Expr::Boolean(true), 0..0), ws(Stmt::Block(vec![]), 7..9), 0..9),
+            ])
         );
         assert_eq!(
             parse_str("for(var i=0;;){}"),
             Ok(vec![block(vec![
-                var_i_zero(10),
-                while_stmt(ws(Expr::Boolean(true), 0..0), Stmt::Block(vec![])),
-            ])])
+                var_i_zero(10, 4..12),
+                while_stmt(ws(Expr::Boolean(true), 0..0), ws(Stmt::Block(vec![]), 14..16), 0..16),
+            ], 0..16)])
         );
         assert_eq!(
             parse_str("for(nil;nil;nil){}"),
             Ok(vec![block(vec![
-                Stmt::Expression(Box::new(ws(nil(), 4..7))),
+                ws(Stmt::Expression(Box::new(ws(nil(), 4..7))), 4..8),
                 while_stmt(
                     ws(Expr::Nil, 8..11),
-                    Stmt::Block(vec![Stmt::Block(vec![]), Stmt::Expression(Box::new(ws(nil(), 12..15))),])
+                    ws(Stmt::Block(vec![ws(Stmt::Block(vec![]), 16..18), ws(Stmt::Expression(Box::new(ws(nil(), 12..15))), 12..15), ]), 12..15),
+                    8..15,
                 ),
-            ])])
+            ], 4..15)])
         );
     }
 }

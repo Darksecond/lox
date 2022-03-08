@@ -11,8 +11,8 @@ pub fn compile_ast(compiler: &mut Compiler, ast: &Ast) {
     }
 }
 
-fn compile_stmt(compiler: &mut Compiler, stmt: &Stmt) {
-    match stmt {
+fn compile_stmt(compiler: &mut Compiler, stmt: &WithSpan<Stmt>) {
+    match &stmt.value {
         Stmt::Print(ref expr) => compile_print(compiler, expr),
         Stmt::Var(ref identifier, ref expr) => {
             compile_var_declaration(compiler, identifier.as_ref(), expr.as_ref())
@@ -86,7 +86,7 @@ fn compile_class(
     compiler: &mut Compiler,
     identifier: WithSpan<&String>,
     _extends: Option<&WithSpan<String>>,
-    stmts: &[Stmt],
+    stmts: &[WithSpan<Stmt>],
 ) {
     declare_variable(compiler, identifier.value);
     let constant = compiler.add_constant(Constant::Class(Class {
@@ -101,7 +101,7 @@ fn compile_class(
 
     // Methods
     for stmt in stmts {
-        match stmt {
+        match &stmt.value {
             Stmt::Function(identifier, args, block) => {
                 compile_method(compiler, identifier.as_ref(), args, block);
             },
@@ -116,7 +116,7 @@ fn compile_method(
     compiler: &mut Compiler,
     identifier: WithSpan<&String>,
     args: &Vec<WithSpan<Identifier>>,
-    block: &Vec<Stmt>,
+    block: &Vec<WithSpan<Stmt>>,
 ) {
 
     let context_type = if identifier.value == "init" { ContextType::Initializer } else { ContextType::Method };
@@ -145,7 +145,7 @@ fn compile_closure(
     compiler: &mut Compiler, 
     identifier: &WithSpan<&String>, 
     args: &Vec<WithSpan<Identifier>>, 
-    block: &Vec<Stmt>,
+    block: &Vec<WithSpan<Stmt>>,
     context_type: ContextType
 ) {
     let (chunk_index, upvalues) =
@@ -182,7 +182,7 @@ fn compile_function(
     compiler: &mut Compiler,
     identifier: &WithSpan<&String>,
     args: &Vec<WithSpan<Identifier>>,
-    block: &Vec<Stmt>,
+    block: &Vec<WithSpan<Stmt>>,
 ) {
     declare_variable(compiler, identifier.value);
     if compiler.is_scoped() {
@@ -197,7 +197,7 @@ fn compile_function(
 fn compile_while(
     compiler: &mut Compiler,
     condition: &WithSpan<Expr>,
-    body: &Stmt,
+    body: &WithSpan<Stmt>,
 ) {
     let loop_start = compiler.instruction_index();
     compile_expr(compiler, condition);
@@ -210,10 +210,10 @@ fn compile_while(
     compiler.add_instruction(Instruction::Pop);
 }
 
-fn compile_if<S: AsRef<Stmt>>(
+fn compile_if<S: AsRef<WithSpan<Stmt>>>(
     compiler: &mut Compiler,
     condition: &WithSpan<Expr>,
-    then_stmt: &Stmt,
+    then_stmt: &WithSpan<Stmt>,
     else_stmt: Option<S>,
 ) {
     compile_expr(compiler, condition);

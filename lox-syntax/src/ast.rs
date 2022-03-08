@@ -52,17 +52,17 @@ pub enum Stmt {
     Expression(Box<WithSpan<Expr>>),
     Print(Box<WithSpan<Expr>>),
     Var(WithSpan<Identifier>, Option<Box<WithSpan<Expr>>>),
-    If(Box<WithSpan<Expr>>, Box<Stmt>, Option<Box<Stmt>>),
-    Block(Vec<Stmt>),
-    While(Box<WithSpan<Expr>>, Box<Stmt>),
+    If(Box<WithSpan<Expr>>, Box<WithSpan<Stmt>>, Option<Box<WithSpan<Stmt>>>),
+    Block(Vec<WithSpan<Stmt>>),
+    While(Box<WithSpan<Expr>>, Box<WithSpan<Stmt>>),
     Return(Option<Box<WithSpan<Expr>>>),
-    Function(WithSpan<Identifier>, Vec<WithSpan<Identifier>>, Vec<Stmt>),
+    Function(WithSpan<Identifier>, Vec<WithSpan<Identifier>>, Vec<WithSpan<Stmt>>),
     Class(
         WithSpan<Identifier>,
         Option<WithSpan<Identifier>>,
-        Vec<Stmt>,
+        Vec<WithSpan<Stmt>>,
     ),
     Import(WithSpan<String>, Option<Vec<WithSpan<String>>>),
 }
 
-pub type Ast = Vec<Stmt>;
+pub type Ast = Vec<WithSpan<Stmt>>;

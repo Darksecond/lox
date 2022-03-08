@@ -1,3 +1,4 @@
+
 #[derive(Debug, Copy, Clone, PartialEq, PartialOrd, Eq, Ord, Default)]
 pub struct BytePos(u32);
 
@@ -18,6 +19,13 @@ impl Span {
         Span {
             start: BytePos(start),
             end: BytePos(end),
+        }
+    }
+
+    pub const fn empty() -> Self {
+        Span {
+            start: BytePos(0),
+            end: BytePos(0),
         }
     }
 
