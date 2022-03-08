@@ -2,7 +2,7 @@
 name = "lox-vm"
 version = "0.1.0"
 authors = ["Tim Peters <tim@darksecond.nl>"]
-edition = "2018"
+edition = "2021"
 
 [dependencies]
 lox-bytecode = { path = "../lox-bytecode" }
