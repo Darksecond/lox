@@ -32,6 +32,12 @@ impl Span {
     pub fn union_span(a: Self, b: Self) -> Self {
         use std::cmp;
 
+        if a == Span::empty() {
+            return b;
+        } else if b == Span::empty() {
+            return a;
+        }
+
         Span {
             start: cmp::min(a.start, b.start),
             end: cmp::max(a.end, b.end),

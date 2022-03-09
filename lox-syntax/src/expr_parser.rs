@@ -71,7 +71,7 @@ fn parse_infix(it: &mut Parser, left: WithSpan<Expr>) -> Result<WithSpan<Expr>, 
         TokenKind::Dot => parse_get(it, left),
         _ => {
             it.error(&format!("Unexpected {}", it.peek_token().value), it.peek_token().span);
-            Err(())
+            Ok(WithSpan::empty(Expr::Error))
         },
     }
 }
@@ -90,7 +90,7 @@ fn parse_prefix(it: &mut Parser) -> Result<WithSpan<Expr>, ()> {
         TokenKind::LeftParen => parse_grouping(it),
         _ => {
             it.error(&format!("Unexpected {}", it.peek_token().value), it.peek_token().span);
-            Err(())
+            Ok(WithSpan::empty(Expr::Error))
         },
     }
 }

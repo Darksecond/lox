@@ -41,6 +41,7 @@ fn compile_stmt(compiler: &mut Compiler, stmt: &WithSpan<Stmt>) {
             compile_class(compiler, identifier.as_ref(), extends.as_ref(), stmts)
         }
         Stmt::Import(path, identifiers) => compile_import(compiler, path, identifiers.as_ref()),
+        Stmt::Error => (),
     }
 }
 
