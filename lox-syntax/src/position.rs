@@ -94,3 +94,9 @@ impl<T> WithSpan<T> {
         }
     }
 }
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Diagnostic {
+    pub span: Span,
+    pub message: String,
+}

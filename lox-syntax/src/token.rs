@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 #[derive(PartialEq, Debug, Clone)]
 pub enum Token {
     // Single-character tokens.
@@ -108,6 +110,13 @@ pub enum TokenKind {
     Unknown,
 }
 
+impl Display for Token {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let kind: TokenKind = self.into();
+        write!(f, "{}", kind)
+    }
+}
+
 impl From<&crate::position::WithSpan<Token>> for TokenKind {
     fn from(token_with_span: &crate::position::WithSpan<Token>) -> Self {
         TokenKind::from(&token_with_span.value)
@@ -160,5 +169,54 @@ impl From<&Token> for TokenKind {
             Token::UnterminatedString => TokenKind::UnterminatedString,
             Token::Unknown(_) => TokenKind::Unknown,
         }
+    }
+}
+
+impl Display for TokenKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", match self {
+            TokenKind::LeftParen => "')'",
+            TokenKind::RightParen => "')'",
+            TokenKind::LeftBrace => "'{'",
+            TokenKind::RightBrace => "'}'",
+            TokenKind::Comma => "','",
+            TokenKind::Dot => "'.'",
+            TokenKind::Minus => "'-'",
+            TokenKind::Plus => "'+'",
+            TokenKind::Semicolon => "';'",
+            TokenKind::Slash => "'/'",
+            TokenKind::Star => "'*'",
+            TokenKind::Bang => "'!'",
+            TokenKind::BangEqual => "'!='",
+            TokenKind::Equal => "'='",
+            TokenKind::EqualEqual => "'=='",
+            TokenKind::Greater => "'>'",
+            TokenKind::GreaterEqual => "'>='",
+            TokenKind::Less => "'<'",
+            TokenKind::LessEqual => "'<='",
+            TokenKind::Identifier => "identifier",
+            TokenKind::String => "string",
+            TokenKind::Number => "number",
+            TokenKind::And => "'and'",
+            TokenKind::Class => "'class'",
+            TokenKind::Else => "'else'",
+            TokenKind::False => "'false'",
+            TokenKind::Fun => "'fun'",
+            TokenKind::For => "'for'",
+            TokenKind::If => "'if'",
+            TokenKind::Nil => "nil",
+            TokenKind::Or => "'or'",
+            TokenKind::Print => "'print'",
+            TokenKind::Return => "'return'",
+            TokenKind::Super => "'super'",
+            TokenKind::This => "'this'",
+            TokenKind::True => "'true'",
+            TokenKind::Var => "'var'",
+            TokenKind::While => "'while'",
+            TokenKind::Import => "'import'",
+            TokenKind::Eof => "<EOF>",
+            TokenKind::UnterminatedString => "<Unterminated String>",
+            TokenKind::Unknown => "<Unknown>",
+        })
     }
 }

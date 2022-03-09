@@ -1,9 +1,9 @@
 use crate::bytecode::*;
 use lox_syntax::ast::*;
-use lox_syntax::SyntaxError;
+use lox_syntax::position::Diagnostic;
 use lox_syntax::position::WithSpan;
 
-fn parse_stmt(data: &str) -> Result<Vec<WithSpan<Stmt>>, SyntaxError> {
+fn parse_stmt(data: &str) -> Result<Vec<WithSpan<Stmt>>, Vec<Diagnostic>> {
     lox_syntax::parse(data)
 }
 

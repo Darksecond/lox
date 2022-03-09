@@ -9,24 +9,16 @@ mod stmt_parser;
 mod token;
 mod tokenizer;
 
-use ast::{Ast, Expr};
-use position::WithSpan;
-use token::{Token, TokenKind};
+use ast::Ast;
+use position::Diagnostic;
 
-#[derive(PartialEq, Debug, Clone)]
-pub enum SyntaxError {
-    Expected(TokenKind, WithSpan<Token>),
-    Unexpected(WithSpan<Token>),
-    ExpectedUnaryOperator(WithSpan<Token>),
-    ExpectedBinaryOperator(WithSpan<Token>),
-    ExpectedPrimary(WithSpan<Token>),
-    InvalidLeftValue(WithSpan<Expr>),
-}
-
-pub fn parse(code: &str) -> Result<Ast, SyntaxError> {
+pub fn parse(code: &str) -> Result<Ast, Vec<Diagnostic>> {
     use stmt_parser::parse;
     use tokenizer::tokenize_with_context;
     let tokens = tokenize_with_context(code);
     let mut parser = crate::parser::Parser::new(&tokens);
-    parse(&mut parser)
+    match parse(&mut parser) {
+        Ok(ast) => Ok(ast),
+        Err(_) => Err(parser.diagnostics().to_vec()),
+    }
 }

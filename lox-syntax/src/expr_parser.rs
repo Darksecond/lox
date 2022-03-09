@@ -3,7 +3,6 @@ use super::token::*;
 use crate::common::*;
 use crate::parser::Parser;
 use crate::position::{WithSpan, Span};
-use crate::SyntaxError;
 
 #[allow(dead_code)]
 #[derive(PartialEq, PartialOrd, Copy, Clone)]
@@ -42,7 +41,7 @@ impl<'a> From<TokenKind> for Precedence {
     }
 }
 
-fn parse_expr(it: &mut Parser, precedence: Precedence) -> Result<WithSpan<Expr>, SyntaxError> {
+fn parse_expr(it: &mut Parser, precedence: Precedence) -> Result<WithSpan<Expr>, ()> {
     let mut expr = parse_prefix(it)?;
     while !it.is_eof() {
         let next_precedence = Precedence::from(it.peek());
@@ -54,7 +53,7 @@ fn parse_expr(it: &mut Parser, precedence: Precedence) -> Result<WithSpan<Expr>,
     Ok(expr)
 }
 
-fn parse_infix(it: &mut Parser, left: WithSpan<Expr>) -> Result<WithSpan<Expr>, SyntaxError> {
+fn parse_infix(it: &mut Parser, left: WithSpan<Expr>) -> Result<WithSpan<Expr>, ()> {
     match it.peek() {
         TokenKind::BangEqual
         | TokenKind::EqualEqual
@@ -70,11 +69,14 @@ fn parse_infix(it: &mut Parser, left: WithSpan<Expr>) -> Result<WithSpan<Expr>, 
         TokenKind::Equal => parse_assign(it, left),
         TokenKind::LeftParen => parse_call(it, left),
         TokenKind::Dot => parse_get(it, left),
-        _ => Err(SyntaxError::Unexpected(it.peek_token().clone())),
+        _ => {
+            it.error(&format!("Unexpected {}", it.peek_token().value), it.peek_token().span);
+            Err(())
+        },
     }
 }
 
-fn parse_prefix(it: &mut Parser) -> Result<WithSpan<Expr>, SyntaxError> {
+fn parse_prefix(it: &mut Parser) -> Result<WithSpan<Expr>, ()> {
     match it.peek() {
         TokenKind::Number
         | TokenKind::Nil
@@ -86,11 +88,14 @@ fn parse_prefix(it: &mut Parser) -> Result<WithSpan<Expr>, SyntaxError> {
         | TokenKind::String => parse_primary(it),
         TokenKind::Bang | TokenKind::Minus => parse_unary(it),
         TokenKind::LeftParen => parse_grouping(it),
-        _ => Err(SyntaxError::Unexpected(it.peek_token().clone())),
+        _ => {
+            it.error(&format!("Unexpected {}", it.peek_token().value), it.peek_token().span);
+            Err(())
+        },
     }
 }
 
-fn parse_get(it: &mut Parser, left: WithSpan<Expr>) -> Result<WithSpan<Expr>, SyntaxError> {
+fn parse_get(it: &mut Parser, left: WithSpan<Expr>) -> Result<WithSpan<Expr>, ()> {
     it.expect(TokenKind::Dot)?;
     let tc = it.advance();
     match &tc.value {
@@ -98,11 +103,14 @@ fn parse_get(it: &mut Parser, left: WithSpan<Expr>) -> Result<WithSpan<Expr>, Sy
             let span = Span::union(&left, tc);
             Ok(WithSpan::new(Expr::Get(Box::new(left), WithSpan::new(i.clone(), tc.span)), span))
         },
-        _ => Err(SyntaxError::Expected(TokenKind::Identifier, tc.clone())),
+        _ => {
+            it.error(&format!("Expected identifier got {}", tc.value), tc.span);
+            Err(())
+        },
     }
 }
 
-fn parse_call(it: &mut Parser, left: WithSpan<Expr>) -> Result<WithSpan<Expr>, SyntaxError> {
+fn parse_call(it: &mut Parser, left: WithSpan<Expr>) -> Result<WithSpan<Expr>, ()> {
     it.expect(TokenKind::LeftParen)?;
     let args = parse_arguments(it)?;
     let most_right = it.expect(TokenKind::RightParen)?;
@@ -110,7 +118,7 @@ fn parse_call(it: &mut Parser, left: WithSpan<Expr>) -> Result<WithSpan<Expr>, S
     Ok(WithSpan::new(Expr::Call(Box::new(left), args), span))
 }
 
-fn parse_arguments(it: &mut Parser) -> Result<Vec<WithSpan<Expr>>, SyntaxError> {
+fn parse_arguments(it: &mut Parser) -> Result<Vec<WithSpan<Expr>>, ()> {
     let mut args = Vec::new();
     if !it.check(TokenKind::RightParen) {
         args.push(parse_expr(it, Precedence::None)?);
@@ -122,18 +130,21 @@ fn parse_arguments(it: &mut Parser) -> Result<Vec<WithSpan<Expr>>, SyntaxError> 
     Ok(args)
 }
 
-fn parse_assign(it: &mut Parser, left: WithSpan<Expr>) -> Result<WithSpan<Expr>, SyntaxError> {
+fn parse_assign(it: &mut Parser, left: WithSpan<Expr>) -> Result<WithSpan<Expr>, ()> {
     it.expect(TokenKind::Equal)?;
     let right = parse_expr(it, Precedence::None)?;
     let span = Span::union(&left, &right);
     match &left.value {
         Expr::Variable(i) => Ok(WithSpan::new(Expr::Assign(i.clone(), Box::new(right)), span)),
         Expr::Get(l, i) => Ok(WithSpan::new(Expr::Set(l.clone(), i.clone(), Box::new(right)), span)),
-        e => Err(SyntaxError::InvalidLeftValue(WithSpan::empty(e.clone()))), //TODO
+        _ => {
+            it.error(&format!("Invalid left value"), left.span);
+            Err(())
+        },
     }
 }
 
-fn parse_logical(it: &mut Parser, left: WithSpan<Expr>) -> Result<WithSpan<Expr>, SyntaxError> {
+fn parse_logical(it: &mut Parser, left: WithSpan<Expr>) -> Result<WithSpan<Expr>, ()> {
     let precedence = Precedence::from(it.peek());
     let operator = parse_logical_op(it)?;
     let right = parse_expr(it, precedence)?;
@@ -141,7 +152,7 @@ fn parse_logical(it: &mut Parser, left: WithSpan<Expr>) -> Result<WithSpan<Expr>
     Ok(WithSpan::new(Expr::Logical(Box::new(left), operator, Box::new(right)), span))
 }
 
-fn parse_grouping(it: &mut Parser) -> Result<WithSpan<Expr>, SyntaxError> {
+fn parse_grouping(it: &mut Parser) -> Result<WithSpan<Expr>, ()> {
     let left_paren = it.expect(TokenKind::LeftParen)?;
     let expr = parse_expr(it, Precedence::None)?;
     let right_paren = it.expect(TokenKind::RightParen)?;
@@ -150,7 +161,7 @@ fn parse_grouping(it: &mut Parser) -> Result<WithSpan<Expr>, SyntaxError> {
     Ok(WithSpan::new(Expr::Grouping(Box::new(expr)), span))
 }
 
-fn parse_binary(it: &mut Parser, left: WithSpan<Expr>) -> Result<WithSpan<Expr>, SyntaxError> {
+fn parse_binary(it: &mut Parser, left: WithSpan<Expr>) -> Result<WithSpan<Expr>, ()> {
     let precedence = Precedence::from(it.peek());
     let operator = parse_binary_op(it)?;
     let right = parse_expr(it, precedence)?;
@@ -158,34 +169,40 @@ fn parse_binary(it: &mut Parser, left: WithSpan<Expr>) -> Result<WithSpan<Expr>,
     Ok(WithSpan::new(Expr::Binary(Box::new(left), operator, Box::new(right)), span))
 }
 
-fn parse_unary(it: &mut Parser) -> Result<WithSpan<Expr>, SyntaxError> {
+fn parse_unary(it: &mut Parser) -> Result<WithSpan<Expr>, ()> {
     let operator = parse_unary_op(it)?;
     let right = parse_expr(it, Precedence::Unary)?;
     let span = Span::union(&operator, &right);
     Ok(WithSpan::new(Expr::Unary(operator, Box::new(right)), span))
 }
 
-fn parse_logical_op(it: &mut Parser) -> Result<WithSpan<LogicalOperator>, SyntaxError> {
+fn parse_logical_op(it: &mut Parser) -> Result<WithSpan<LogicalOperator>, ()> {
     let tc = it.advance();
     let operator = match &tc.value {
         &Token::And => LogicalOperator::And,
         &Token::Or => LogicalOperator::Or,
-        _ => return Err(SyntaxError::ExpectedUnaryOperator(tc.clone())),
+        _ => {
+            it.error(&format!("Expected logical operator got {}", tc.value), tc.span);
+            return Err(())
+        },
     };
 
     Ok(WithSpan::new(operator, tc.span))
 }
 
-fn parse_unary_op(it: &mut Parser) -> Result<WithSpan<UnaryOperator>, SyntaxError> {
+fn parse_unary_op(it: &mut Parser) -> Result<WithSpan<UnaryOperator>, ()> {
     let tc = it.advance();
     match &tc.value {
         &Token::Bang => Ok(WithSpan::new(UnaryOperator::Bang, tc.span)),
         &Token::Minus => Ok(WithSpan::new(UnaryOperator::Minus, tc.span)),
-        _ => Err(SyntaxError::ExpectedUnaryOperator(tc.clone())),
+        _ => {
+            it.error(&format!("Expected unary operator got {}", tc.value), tc.span);
+            Err(())
+        }
     }
 }
 
-fn parse_binary_op(it: &mut Parser) -> Result<WithSpan<BinaryOperator>, SyntaxError> {
+fn parse_binary_op(it: &mut Parser) -> Result<WithSpan<BinaryOperator>, ()> {
     let tc = it.advance();
     let operator = match &tc.value {
         &Token::BangEqual => BinaryOperator::BangEqual,
@@ -198,13 +215,16 @@ fn parse_binary_op(it: &mut Parser) -> Result<WithSpan<BinaryOperator>, SyntaxEr
         &Token::Minus => BinaryOperator::Minus,
         &Token::Star => BinaryOperator::Star,
         &Token::Slash => BinaryOperator::Slash,
-        _ => return Err(SyntaxError::ExpectedBinaryOperator(tc.clone())),
+        _ => {
+            it.error(&format!("Expected binary operator got {}", tc.value), tc.span);
+            return Err(())
+        },
     };
 
     Ok(WithSpan::new(operator, tc.span))
 }
 
-fn parse_primary(it: &mut Parser) -> Result<WithSpan<Expr>, SyntaxError> {
+fn parse_primary(it: &mut Parser) -> Result<WithSpan<Expr>, ()> {
     let tc = it.advance();
     match &tc.value {
         &Token::Nil => Ok(WithSpan::new(Expr::Nil, tc.span)),
@@ -215,30 +235,47 @@ fn parse_primary(it: &mut Parser) -> Result<WithSpan<Expr>, SyntaxError> {
         &Token::String(ref s) => Ok(WithSpan::new(Expr::String(s.clone()), tc.span)),
         &Token::Identifier(ref s) => Ok(WithSpan::new(Expr::Variable(WithSpan::new(s.clone(), tc.span)), tc.span)),
         &Token::Super => parse_super(it, &tc),
-        _ => Err(SyntaxError::ExpectedPrimary(tc.clone())),
+        _ => {
+            it.error(&format!("Expected primary got {}", tc.value), tc.span);
+            Err(())
+        },
     }
 }
 
-fn parse_super(it: &mut Parser, keyword: &WithSpan<Token>) -> Result<WithSpan<Expr>, SyntaxError> {
+fn parse_super(it: &mut Parser, keyword: &WithSpan<Token>) -> Result<WithSpan<Expr>, ()> {
     it.expect(TokenKind::Dot)?;
     let name = expect_identifier(it)?;
     let span = Span::union(keyword, &name);
     Ok(WithSpan::new(Expr::Super(name), span))
 }
 
-pub fn parse(it: &mut Parser) -> Result<WithSpan<Expr>, SyntaxError> {
+pub fn parse(it: &mut Parser) -> Result<WithSpan<Expr>, ()> {
     parse_expr(it, Precedence::None)
 }
 
 #[cfg(test)]
 mod tests {
+    use crate::position::Diagnostic;
+
     use super::*;
-    fn parse_str(data: &str) -> Result<WithSpan<Expr>, SyntaxError> {
+    fn parse_str(data: &str) -> Result<WithSpan<Expr>, Vec<Diagnostic>> {
         use super::super::tokenizer::*;
 
         let tokens = tokenize_with_context(data);
         let mut parser = crate::parser::Parser::new(&tokens);
-        parse(&mut parser)
+        match parse(&mut parser) {
+            Ok(e) => Ok(e),
+            Err(_) => Err(parser.diagnostics().to_vec()),
+        }
+    }
+
+    fn assert_errs(data: &str, errs: &[&str]) {
+        let x = parse_str(data);
+        assert!(x.is_err());
+        let diagnostics = x.unwrap_err();
+        for diag in diagnostics {
+            assert!(errs.contains(&&diag.message.as_str()), "{}", diag.message);
+        }
     }
 
     mod make {
@@ -432,7 +469,9 @@ mod tests {
 
         // Test infinite loops and extra tokens
         assert2("1+2 3", simple_binary(BinaryOperator::Plus, 1), 0..3);
-        assert!(matches!(parse_str("1+"), Err(SyntaxError::Unexpected(_))));
+
+        // assert!(matches!(parse_str("1+"), Err(SyntaxError::Unexpected(_))));
+        assert_errs("1+", &["Unexpected <EOF>"]);
     }
 
     #[test]
@@ -450,8 +489,8 @@ mod tests {
         ), 0..5);
         assert("(1+2)", expr);
 
-        assert!(matches!(parse_str("(1"), Err(SyntaxError::Expected(TokenKind::RightParen, _))));
-        assert!(matches!(parse_str("(1}"), Err(SyntaxError::Expected(TokenKind::RightParen, WithSpan{span: _, value: Token::RightBrace}))));
+        assert_errs("(1", &["Expected ')' got <EOF>"]);
+        assert_errs("(1}", &["Expected ')' got '}'"]);
     }
 
     #[test]
@@ -509,8 +548,8 @@ mod tests {
         let expr = wsa(wsi("a", 0..1), ws(simple_binary2(BinaryOperator::Plus, 1, 2), 2..5));
         assert("a=1+2", expr);
 
-        assert!(matches!(parse_str("a="), Err(SyntaxError::Unexpected(_))));
-        assert!(matches!(parse_str("3=3"), Err(SyntaxError::InvalidLeftValue(WithSpan{span: _, value: Expr::Number(_)}))));
+        assert_errs("a=", &["Unexpected <EOF>"]);
+        assert_errs("3=3", &["Invalid left value"]);
     }
 
     #[test]
@@ -565,7 +604,7 @@ mod tests {
         let expr = wsbo(left, ws(BinaryOperator::Plus, 3..4), right);
         assert("a()+b()", expr);
 
-        assert!(matches!(parse_str("a(3,)"), Err(SyntaxError::Unexpected(WithSpan{span: _, value: Token::RightParen}))));
+        assert_errs("a(3,)", &["Unexpected ')'"]);
     }
 
     #[test]

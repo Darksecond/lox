@@ -1,16 +1,16 @@
 mod bettercompiler;
 
 use lox_bytecode::bytecode;
+use lox_syntax::position::Diagnostic;
 
 //TODO Better errors
 
 pub use crate::bettercompiler::CompilerError;
-pub use lox_syntax::SyntaxError;
 
 #[derive(Debug)]
 pub enum Error {
     CompileError(Vec<CompilerError>),
-    ParseError(SyntaxError),
+    ParseError(Vec<Diagnostic>),
 }
 
 use bytecode::Module;
