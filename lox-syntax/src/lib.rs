@@ -18,7 +18,8 @@ pub fn parse(code: &str) -> Result<Ast, Vec<Diagnostic>> {
     let tokens = tokenize_with_context(code);
     let mut parser = crate::parser::Parser::new(&tokens);
     match parse(&mut parser) {
-        Ok(ast) => Ok(ast),
+        Ok(ast) if parser.diagnostics().is_empty() => Ok(ast),
+        Ok(_) => Err(parser.diagnostics().to_vec()),
         Err(_) => Err(parser.diagnostics().to_vec()),
     }
 }

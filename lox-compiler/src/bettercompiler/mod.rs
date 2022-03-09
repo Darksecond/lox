@@ -8,21 +8,10 @@ mod tests;
 use crate::bytecode::*;
 use compiler::{Compiler, ContextType};
 use lox_syntax::ast::*;
-use lox_syntax::position::WithSpan;
+use lox_syntax::position::Diagnostic;
 use statements::compile_ast;
 
-#[derive(Debug)]
-pub enum CompilerError {
-    LocalAlreadyDefined,
-    LocalNotInitialized,
-    InvalidThis,
-    InvalidReturn,
-
-    Multiple(Vec<CompilerError>),
-    WithSpan(WithSpan<Box<CompilerError>>),
-}
-
-pub fn compile(ast: &Ast) -> Result<Module, Vec<CompilerError>> {
+pub fn compile(ast: &Ast) -> Result<Module, Vec<Diagnostic>> {
     let mut compiler = Compiler::new();
 
     let _ = compiler.with_context(ContextType::TopLevel, |compiler| {

@@ -1,6 +1,5 @@
 use super::compiler::Compiler;
 use super::compiler::ContextType;
-use super::CompilerError;
 use crate::bytecode::*;
 use lox_syntax::ast::*;
 use lox_syntax::position::WithSpan;
@@ -28,11 +27,11 @@ fn compile_stmt(compiler: &mut Compiler, stmt: &WithSpan<Stmt>) {
         }
         Stmt::Return(ref expr) => {
             if compiler.context_type() == ContextType::Initializer && expr.is_some() { // Do Allow for early returns from init
-                compiler.add_error(CompilerError::InvalidReturn);
+                compiler.add_error("Invalid return", stmt.span);
                 return;
             }
             if compiler.context_type() == ContextType::TopLevel && expr.is_some() {
-                compiler.add_error(CompilerError::InvalidReturn);
+                compiler.add_error("Invalid return", stmt.span);
                 return;
             }
             compile_return(compiler, expr.as_ref())
@@ -44,14 +43,14 @@ fn compile_stmt(compiler: &mut Compiler, stmt: &WithSpan<Stmt>) {
     }
 }
 
-fn declare_variable(compiler: &mut Compiler, identifier: &str) {
+fn declare_variable<I: AsRef<str>>(compiler: &mut Compiler, identifier: WithSpan<I>) {
     if compiler.is_scoped() {
-        if compiler.has_local_in_current_scope(identifier) {
-            compiler.add_error(CompilerError::LocalAlreadyDefined);
+        if compiler.has_local_in_current_scope(identifier.value.as_ref()) {
+            compiler.add_error("Local already defined", identifier.span);
             return;
         }
 
-        compiler.add_local(identifier);
+        compiler.add_local(identifier.value.as_ref());
     }
 }
 
@@ -70,7 +69,7 @@ fn compile_import(compiler: &mut Compiler, path: &WithSpan<String>, identifiers:
 
     if let Some(identifiers) = identifiers {
         for identifier in identifiers {
-            declare_variable(compiler, &identifier.value);
+            declare_variable(compiler, identifier.as_ref());
             
             let constant = compiler.add_constant(identifier.value.as_str());
             compiler.add_instruction(Instruction::ImportGlobal(constant));
@@ -88,7 +87,7 @@ fn compile_class(
     _extends: Option<&WithSpan<String>>,
     stmts: &[WithSpan<Stmt>],
 ) {
-    declare_variable(compiler, identifier.value);
+    declare_variable(compiler, identifier.as_ref());
     let constant = compiler.add_constant(Constant::Class(Class {
         name: identifier.value.to_string(),
     }));
@@ -151,7 +150,7 @@ fn compile_closure(
     let (chunk_index, upvalues) =
     compiler.with_scoped_context(context_type, |compiler| {
         for arg in args {
-            declare_variable(compiler, &arg.value);
+            declare_variable(compiler, arg.as_ref());
             define_variable(compiler, &arg.value);
         }
 
@@ -184,7 +183,7 @@ fn compile_function(
     args: &Vec<WithSpan<Identifier>>,
     block: &Vec<WithSpan<Stmt>>,
 ) {
-    declare_variable(compiler, identifier.value);
+    declare_variable(compiler, identifier.as_ref());
     if compiler.is_scoped() {
         compiler.mark_local_initialized();
     }
@@ -247,7 +246,7 @@ fn compile_var_declaration<T: AsRef<WithSpan<Expr>>, I: AsRef<str>>(
     identifier: WithSpan<I>,
     expr: Option<T>,
 ) {
-    declare_variable(compiler, identifier.value.as_ref());
+    declare_variable(compiler, identifier.as_ref());
 
     //expr
     if let Some(expr) = expr {
@@ -287,18 +286,18 @@ fn compile_expr(compiler: &mut Compiler, expr: &WithSpan<Expr>) {
             compile_set(compiler, expr, identifier.as_ref(), value)
         }
         Expr::Get(ref expr, ref identifier) => compile_get(compiler, expr, identifier.as_ref()),
-        Expr::This => compile_this(compiler),
+        Expr::This => compile_this(compiler, expr),
         ref expr => unimplemented!("{:?}", expr),
     }
 }
 
-fn compile_this(compiler: &mut Compiler) {
+fn compile_this(compiler: &mut Compiler, expr: &WithSpan<Expr>) {
     if !compiler.in_method_or_initializer_nested() {
-        compiler.add_error(CompilerError::InvalidThis);
+        compiler.add_error("Invalid 'this'", expr.span);
         return;
     }
 
-    compile_variable(compiler, WithSpan::empty(&"this".to_string()))
+    compile_variable(compiler, WithSpan::new(&"this".to_string(), expr.span))
 }
 
 fn compile_get(

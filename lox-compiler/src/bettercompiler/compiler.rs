@@ -1,5 +1,7 @@
+use lox_syntax::position::Diagnostic;
+use lox_syntax::position::Span;
+
 use super::locals::*;
-use super::CompilerError;
 use crate::bytecode::*;
 
 #[derive(Copy, Clone, PartialEq)]
@@ -20,7 +22,7 @@ struct CompilerContext {
 pub struct Compiler {
     module: Module,
     contexts: Vec<CompilerContext>,
-    errors: Vec<CompilerError>,
+    errors: Vec<Diagnostic>,
 }
 
 impl CompilerContext {
@@ -46,10 +48,10 @@ impl CompilerContext {
         self.upvalues.len() - 1
     }
 
-    fn resolve_local(&self, name: &str) -> Result<Option<StackIndex>, CompilerError> {
+    fn resolve_local(&self, name: &str) -> Result<Option<StackIndex>, ()> {
         if let Some(local) = self.locals.get(name) {
             if !local.initialized() {
-                Err(CompilerError::LocalNotInitialized)
+                Err(())
             } else {
                 Ok(Some(local.slot()))
             }
@@ -113,7 +115,7 @@ impl Compiler {
         self.module
     }
 
-    pub fn into_errors(self) -> Vec<CompilerError> {
+    pub fn into_errors(self) -> Vec<Diagnostic> {
         self.errors
     }
 
@@ -121,8 +123,11 @@ impl Compiler {
         self.current_context().context_type
     }
 
-    pub fn add_error(&mut self, error: CompilerError) {
-        self.errors.push(error);
+    pub fn add_error(&mut self, message: &str, span: Span) {
+        self.errors.push(Diagnostic {
+            message: message.to_string(),
+            span,
+        });
     }
 
     pub fn has_errors(&self) -> bool {
@@ -226,8 +231,8 @@ impl Compiler {
 
     pub fn resolve_local(&mut self, name: &str) -> Option<StackIndex> {
         match self.current_context().resolve_local(name) {
-            Err(error) => {
-                self.add_error(error);
+            Err(_) => {
+                self.add_error("Local not initialized", Span::empty()); //TODO
                 None
             },
             Ok(local) => local,
@@ -242,8 +247,8 @@ impl Compiler {
         for i in (0..(self.contexts.len() - 1)).rev() {
             // Skip the current context
             match self.contexts[i].resolve_local(name) {
-                Err(error) => {
-                    self.add_error(error);
+                Err(_) => {
+                    self.add_error("Local not initialized", Span::empty()); //TODO
                     return None;
                 },
                 Ok(Some(local)) => {
