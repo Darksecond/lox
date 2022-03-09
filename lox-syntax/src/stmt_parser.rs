@@ -181,9 +181,14 @@ fn parse_return_statement(it: &mut Parser) -> Result<WithSpan<Stmt>, ()> {
 
 fn parse_expr_statement(it: &mut Parser) -> Result<WithSpan<Stmt>, ()> {
     let expr = parse_expr(it)?;
-    let end_span = it.expect(TokenKind::Semicolon)?;
+    let end_span = match it.expect2(TokenKind::Semicolon) {
+        Some(token) => token,
+        None => {
+            return Ok(WithSpan::empty(Stmt::Error));
+        },
+    };
 
-    let span = Span::union(&expr, end_span);
+    let span = Span::union_span(expr.span, end_span);
     Ok(WithSpan::new(Stmt::Expression(Box::new(expr)), span))
 }
 

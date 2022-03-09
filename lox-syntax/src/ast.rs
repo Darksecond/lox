@@ -45,6 +45,7 @@ pub enum Expr {
     Call(Box<WithSpan<Expr>>, Vec<WithSpan<Expr>>),
     Get(Box<WithSpan<Expr>>, WithSpan<Identifier>),
     Set(Box<WithSpan<Expr>>, WithSpan<Identifier>, Box<WithSpan<Expr>>),
+    Error,
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -63,6 +64,7 @@ pub enum Stmt {
         Vec<WithSpan<Stmt>>,
     ),
     Import(WithSpan<String>, Option<Vec<WithSpan<String>>>),
+    Error,
 }
 
 pub type Ast = Vec<WithSpan<Stmt>>;

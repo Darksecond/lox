@@ -65,6 +65,17 @@ impl<'a> Parser<'a> {
         }
     }
 
+    pub fn expect2(&mut self, expected: TokenKind) -> Option<Span> {
+        let token = self.peek_token();
+        let kind = TokenKind::from(token);
+        if kind != expected {
+            self.error(&format!("Expected {} got {}", expected, token.value), token.span);
+            return None;
+        }
+
+        Some(self.advance().span)
+    }
+
     pub fn optionally(&mut self, expected: TokenKind) -> Result<bool, ()> {
         let token = self.peek();
         if TokenKind::from(token) == expected {
