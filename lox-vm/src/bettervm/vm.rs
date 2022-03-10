@@ -117,7 +117,7 @@ impl<W> Vm<W> where W: Write {
 
     pub fn interpret(&mut self) -> Result<(), VmError> {
         while self.interpret_next()? == InterpretResult::More {
-            // gc::collect();
+            gc::collect();
         }
 
         Ok(())
