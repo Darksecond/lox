@@ -1,8 +1,8 @@
-use lox_bytecode::bytecode::Chunk;
+use lox_bytecode::bytecode::{Chunk, Instruction};
 
 use super::memory::*;
 use crate::bettergc::{Gc, Trace, UniqueRoot, gc};
-use crate::bytecode::{Module};
+use crate::bytecode::Module;
 use std::{cell::RefCell, io::{Stdout, Write, stdout}};
 use std::collections::HashMap;
 
@@ -46,6 +46,11 @@ impl CallFrame {
         // This is safe, because we have `Root<Closure>` which eventually has a `Gc<Import>`.
         unsafe { &*self.chunk }
     }
+
+    #[inline]
+    fn instruction(&self) -> Instruction {
+        self.chunk().instruction(self.program_counter)
+    }
 }
 
 pub struct Vm<W> where W: Write {
@@ -65,9 +70,9 @@ impl Vm<Stdout> {
 impl<W> Vm<W> where W: Write {
     pub fn with_stdout(module: Module, stdout: W) -> Self {
         let mut vm = Vm {
-            frames: gc::unique(vec![]),
-            stack: gc::unique(vec![]),
-            upvalues: gc::unique(vec![]),
+            frames: gc::unique(Vec::with_capacity(8192)),
+            stack: gc::unique(Vec::with_capacity(8192)),
+            upvalues: gc::unique(Vec::with_capacity(8192)),
             stdout,
             imports: gc::unique(HashMap::new()),
         };
@@ -105,13 +110,14 @@ impl<W> Vm<W> where W: Write {
         });
     }
 
-    fn current_import(&self) -> Result<Gc<Import>, VmError> {
-        Ok(self.current_frame()?.closure.function.import)
+    #[inline]
+    fn current_import(&self) -> Gc<Import> {
+        self.current_frame().closure.function.import
     }
 
     pub fn interpret(&mut self) -> Result<(), VmError> {
         while self.interpret_next()? == InterpretResult::More {
-            gc::collect();
+            // gc::collect();
         }
 
         Ok(())
@@ -124,25 +130,27 @@ impl<W> Vm<W> where W: Write {
         };
 
         let root = gc::manage(native_function);
-        self.current_import().unwrap().set_global(identifier, Value::NativeFunction(root.as_gc()))
+        self.current_import().set_global(identifier, Value::NativeFunction(root.as_gc()))
     }
 
     fn interpret_next(&mut self) -> Result<InterpretResult, VmError> {
-        use crate::bytecode::{Constant, Instruction};
+        use crate::bytecode::Constant;
 
-        let current_import = self.current_import()?;
-
-        self.current_frame_mut()?.program_counter += 1;
+        let current_import = self.current_import();
 
         let instr = {
-            let frame = self.current_frame()?;
-            frame.chunk().instructions()[frame.program_counter - 1]
+            let frame = self.current_frame();
+            frame.instruction()
         };
+
+        self.current_frame_mut().program_counter += 1;
 
         if false {
             // DEBUG
+            println!("stack len: {}", self.stack.len());
             println!("stack: {:?}", self.stack);
             println!("");
+            println!("stack len: {}", self.stack.len());
             println!("globals: {:?}", current_import.globals.borrow());
             println!("{:?}", instr);
             println!("");
@@ -189,7 +197,7 @@ impl<W> Vm<W> where W: Write {
 
                     let closure_root = gc::manage(Closure {
                         function: Function::new(&closure.function, current_import),
-                        upvalues: upvalues,
+                        upvalues,
                     });
                     self.push(Value::Closure(closure_root.as_gc()));
                 } else {
@@ -211,8 +219,8 @@ impl<W> Vm<W> where W: Write {
             //TODO Pretty sure it leaves the stack clean, but double check
             Instruction::Method(index) => {
                 if let Constant::String(identifier) = current_import.constant(index) {
-                    if let Value::Class(class) = self.peek_n(1)? {
-                        if let Value::Closure(closure) = self.peek_n(0)? {
+                    if let Value::Class(class) = self.peek_n(1) {
+                        if let Value::Closure(closure) = self.peek_n(0) {
                             class.borrow_mut().methods.insert(identifier.to_owned(), *closure);
                         } else {
                             return Err(VmError::UnexpectedConstant);
@@ -221,21 +229,21 @@ impl<W> Vm<W> where W: Write {
                         return Err(VmError::UnexpectedConstant);
                     }
 
-                    self.pop()?;
+                    self.pop();
                 } else {
                     return Err(VmError::UnexpectedConstant);
                 }
             },
             Instruction::SetProperty(index) => {
                 if let Constant::String(property) = current_import.constant(index) {
-                    if let Value::Instance(instance) = self.peek_n(1)? {
+                    if let Value::Instance(instance) = self.peek_n(1) {
                         instance
                             .borrow_mut()
                             .fields
-                            .insert(property.clone(), *self.peek()?);
+                            .insert(property.clone(), *self.peek());
 
-                        let value = self.pop()?;
-                        self.pop()?;
+                        let value = self.pop();
+                        self.pop();
                         self.push(value);
                     } else {
                         return Err(VmError::UnexpectedValue);
@@ -246,7 +254,7 @@ impl<W> Vm<W> where W: Write {
             }
             Instruction::GetProperty(index) => {
                 if let Constant::String(property) = current_import.constant(index) {
-                    if let Value::Instance(instance) = self.pop()? {
+                    if let Value::Instance(instance) = self.pop() {
                         let instance = gc::root(instance);
                         if let Some(value) = instance.borrow().fields.get(property) {
                             self.push(*value);
@@ -264,7 +272,7 @@ impl<W> Vm<W> where W: Write {
                     }
                 }
             }
-            Instruction::Print => match self.pop()? {
+            Instruction::Print => match self.pop() {
                 Value::Number(n) => writeln!(self.stdout, "{}", n).expect("Could not write to stdout"),
                 Value::Nil => writeln!(self.stdout, "nil").expect("Could not write to stdout"),
                 Value::Boolean(boolean) => writeln!(self.stdout, "{}", boolean).expect("Could not write to stdout"),
@@ -280,8 +288,8 @@ impl<W> Vm<W> where W: Write {
             },
             Instruction::Nil => self.push(Value::Nil),
             Instruction::Return => {
-                let result = self.pop()?;
-                let frame = self.frames.pop().ok_or(VmError::FrameEmpty)?;
+                let result = self.pop();
+                let frame = self.frames.pop().expect("no frame");
 
                 for i in frame.base_counter..self.stack.len() {
                     self.close_upvalues(i);
@@ -296,29 +304,29 @@ impl<W> Vm<W> where W: Write {
 
                 self.push(result);
             }
-            Instruction::Add => match (self.pop()?, self.pop()?) {
+            Instruction::Add => match (self.pop(), self.pop()) {
                 (Value::Number(b), Value::Number(a)) => self.push(Value::Number(a + b)),
                 (Value::String(b), Value::String(a)) => self.push_string(&format!("{}{}", a, b)),
                 _ => return Err(VmError::UnexpectedValue),
             },
-            Instruction::Subtract => match (self.pop()?, self.pop()?) {
+            Instruction::Subtract => match (self.pop(), self.pop()) {
                 (Value::Number(b), Value::Number(a)) => self.push(Value::Number(a - b)),
                 _ => return Err(VmError::UnexpectedValue),
             },
-            Instruction::Multiply => match (self.pop()?, self.pop()?) {
+            Instruction::Multiply => match (self.pop(), self.pop()) {
                 (Value::Number(b), Value::Number(a)) => self.push(Value::Number(a * b)),
                 _ => return Err(VmError::UnexpectedValue),
             },
-            Instruction::Divide => match (self.pop()?, self.pop()?) {
+            Instruction::Divide => match (self.pop(), self.pop()) {
                 (Value::Number(b), Value::Number(a)) => self.push(Value::Number(a / b)),
                 _ => return Err(VmError::UnexpectedValue),
             },
             Instruction::Pop => {
-                self.pop()?;
+                self.pop();
             }
             Instruction::DefineGlobal(index) => {
                 if let Constant::String(identifier) = current_import.constant(index) {
-                    let value = self.pop()?;
+                    let value = self.pop();
                     current_import.set_global(identifier, value);
                 } else {
                     return Err(VmError::StringConstantExpected);
@@ -338,7 +346,7 @@ impl<W> Vm<W> where W: Write {
             }
             Instruction::SetGlobal(index) => {
                 if let Constant::String(identifier) = current_import.constant(index) {
-                    let value = *self.peek()?;
+                    let value = *self.peek();
                     if current_import.has_global(identifier) {
                         current_import.set_global(identifier, value);
                     } else {
@@ -349,35 +357,35 @@ impl<W> Vm<W> where W: Write {
                 }
             }
             Instruction::GetLocal(index) => {
-                let index = self.current_frame()?.base_counter + index;
+                let index = self.current_frame().base_counter + index;
                 self.push(self.stack[index]);
             }
             Instruction::SetLocal(index) => {
-                let index = self.current_frame()?.base_counter + index;
-                let value = *self.peek()?;
+                let index = self.current_frame().base_counter + index;
+                let value = *self.peek();
                 self.stack[index] = value;
             }
             Instruction::True => self.push(Value::Boolean(true)),
             Instruction::False => self.push(Value::Boolean(false)),
             Instruction::JumpIfFalse(to) => {
-                if self.peek()?.is_falsey() {
-                    self.current_frame_mut()?.program_counter = to;
+                if self.peek().is_falsey() {
+                    self.current_frame_mut().program_counter = to;
                 }
             }
             Instruction::Jump(to) => {
-                self.current_frame_mut()?.program_counter = to;
+                self.current_frame_mut().program_counter = to;
             }
-            Instruction::Less => match (self.pop()?, self.pop()?) {
+            Instruction::Less => match (self.pop(), self.pop()) {
                 (Value::Number(b), Value::Number(a)) => self.push((a < b).into()),
                 _ => return Err(VmError::UnexpectedValue),
             },
-            Instruction::Greater => match (self.pop()?, self.pop()?) {
+            Instruction::Greater => match (self.pop(), self.pop()) {
                 (Value::Number(b), Value::Number(a)) => self.push((a > b).into()),
                 _ => return Err(VmError::UnexpectedValue),
             },
             Instruction::Equal => {
-                let b = self.pop()?;
-                let a = self.pop()?;
+                let b = self.pop();
+                let a = self.pop();
 
                 if Value::is_same_type(&a, &b) {
                     match (b, a) {
@@ -399,27 +407,27 @@ impl<W> Vm<W> where W: Write {
             Instruction::Call(arity) => {
                 self.call(arity)?;
             }
-            Instruction::Negate => match self.pop()? {
+            Instruction::Negate => match self.pop() {
                 Value::Number(n) => self.push(Value::Number(-n)),
                 _ => return Err(VmError::UnexpectedValue),
             },
             Instruction::Not => {
-                let is_falsey = self.pop()?.is_falsey();
+                let is_falsey = self.pop().is_falsey();
                 self.push(is_falsey.into());
             }
             Instruction::GetUpvalue(index) => {
-                let upvalue = self.current_frame()?.closure.upvalues[index];
+                let upvalue = self.current_frame().closure.upvalues[index];
                 self.push(self.resolve_upvalue_into_value(&*upvalue.borrow()));
             }
             Instruction::SetUpvalue(index) => {
-                let value = *self.peek()?;
-                let upvalue = self.current_frame()?.closure.upvalues[index];
+                let value = *self.peek();
+                let upvalue = self.current_frame().closure.upvalues[index];
                 self.set_upvalue(&mut *upvalue.borrow_mut(), value);
             }
             Instruction::CloseUpvalue => {
                 let index = self.stack.len() - 1;
                 self.close_upvalues(index);
-                self.stack.pop().ok_or(VmError::StackEmpty)?;
+                self.pop();
             }
         }
 
@@ -468,7 +476,7 @@ impl<W> Vm<W> where W: Write {
 
     //TODO Reduce duplicate code paths
     fn call(&mut self, arity: usize) -> Result<(), VmError> {
-        let callee = *self.peek_n(arity)?;
+        let callee = *self.peek_n(arity);
         match callee {
             Value::Closure(callee) => {
                 if callee.function.arity != arity {
@@ -477,9 +485,9 @@ impl<W> Vm<W> where W: Write {
                 self.begin_frame(callee);
             }
             Value::NativeFunction(callee) => {
-                let mut args = self.pop_n(arity)?;
+                let mut args = self.pop_n(arity);
                 args.reverse();
-                self.pop()?; // discard callee
+                self.pop(); // discard callee
                 let result = (callee.code)(&args);
                 self.push(result);
             }
@@ -513,12 +521,12 @@ impl<W> Vm<W> where W: Write {
         Ok(())
     }
 
-    fn current_frame(&self) -> Result<&CallFrame, VmError> {
-        self.frames.last().ok_or(VmError::FrameEmpty)
+    fn current_frame(&self) -> &CallFrame {
+        self.frames.last().expect("No frame")
     }
 
-    fn current_frame_mut(&mut self) -> Result<&mut CallFrame, VmError> {
-        self.frames.last_mut().ok_or(VmError::FrameEmpty)
+    fn current_frame_mut(&mut self) -> &mut CallFrame {
+        self.frames.last_mut().expect("No frame")
     }
 
     fn push(&mut self, value: Value) {
@@ -535,27 +543,25 @@ impl<W> Vm<W> where W: Write {
         self.push(Value::String(root.as_gc()));
     }
 
-    fn pop(&mut self) -> Result<Value, VmError> {
-        self.stack.pop().ok_or(VmError::StackEmpty)
+    fn pop(&mut self) -> Value {
+        self.stack.pop().expect("Stack empty")
     }
 
-    fn pop_n(&mut self, n: usize) -> Result<Vec<Value>, VmError> {
+    fn pop_n(&mut self, n: usize) -> Vec<Value> {
         let mut result = Vec::with_capacity(n);
         while result.len() < n {
-            result.push(self.pop()?);
+            result.push(self.pop());
         }
 
-        Ok(result)
+        result
     }
 
-    fn peek(&self) -> Result<&Value, VmError> {
-        self.stack.last().ok_or(VmError::StackEmpty)
+    fn peek(&self) -> &Value {
+        self.stack.last().expect("Stack empty")
     }
 
-    fn peek_n(&self, n: usize) -> Result<&Value, VmError> {
-        self.stack
-            .get(self.stack.len() - n - 1)
-            .ok_or(VmError::StackEmpty)
+    fn peek_n(&self, n: usize) -> &Value {
+        self.stack.get(self.stack.len() - n - 1).expect("Stack not deep enough")
     }
 
     fn begin_frame(&mut self, closure: Gc<Closure>) {

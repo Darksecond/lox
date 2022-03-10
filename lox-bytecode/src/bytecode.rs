@@ -197,4 +197,10 @@ impl Chunk {
     pub fn instructions(&self) -> &[Instruction] {
         &self.instructions
     }
+
+    #[inline]
+    pub fn instruction(&self, pc: usize) -> Instruction {
+        // self.instructions[pc]
+        unsafe { *self.instructions.get_unchecked(pc) }
+    }
 }
