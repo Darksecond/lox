@@ -283,6 +283,7 @@ impl<T: fmt::Debug + 'static + Trace + ?Sized> fmt::Debug for UniqueRoot<T> {
 
 use std::cell::RefCell;
 use std::collections::HashMap;
+use fxhash::FxHashMap;
 use std::hash::Hash;
 impl<T: Trace> Trace for RefCell<T> {
     #[inline]
@@ -314,7 +315,14 @@ impl<K: Eq + Hash, T: Trace> Trace for HashMap<K, T> {
         }
     }
 }
-
+impl<K: Eq + Hash, T: Trace> Trace for FxHashMap<K, T> {
+    #[inline]
+    fn trace(&self) {
+        for val in self.values() {
+            val.trace();
+        }
+    }
+}
 impl Trace for String {
     #[inline]
     fn trace(&self) {}

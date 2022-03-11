@@ -3,7 +3,9 @@ use lox_bytecode::bytecode::{Chunk, Constant, ConstantIndex, Module};
 use crate::bettergc::{Gc, Trace};
 use crate::bytecode::ChunkIndex;
 use std::cell::RefCell;
-use std::collections::HashMap;
+use fxhash::FxHashMap;
+
+use super::vm::{Symbol, Interner};
 
 #[derive(Debug, Copy, Clone)]
 pub enum Upvalue {
@@ -48,7 +50,7 @@ impl Trace for Upvalue {
 #[derive(Debug)]
 pub struct Instance {
     pub class: Gc<RefCell<Class>>,
-    pub fields: HashMap<String, Value>,
+    pub fields: FxHashMap<Symbol, Value>,
 }
 
 impl Trace for Instance {
@@ -62,7 +64,7 @@ impl Trace for Instance {
 #[derive(Debug)]
 pub struct Class {
     pub name: String,
-    pub methods: HashMap<String, Gc<Closure>>,
+    pub methods: FxHashMap<Symbol, Gc<Closure>>,
 }
 
 impl Trace for Class {
@@ -146,7 +148,8 @@ impl Trace for BoundMethod {
 #[derive(Debug)]
 pub struct Import {
     module: Module,
-    pub globals: RefCell<HashMap<String, Value>>,
+    pub globals: RefCell<FxHashMap<Symbol, Value>>,
+    pub symbols: Vec<Symbol>,
 }
 
 impl Trace for Import {
@@ -157,11 +160,24 @@ impl Trace for Import {
 }
 
 impl Import {
-    pub fn new(module: Module) -> Self {
+    pub fn new(module: Module, interner: &mut Interner) -> Self {
+        let symbols = module.constants().iter().map(|constant| {
+            match constant {
+                Constant::String(str) => interner.intern(str),
+                _ => Symbol::invalid(),
+            }
+        }).collect();
+
         Self {
             module,
-            globals: RefCell::new(HashMap::new()),
+            globals: RefCell::new(FxHashMap::default()),
+            symbols,
         }
+    }
+
+    #[inline]
+    pub fn symbol(&self, index: ConstantIndex) -> Symbol {
+        unsafe { *self.symbols.get_unchecked(index) }
     }
 
     #[inline]
@@ -174,16 +190,16 @@ impl Import {
         self.module.constant(index)
     }
 
-    pub fn set_global(&self, key: &str, value: Value) -> () {
-        self.globals.borrow_mut().insert(key.to_string(), value);
+    pub fn set_global(&self, key: Symbol, value: Value) -> () {
+        self.globals.borrow_mut().insert(key, value);
     }
 
-    pub fn has_global(&self, key: &str) -> bool {
-        self.globals.borrow().contains_key(key)
+    pub fn has_global(&self, key: Symbol) -> bool {
+        self.globals.borrow().contains_key(&key)
     }
 
-    pub fn global(&self, key: &str) -> Option<Value> {
-        self.globals.borrow().get(key).cloned()
+    pub fn global(&self, key: Symbol) -> Option<Value> {
+        self.globals.borrow().get(&key).cloned()
     }
 }
 
