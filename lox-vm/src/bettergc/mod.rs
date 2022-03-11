@@ -1,5 +1,3 @@
-pub mod gc;
-
 use std::cell::Cell;
 use std::fmt;
 use std::ops::{Deref, DerefMut};
@@ -31,6 +29,8 @@ struct Allocation<T: 'static + Trace + ?Sized> {
 #[derive(Debug)]
 pub struct Heap {
     objects: Vec<Box<Allocation<dyn Trace>>>,
+    bytes_allocated: usize,
+    threshold: usize,
 }
 
 pub struct Gc<T: 'static + Trace + ?Sized> {
@@ -78,8 +78,14 @@ impl Default for Header {
 }
 
 impl Heap {
+    const THRESHOLD_ADJ: f32 = 1.4;
+
     pub fn new() -> Self {
-        Heap { objects: vec![] }
+        Heap {
+            objects: vec![],
+            bytes_allocated: 0,
+            threshold: 100,
+        }
     }
 
     fn allocate<T: 'static + Trace>(&mut self, data: T) -> NonNull<Allocation<T>> {
@@ -89,6 +95,7 @@ impl Heap {
         });
         let ptr = unsafe { NonNull::new_unchecked(&mut *alloc) };
         self.objects.push(alloc);
+        self.bytes_allocated += std::mem::size_of::<T>();
         ptr
     }
 
@@ -117,9 +124,21 @@ impl Heap {
     }
 
     pub fn collect(&mut self) -> usize {
+        if self.bytes_allocated > self.threshold {
+            self.force_collect()
+        } else {
+            0
+        }
+    }
+
+    fn force_collect(&mut self) -> usize {
         self.mark();
         let bytes = self.bytes_marked();
         self.sweep();
+
+        self.bytes_allocated -= bytes;
+        self.threshold = (self.bytes_allocated as f32 * Self::THRESHOLD_ADJ) as usize;
+
         bytes
     }
 

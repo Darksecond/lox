@@ -1,7 +1,7 @@
 use lox_bytecode::bytecode::{Chunk, Instruction};
 
 use super::memory::*;
-use crate::bettergc::{Gc, Trace, UniqueRoot, gc};
+use crate::bettergc::{Gc, Trace, UniqueRoot, Heap};
 use crate::bytecode::Module;
 use std::{cell::RefCell, io::{Stdout, Write, stdout}};
 use std::collections::HashMap;
@@ -65,6 +65,7 @@ struct CallFrame {
     program_counter: usize,
     base_counter: usize,
     closure: Gc<Closure>,
+
     chunk: *const Chunk,
 }
 
@@ -75,6 +76,16 @@ impl Trace for CallFrame {
 }
 
 impl CallFrame {
+    pub fn new(closure: Gc<Closure>, base_counter: usize) -> Self {
+        let chunk: *const Chunk = closure.function.import.chunk(closure.function.chunk_index);
+        Self {
+            program_counter: 0,
+            base_counter,
+            closure,
+            chunk,
+        }
+    }
+
     #[inline]
     fn chunk(&self) -> &Chunk {
         // We use unsafe here because it's way faster
@@ -83,8 +94,15 @@ impl CallFrame {
     }
 
     #[inline]
-    fn instruction(&self) -> Instruction {
-        self.chunk().instruction(self.program_counter)
+    pub fn next_instruction(&mut self) -> Instruction {
+        let instr = self.chunk().instruction(self.program_counter);
+        self.program_counter += 1;
+        instr
+    }
+
+    #[inline]
+    pub fn set_pc(&mut self, value: usize) {
+        self.program_counter = value;
     }
 }
 
@@ -95,6 +113,7 @@ pub struct Vm<W> where W: Write {
     upvalues: UniqueRoot<Vec<Gc<RefCell<Upvalue>>>>,
     stdout: W,
     interner: Interner,
+    heap: Heap,
 }
 
 impl Vm<Stdout> {
@@ -105,13 +124,15 @@ impl Vm<Stdout> {
 
 impl<W> Vm<W> where W: Write {
     pub fn with_stdout(module: Module, stdout: W) -> Self {
+        let mut heap = Heap::new();
         let mut vm = Vm {
-            frames: gc::unique(Vec::with_capacity(8192)),
-            stack: gc::unique(Vec::with_capacity(8192)),
-            upvalues: gc::unique(Vec::with_capacity(8192)),
+            frames: heap.unique(Vec::with_capacity(8192)),
+            stack: heap.unique(Vec::with_capacity(8192)),
+            upvalues: heap.unique(Vec::with_capacity(8192)),
             stdout,
-            imports: gc::unique(HashMap::new()),
+            imports: heap.unique(HashMap::new()),
             interner: Interner::new(),
+            heap,
         };
 
         //TODO reserve frames/upvalues/stack
@@ -122,7 +143,7 @@ impl<W> Vm<W> where W: Write {
     }
 
     fn prepare_interpret(&mut self, module: Module) {
-        let import = gc::manage(Import::new(module, &mut self.interner));
+        let import = self.heap.manage(Import::new(module, &mut self.interner));
         self.imports.insert("_root".into(), import.as_gc());
 
         let function = Function {
@@ -131,20 +152,12 @@ impl<W> Vm<W> where W: Write {
             name: "top".into(),
             import: import.as_gc(),
         };
-        let closure = gc::manage(Closure {
+        let closure = self.heap.manage(Closure {
             upvalues: vec![],
             function,
         });
         self.push(Value::Closure(closure.as_gc()));
-
-        let chunk: *const Chunk = closure.function.import.chunk(closure.function.chunk_index);
-        self.frames.push(CallFrame {
-            //TODO Use begin/end_frame because it needs to do cleanup of the stack
-            program_counter: 0,
-            base_counter: 0,
-            closure: closure.as_gc(),
-            chunk,
-        });
+        self.frames.push(CallFrame::new(closure.as_gc(), 0));
     }
 
     #[inline]
@@ -154,7 +167,7 @@ impl<W> Vm<W> where W: Write {
 
     pub fn interpret(&mut self) -> Result<(), VmError> {
         while self.interpret_next()? == InterpretResult::More {
-            gc::collect();
+            self.heap.collect();
         }
 
         Ok(())
@@ -167,7 +180,7 @@ impl<W> Vm<W> where W: Write {
         };
         
         let identifier = self.interner.intern(identifier);
-        let root = gc::manage(native_function);
+        let root = self.heap.manage(native_function);
         self.current_import().set_global(identifier, Value::NativeFunction(root.as_gc()))
     }
 
@@ -178,9 +191,7 @@ impl<W> Vm<W> where W: Write {
 
         let instr = {
             let frame = self.current_frame_mut();
-            let instr = frame.instruction();
-            frame.program_counter += 1;
-            instr
+            frame.next_instruction()
         };
 
         if false {
@@ -221,7 +232,7 @@ impl<W> Vm<W> where W: Write {
                                     {
                                         upvalue
                                     } else {
-                                        let root = gc::manage(RefCell::new(Upvalue::Open(index)));
+                                        let root = self.heap.manage(RefCell::new(Upvalue::Open(index)));
                                         self.upvalues.push(root.as_gc());
                                         root.as_gc()
                                     }
@@ -233,7 +244,7 @@ impl<W> Vm<W> where W: Write {
                         })
                         .collect();
 
-                    let closure_root = gc::manage(Closure {
+                    let closure_root = self.heap.manage(Closure {
                         function: Function::new(&closure.function, current_import),
                         upvalues,
                     });
@@ -244,7 +255,7 @@ impl<W> Vm<W> where W: Write {
             }
             Instruction::Class(index) => {
                 if let Constant::Class(class) = current_import.constant(index) {
-                    let class = gc::manage(RefCell::new(Class {
+                    let class = self.heap.manage(RefCell::new(Class {
                         name: class.name.clone(),
                         methods: FxHashMap::default(),
                     }));
@@ -257,61 +268,50 @@ impl<W> Vm<W> where W: Write {
             //TODO Pretty sure it leaves the stack clean, but double check
             Instruction::Method(index) => {
                 let identifier = current_import.symbol(index);
-                // if let Constant::String(identifier) = current_import.constant(index) {
-                    if let Value::Class(class) = self.peek_n(1) {
-                        if let Value::Closure(closure) = self.peek_n(0) {
-                            class.borrow_mut().methods.insert(identifier, *closure);
-                        } else {
-                            return Err(VmError::UnexpectedConstant);
-                        }
+                if let Value::Class(class) = self.peek_n(1) {
+                    if let Value::Closure(closure) = self.peek_n(0) {
+                        class.borrow_mut().methods.insert(identifier, *closure);
                     } else {
                         return Err(VmError::UnexpectedConstant);
                     }
+                } else {
+                    return Err(VmError::UnexpectedConstant);
+                }
 
-                    self.pop();
-                // } else {
-                //     return Err(VmError::UnexpectedConstant);
-                // }
+                self.pop();
             },
             Instruction::SetProperty(index) => {
                 let property = current_import.symbol(index);
-                // if let Constant::String(property) = current_import.constant(index) {
-                    if let Value::Instance(instance) = self.peek_n(1) {
-                        instance
-                            .borrow_mut()
-                            .fields
-                            .insert(property, *self.peek());
+                if let Value::Instance(instance) = self.peek_n(1) {
+                    instance
+                        .borrow_mut()
+                        .fields
+                        .insert(property, *self.peek());
 
-                        let value = self.pop();
-                        self.pop();
-                        self.push(value);
-                    } else {
-                        return Err(VmError::UnexpectedValue);
-                    }
-                // } else {
-                //     return Err(VmError::UnexpectedConstant);
-                // }
+                    let value = self.pop();
+                    self.pop();
+                    self.push(value);
+                } else {
+                    return Err(VmError::UnexpectedValue);
+                }
             }
             Instruction::GetProperty(index) => {
                 let property = current_import.symbol(index);
-                // if let Constant::String(property) = current_import.constant(index) {
-                    if let Value::Instance(instance) = self.pop() {
-                        // let instance = gc::root(instance);
-                        if let Some(value) = instance.borrow().fields.get(&property) {
-                            self.push(*value);
-                        } else if let Some(method) = instance.borrow().class.borrow().methods.get(&property) {
-                            let bind = gc::manage(BoundMethod {
-                                receiver: instance,
-                                method: *method,
-                            });
-                            self.push(Value::BoundMethod(bind.as_gc()));
-                        } else {
-                            return Err(VmError::UndefinedProperty);
-                        };
+                if let Value::Instance(instance) = self.pop() {
+                    if let Some(value) = instance.borrow().fields.get(&property) {
+                        self.push(*value);
+                    } else if let Some(method) = instance.borrow().class.borrow().methods.get(&property) {
+                        let bind = self.heap.manage(BoundMethod {
+                            receiver: instance,
+                            method: *method,
+                        });
+                        self.push(Value::BoundMethod(bind.as_gc()));
                     } else {
-                        return Err(VmError::UnexpectedValue);
-                    }
-                // }
+                        return Err(VmError::UndefinedProperty);
+                    };
+                } else {
+                    return Err(VmError::UnexpectedValue);
+                }
             }
             Instruction::Print => match self.pop() {
                 Value::Number(n) => writeln!(self.stdout, "{}", n).expect("Could not write to stdout"),
@@ -367,38 +367,26 @@ impl<W> Vm<W> where W: Write {
             }
             Instruction::DefineGlobal(index) => {
                 let identifier = current_import.symbol(index);
-                // if let Constant::String(identifier) = current_import.constant(index) {
-                    let value = self.pop();
-                    current_import.set_global(identifier, value);
-                // } else {
-                //     return Err(VmError::StringConstantExpected);
-                // }
+                let value = self.pop();
+                current_import.set_global(identifier, value);
             }
             Instruction::GetGlobal(index) => {
                 let identifier = current_import.symbol(index);
-                // if let Constant::String(identifier) = current_import.constant(index) {
-                    let value = current_import.global(identifier);
-                    if let Some(value) = value {
-                        self.push(value);
-                    } else {
-                        return Err(VmError::GlobalNotDefined);
-                    }
-                // } else {
-                //     return Err(VmError::StringConstantExpected);
-                // }
+                let value = current_import.global(identifier);
+                if let Some(value) = value {
+                    self.push(value);
+                } else {
+                    return Err(VmError::GlobalNotDefined);
+                }
             }
             Instruction::SetGlobal(index) => {
                 let identifier = current_import.symbol(index);
-                // if let Constant::String(identifier) = current_import.constant(index) {
-                    let value = *self.peek();
-                    if current_import.has_global(identifier) {
-                        current_import.set_global(identifier, value);
-                    } else {
-                        return Err(VmError::GlobalNotDefined);
-                    }
-                // } else {
-                //     return Err(VmError::StringConstantExpected);
-                // }
+                let value = *self.peek();
+                if current_import.has_global(identifier) {
+                    current_import.set_global(identifier, value);
+                } else {
+                    return Err(VmError::GlobalNotDefined);
+                }
             }
             Instruction::GetLocal(index) => {
                 let index = self.current_frame().base_counter + index;
@@ -413,11 +401,11 @@ impl<W> Vm<W> where W: Write {
             Instruction::False => self.push(Value::Boolean(false)),
             Instruction::JumpIfFalse(to) => {
                 if self.peek().is_falsey() {
-                    self.current_frame_mut().program_counter = to;
+                    self.current_frame_mut().set_pc(to);
                 }
             }
             Instruction::Jump(to) => {
-                self.current_frame_mut().program_counter = to;
+                self.current_frame_mut().set_pc(to);
             }
             Instruction::Less => match (self.pop(), self.pop()) {
                 (Value::Number(b), Value::Number(a)) => self.push((a < b).into()),
@@ -479,9 +467,9 @@ impl<W> Vm<W> where W: Write {
     }
 
     fn close_upvalues(&mut self, index: usize) {
-        let value = self.stack[index]; //TODO Result
         for upvalue in self.upvalues.iter() {
             if upvalue.borrow().is_open_with_index(index) {
+                let value = self.stack[index];
                 upvalue.replace(Upvalue::Closed(value));
             }
         }
@@ -536,7 +524,7 @@ impl<W> Vm<W> where W: Write {
                 self.push(result);
             }
             Value::Class(class) => {
-                let instance = gc::manage(RefCell::new(Instance {
+                let instance = self.heap.manage(RefCell::new(Instance {
                     class,
                     fields: FxHashMap::default(),
                 }));
@@ -584,7 +572,7 @@ impl<W> Vm<W> where W: Write {
     }
 
     fn push_string(&mut self, string: &str) {
-        let root = gc::manage(string.to_string());
+        let root = self.heap.manage(string.to_string());
         self.push(Value::String(root.as_gc()));
     }
 
@@ -610,12 +598,6 @@ impl<W> Vm<W> where W: Write {
     }
 
     fn begin_frame(&mut self, closure: Gc<Closure>) {
-        let chunk: *const Chunk = closure.function.import.chunk(closure.function.chunk_index);
-        self.frames.push(CallFrame {
-            program_counter: 0,
-            base_counter: self.stack.len() - closure.function.arity - 1,
-            closure,
-            chunk,
-        });
+        self.frames.push(CallFrame::new(closure, self.stack.len() - closure.function.arity - 1));
     }
 }
