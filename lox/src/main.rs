@@ -1,5 +1,7 @@
 use std::env;
 
+use lox_compiler::LineOffsets;
+
 #[cfg(test)]
 mod tests;
 
@@ -23,19 +25,29 @@ mod tests;
 //     lox_vm::bettervm::execute(&module).unwrap();
 // }
 
-fn main() -> Result<(), String> {
+fn main() {
     let args: Vec<String> = env::args().skip(1).collect();
 
     if args.len() != 1 {
-        Err("Usage: lox [path]".into())
-    } else {
-        let path = args.first().unwrap();
-
-        let data = std::fs::read_to_string(path).unwrap();
-        let module = lox_compiler::compile(&data).unwrap();
-        lox_vm::bettervm::execute(module).unwrap();
-
-
-        Ok(())
+        eprintln!("Usage: lox [path]");
+        return;
     }
+
+    let path = args.first().unwrap();
+    let data = std::fs::read_to_string(path).unwrap();
+    let offsets = LineOffsets::new(&data);
+
+    let module = match lox_compiler::compile(&data) {
+        Ok(module) => module,
+        Err(diagnostics) => {
+            for diag in diagnostics {
+                let line = offsets.line(diag.span.start);
+                let msg = diag.message;
+                eprintln!("Error: {msg} at line {line}");
+            }
+            return;
+        },
+    };
+
+    lox_vm::bettervm::execute(module).unwrap();
 }

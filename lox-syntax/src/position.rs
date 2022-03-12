@@ -100,3 +100,37 @@ pub struct Diagnostic {
     pub span: Span,
     pub message: String,
 }
+
+pub struct LineOffsets {
+    offsets: Vec<u32>,
+    len: u32,
+}
+
+impl LineOffsets {
+    pub fn new(data: &str) -> Self {
+        let mut offsets = vec![0];
+        let len = data.len() as u32;
+
+        for (i, val) in data.bytes().enumerate() {
+            if val == b'\n' {
+                offsets.push(i as u32);
+            }
+        }
+
+        Self {
+            offsets,
+            len,
+        }
+    }
+
+    pub fn line(&self, pos: BytePos) -> usize {
+        let offset = pos.0;
+
+        assert!(offset < self.len);
+
+        match self.offsets.binary_search(&offset) {
+            Ok(line) => line,
+            Err(line) => line,
+        }
+    }
+}

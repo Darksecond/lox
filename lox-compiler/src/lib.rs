@@ -1,7 +1,8 @@
 mod bettercompiler;
 
 use lox_bytecode::bytecode;
-use lox_syntax::position::Diagnostic;
+pub use lox_syntax::position::Diagnostic;
+pub use lox_syntax::position::LineOffsets;
 
 //TODO Better errors
 

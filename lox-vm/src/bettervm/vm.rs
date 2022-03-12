@@ -584,6 +584,7 @@ impl<W> Vm<W> where W: Write {
         self.stack.push(value)
     }
 
+    //TODO match index with n of peek_n, this is 1 off from peek_n.
     fn rset(&mut self, index: usize, value: Value) {
         let index = self.stack.len() - index;
         self.stack[index] = value;
