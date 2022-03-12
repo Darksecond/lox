@@ -43,6 +43,7 @@ pub enum Instruction {
     Jump(InstructionIndex),
     JumpIfFalse(InstructionIndex),
     Call(ArgumentCount),
+    Invoke(ConstantIndex, ArgumentCount),
     CloseUpvalue,
 
     Class(ConstantIndex),

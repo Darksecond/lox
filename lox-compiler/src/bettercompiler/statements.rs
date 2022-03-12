@@ -339,11 +339,24 @@ fn compile_call(
     identifier: &WithSpan<Expr>,
     args: &Vec<WithSpan<Expr>>,
 ) {
-    compile_expr(compiler, identifier);
-    for arg in args {
-        compile_expr(compiler, arg);
+    if let Expr::Get(expr, ident) = &identifier.value {
+        compile_expr(compiler, expr);
+
+        for arg in args {
+            compile_expr(compiler, arg);
+        }
+        
+        let constant = compiler.add_constant(ident.value.as_str());
+        compiler.add_instruction(Instruction::Invoke(constant, args.len()));
+    } else {
+        compile_expr(compiler, identifier);
+
+        for arg in args {
+            compile_expr(compiler, arg);
+        }
+
+        compiler.add_instruction(Instruction::Call(args.len()));
     }
-    compiler.add_instruction(Instruction::Call(args.len()));
 }
 
 fn compile_logical(

@@ -437,7 +437,8 @@ impl<W> Vm<W> where W: Write {
                 }
             }
             Instruction::Call(arity) => {
-                self.call(arity)?;
+                let callee = *self.peek_n(arity);
+                self.call(arity, callee)?;
             }
             Instruction::Negate => match self.pop() {
                 Value::Number(n) => self.push(Value::Number(-n)),
@@ -460,6 +461,24 @@ impl<W> Vm<W> where W: Write {
                 let index = self.stack.len() - 1;
                 self.close_upvalues(index);
                 self.pop();
+            }
+            Instruction::Invoke(index, arity) => {
+                let property = current_import.symbol(index);
+                if let Value::Instance(instance) = *self.peek_n(arity) {
+                    if let Some(value) = instance.borrow().fields.get(&property) {
+                        self.rset(arity+1, *value);
+                        self.call(arity, *value)?;
+                    } else if let Some(method) = instance.borrow().class.borrow().methods.get(&property) {
+                        if method.function.arity != arity {
+                            return Err(VmError::IncorrectArity);
+                        }
+                        self.begin_frame(*method);
+                    } else {
+                        return Err(VmError::UndefinedProperty);
+                    };
+                } else {
+                    return Err(VmError::UnexpectedValue);
+                }
             }
         }
 
@@ -507,8 +526,7 @@ impl<W> Vm<W> where W: Write {
     }
 
     //TODO Reduce duplicate code paths
-    fn call(&mut self, arity: usize) -> Result<(), VmError> {
-        let callee = *self.peek_n(arity);
+    fn call(&mut self, arity: usize, callee: Value) -> Result<(), VmError> {
         match callee {
             Value::Closure(callee) => {
                 if callee.function.arity != arity {
