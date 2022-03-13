@@ -82,7 +82,7 @@ impl Heap {
 
     pub fn new() -> Self {
         Heap {
-            objects: vec![],
+            objects: Vec::with_capacity(8192),
             bytes_allocated: 0,
             threshold: 100,
         }
@@ -123,6 +123,7 @@ impl Heap {
         root
     }
 
+    #[inline]
     pub fn collect(&mut self) -> usize {
         if self.bytes_allocated > self.threshold {
             self.force_collect()
@@ -138,6 +139,7 @@ impl Heap {
 
         self.bytes_allocated -= bytes;
         self.threshold = (self.bytes_allocated as f32 * Self::THRESHOLD_ADJ) as usize;
+        self.threshold += 100; // Offset by 100 so it never reaches 0
 
         bytes
     }
