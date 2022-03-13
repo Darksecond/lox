@@ -1,6 +1,6 @@
 
 #[derive(Debug, Copy, Clone, PartialEq, PartialOrd, Eq, Ord, Default)]
-pub struct BytePos(u32);
+pub struct BytePos(pub u32);
 
 impl BytePos {
     pub fn shift(self, ch: char) -> Self {
@@ -106,6 +106,18 @@ pub struct LineOffsets {
     len: u32,
 }
 
+/// Helper struct to convert BytePos into line numbers.
+/// 
+/// # Examples
+/// ```
+/// use lox_syntax::position::{LineOffsets, BytePos};
+/// let offsets = LineOffsets::new("abc\ndef");
+/// assert_eq!(offsets.line(BytePos(0)), 1);
+/// assert_eq!(offsets.line(BytePos(1)), 1);
+/// assert_eq!(offsets.line(BytePos(4)), 2);
+/// assert_eq!(offsets.line(BytePos(3)), 1);
+/// assert_eq!(offsets.line(BytePos(7)), 2);
+/// ```
 impl LineOffsets {
     pub fn new(data: &str) -> Self {
         let mut offsets = vec![0];
@@ -113,7 +125,7 @@ impl LineOffsets {
 
         for (i, val) in data.bytes().enumerate() {
             if val == b'\n' {
-                offsets.push(i as u32);
+                offsets.push((i+1) as u32);
             }
         }
 
@@ -126,10 +138,10 @@ impl LineOffsets {
     pub fn line(&self, pos: BytePos) -> usize {
         let offset = pos.0;
 
-        assert!(offset < self.len);
+        assert!(offset <= self.len);
 
         match self.offsets.binary_search(&offset) {
-            Ok(line) => line,
+            Ok(line) => line + 1,
             Err(line) => line,
         }
     }
