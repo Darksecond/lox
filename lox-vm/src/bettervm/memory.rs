@@ -1,7 +1,7 @@
-use lox_bytecode::bytecode::{Chunk, Constant, ConstantIndex, Module};
+use lox_bytecode::bytecode::{Chunk, Constant, ConstantIndex, Module, ClosureIndex};
 
 use crate::bettergc::{Gc, Trace};
-use crate::bytecode::ChunkIndex;
+use crate::bytecode::{ChunkIndex, self};
 use std::cell::RefCell;
 use fxhash::FxHashMap;
 
@@ -188,6 +188,12 @@ impl Import {
     #[inline]
     pub fn constant(&self, index: ConstantIndex) -> &Constant {
         self.module.constant(index)
+    }
+
+    //TODO rename to make it clear this is not an alive closure.
+    #[inline]
+    pub fn closure(&self, index: ClosureIndex) -> &bytecode::Closure {
+        self.module.closure(index)
     }
 
     pub fn set_global(&self, key: Symbol, value: Value) -> () {

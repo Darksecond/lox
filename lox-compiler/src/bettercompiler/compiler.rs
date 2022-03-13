@@ -243,6 +243,10 @@ impl Compiler {
         self.module.add_constant(constant.into())
     }
 
+    pub fn add_closure(&mut self, closure: Closure) -> ClosureIndex {
+        self.module.add_closure(closure)
+    }
+
     pub fn resolve_upvalue(&mut self, name: &str) -> Option<StackIndex> {
         for i in (0..(self.contexts.len() - 1)).rev() {
             // Skip the current context

@@ -6,6 +6,7 @@ pub type StackIndex = usize;
 pub type ChunkIndex = usize;
 pub type ArgumentCount = usize;
 pub type UpvalueIndex = usize;
+pub type ClosureIndex = usize;
 
 #[derive(Debug, PartialEq, Copy, Clone, Serialize, Deserialize)]
 pub enum Instruction {
@@ -47,7 +48,7 @@ pub enum Instruction {
     CloseUpvalue,
 
     Class(ConstantIndex),
-    Closure(ConstantIndex),
+    Closure(ClosureIndex),
     Method(ConstantIndex),
 
     Import(ConstantIndex),
@@ -84,7 +85,6 @@ pub struct Function {
 pub enum Constant {
     Number(f64),
     String(String),
-    Closure(Closure),
     Class(Class),
 }
 
@@ -98,12 +98,13 @@ impl From<&str> for Constant {
         Constant::String(String::from(item))
     }
 }
-impl From<Function> for Constant {
+
+impl From<Function> for Closure {
     fn from(item: Function) -> Self {
-        Constant::Closure(Closure {
+        Closure {
             function: item,
             upvalues: vec![],
-        })
+        }
     }
 }
 
@@ -116,6 +117,7 @@ pub struct Chunk {
 pub struct Module {
     chunks: Vec<Chunk>,
     constants: Vec<Constant>,
+    closures: Vec<Closure>,
 }
 
 impl std::fmt::Debug for Module {
@@ -129,6 +131,7 @@ impl Module {
         Module {
             chunks: vec![],
             constants: vec![],
+            closures: vec![],
         }
     }
 
@@ -151,13 +154,27 @@ impl Module {
         self.constants.len() - 1
     }
 
+    pub fn add_closure(&mut self, closure: Closure) -> ClosureIndex {
+        self.closures.push(closure);
+        self.closures.len() - 1
+    }
+
     pub fn constants(&self) -> &[Constant] {
         &self.constants
+    }
+
+    pub fn closures(&self) -> &[Closure] {
+        &self.closures
     }
 
     #[inline]
     pub fn constant(&self, index: ConstantIndex) -> &Constant {
         &self.constants[index]
+    }
+
+    #[inline]
+    pub fn closure(&self, index: ClosureIndex) -> &Closure {
+        &self.closures[index]
     }
 
     pub fn chunks(&self) -> &[Chunk] {

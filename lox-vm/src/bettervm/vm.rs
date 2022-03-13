@@ -210,48 +210,44 @@ impl<W> Vm<W> where W: Write {
                 Constant::Number(n) => self.push(Value::Number(*n)),
                 Constant::String(string) => self.push_string(string),
                 Constant::Class(_) => unimplemented!(),
-                Constant::Closure(_) => unimplemented!(),
             },
 
             Instruction::Import(_) => unimplemented!(),
             Instruction::ImportGlobal(_) => unimplemented!(),
             
             Instruction::Closure(index) => {
-                if let Constant::Closure(closure) = current_import.constant(index) {
-                    let upvalues = closure
-                        .upvalues
-                        .iter()
-                        .map(|u| {
-                            match u {
-                                crate::bytecode::Upvalue::Local(index) => {
-                                    let frame = &self.frames[self.frames.len() - 1]; //TODO Result // Get the enclosing frame
-                                    let base = frame.base_counter;
-                                    let index = base + *index;
+                let closure = current_import.closure(index);
+                let upvalues = closure
+                    .upvalues
+                    .iter()
+                    .map(|u| {
+                        match u {
+                            crate::bytecode::Upvalue::Local(index) => {
+                                let frame = &self.frames[self.frames.len() - 1]; //TODO Result // Get the enclosing frame
+                                let base = frame.base_counter;
+                                let index = base + *index;
 
-                                    if let Some(upvalue) = self.find_open_upvalue_with_index(index)
-                                    {
-                                        upvalue
-                                    } else {
-                                        let root = self.heap.manage(RefCell::new(Upvalue::Open(index)));
-                                        self.upvalues.push(root.as_gc());
-                                        root.as_gc()
-                                    }
-                                }
-                                crate::bytecode::Upvalue::Upvalue(u) => {
-                                    self.find_upvalue_by_index(*u)
+                                if let Some(upvalue) = self.find_open_upvalue_with_index(index)
+                                {
+                                    upvalue
+                                } else {
+                                    let root = self.heap.manage(RefCell::new(Upvalue::Open(index)));
+                                    self.upvalues.push(root.as_gc());
+                                    root.as_gc()
                                 }
                             }
-                        })
-                        .collect();
+                            crate::bytecode::Upvalue::Upvalue(u) => {
+                                self.find_upvalue_by_index(*u)
+                            }
+                        }
+                    })
+                    .collect();
 
-                    let closure_root = self.heap.manage(Closure {
-                        function: Function::new(&closure.function, current_import),
-                        upvalues,
-                    });
-                    self.push(Value::Closure(closure_root.as_gc()));
-                } else {
-                    return Err(VmError::ClosureConstantExpected);
-                }
+                let closure_root = self.heap.manage(Closure {
+                    function: Function::new(&closure.function, current_import),
+                    upvalues,
+                });
+                self.push(Value::Closure(closure_root.as_gc()));
             }
             Instruction::Class(index) => {
                 if let Constant::Class(class) = current_import.constant(index) {

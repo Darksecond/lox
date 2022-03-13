@@ -170,10 +170,10 @@ fn compile_closure(
 
     let closure = Closure {
         function,
-        upvalues: upvalues,
+        upvalues,
     };
 
-    let constant = compiler.add_constant(Constant::Closure(closure));
+    let constant = compiler.add_closure(closure);
     compiler.add_instruction(Instruction::Closure(constant));
 }
 
