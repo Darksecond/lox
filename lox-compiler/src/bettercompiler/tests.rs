@@ -34,6 +34,10 @@ fn assert_closures(module: &Module, closures: Vec<Closure>) {
     assert_eq!(closures, module.closures());
 }
 
+fn assert_classes(module: &Module, classes: Vec<Class>) {
+    assert_eq!(classes, module.classes());
+}
+
 #[test]
 fn test_stmt_print_numbers() {
     assert_first_chunk(
@@ -849,10 +853,14 @@ fn test_empty_class_global() {
 
     assert_instructions(
         module.chunk(0),
-        vec![Class(0), DefineGlobal(1), GetGlobal(2), Pop, Nil, Return],
+        vec![Class(0), DefineGlobal(0), GetGlobal(1), Pop, Nil, Return],
     );
 
-    assert_constants(&module, vec![make_class("Foo"), "Foo".into(), "Foo".into()]);
+    assert_constants(&module, vec!["Foo".into(), "Foo".into()]);
+
+    assert_classes(&module, vec![
+        make_class("Foo")
+    ]);
 }
 
 #[test]
@@ -863,7 +871,9 @@ fn test_empty_class_local() {
 
     assert_instructions(module.chunk(0), vec![Class(0), GetLocal(1), Pop, Pop, Nil, Return]);
 
-    assert_constants(&module, vec![make_class("Foo")]);
+    assert_classes(&module, vec![
+        make_class("Foo")
+    ]);
 }
 
 #[test]
@@ -912,8 +922,8 @@ fn make_closure(name: &str, index: usize, arity: usize, upvalues: Vec<Upvalue>) 
     crate::bytecode::Closure { function, upvalues }
 }
 
-fn make_class(name: &str) -> Constant {
-    Constant::Class(Class {
+fn make_class(name: &str) -> Class {
+    Class {
         name: name.to_string(),
-    })
+    }
 }

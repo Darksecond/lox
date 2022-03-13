@@ -1,4 +1,4 @@
-use lox_bytecode::bytecode::{Chunk, Constant, ConstantIndex, Module, ClosureIndex};
+use lox_bytecode::bytecode::{Chunk, Constant, ConstantIndex, Module, ClosureIndex, ClassIndex};
 
 use crate::bettergc::{Gc, Trace};
 use crate::bytecode::{ChunkIndex, self};
@@ -188,6 +188,11 @@ impl Import {
     #[inline]
     pub fn constant(&self, index: ConstantIndex) -> &Constant {
         self.module.constant(index)
+    }
+
+    #[inline]
+    pub fn class(&self, index: ClassIndex) -> &bytecode::Class {
+        self.module.class(index)
     }
 
     //TODO rename to make it clear this is not an alive closure.

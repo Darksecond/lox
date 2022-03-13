@@ -7,6 +7,7 @@ pub type ChunkIndex = usize;
 pub type ArgumentCount = usize;
 pub type UpvalueIndex = usize;
 pub type ClosureIndex = usize;
+pub type ClassIndex = usize;
 
 #[derive(Debug, PartialEq, Copy, Clone, Serialize, Deserialize)]
 pub enum Instruction {
@@ -47,7 +48,7 @@ pub enum Instruction {
     Invoke(ConstantIndex, ArgumentCount),
     CloseUpvalue,
 
-    Class(ConstantIndex),
+    Class(ClassIndex),
     Closure(ClosureIndex),
     Method(ConstantIndex),
 
@@ -85,7 +86,6 @@ pub struct Function {
 pub enum Constant {
     Number(f64),
     String(String),
-    Class(Class),
 }
 
 impl From<f64> for Constant {
@@ -118,6 +118,7 @@ pub struct Module {
     chunks: Vec<Chunk>,
     constants: Vec<Constant>,
     closures: Vec<Closure>,
+    classes: Vec<Class>,
 }
 
 impl std::fmt::Debug for Module {
@@ -132,6 +133,7 @@ impl Module {
             chunks: vec![],
             constants: vec![],
             closures: vec![],
+            classes: vec![],
         }
     }
 
@@ -159,12 +161,21 @@ impl Module {
         self.closures.len() - 1
     }
 
+    pub fn add_class(&mut self, class: Class) -> ClassIndex {
+        self.classes.push(class);
+        self.classes.len() - 1
+    }
+
     pub fn constants(&self) -> &[Constant] {
         &self.constants
     }
 
     pub fn closures(&self) -> &[Closure] {
         &self.closures
+    }
+
+    pub fn classes(&self) -> &[Class] {
+        &self.classes
     }
 
     #[inline]
@@ -175,6 +186,11 @@ impl Module {
     #[inline]
     pub fn closure(&self, index: ClosureIndex) -> &Closure {
         &self.closures[index]
+    }
+
+    #[inline]
+    pub fn  class(&self, index: ClassIndex) -> &Class {
+        &self.classes[index]
     }
 
     pub fn chunks(&self) -> &[Chunk] {

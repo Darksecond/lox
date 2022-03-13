@@ -88,9 +88,9 @@ fn compile_class(
     stmts: &[WithSpan<Stmt>],
 ) {
     declare_variable(compiler, identifier.as_ref());
-    let constant = compiler.add_constant(Constant::Class(Class {
-        name: identifier.value.to_string(),
-    }));
+    let constant = compiler.add_class(Class{
+        name: identifier.value.to_string()
+    });
     compiler.add_instruction(Instruction::Class(constant));
     define_variable(compiler, identifier.value);
 

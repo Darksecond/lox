@@ -209,7 +209,6 @@ impl<W> Vm<W> where W: Write {
             Instruction::Constant(index) => match current_import.constant(index) {
                 Constant::Number(n) => self.push(Value::Number(*n)),
                 Constant::String(string) => self.push_string(string),
-                Constant::Class(_) => unimplemented!(),
             },
 
             Instruction::Import(_) => unimplemented!(),
@@ -250,15 +249,12 @@ impl<W> Vm<W> where W: Write {
                 self.push(Value::Closure(closure_root.as_gc()));
             }
             Instruction::Class(index) => {
-                if let Constant::Class(class) = current_import.constant(index) {
-                    let class = self.heap.manage(RefCell::new(Class {
-                        name: class.name.clone(),
-                        methods: FxHashMap::default(),
-                    }));
-                    self.push(Value::Class(class.as_gc()));
-                } else {
-                    return Err(VmError::UnexpectedConstant);
-                }
+                let class = current_import.class(index);
+                let class = self.heap.manage(RefCell::new(Class {
+                    name: class.name.clone(),
+                    methods: FxHashMap::default(),
+                }));
+                self.push(Value::Class(class.as_gc()));
             }
             //TODO Rewrite if's to improve error handling
             //TODO Pretty sure it leaves the stack clean, but double check
