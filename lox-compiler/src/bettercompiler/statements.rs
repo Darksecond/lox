@@ -58,7 +58,7 @@ fn define_variable(compiler: &mut Compiler, identifier: &str) {
     if compiler.is_scoped() {
         compiler.mark_local_initialized();
     } else {
-        let constant = compiler.add_constant(identifier);
+        let constant = compiler.add_identifier(identifier);
         compiler.add_instruction(Instruction::DefineGlobal(constant));
     }
 }
@@ -71,7 +71,7 @@ fn compile_import(compiler: &mut Compiler, path: &WithSpan<String>, identifiers:
         for identifier in identifiers {
             declare_variable(compiler, identifier.as_ref());
             
-            let constant = compiler.add_constant(identifier.value.as_str());
+            let constant = compiler.add_identifier(identifier.value.as_str());
             compiler.add_instruction(Instruction::ImportGlobal(constant));
 
             define_variable(compiler, &identifier.value);
@@ -122,7 +122,7 @@ fn compile_method(
 
     compile_closure(compiler, &identifier, args, block, context_type);
 
-    let constant = compiler.add_constant(identifier.value.as_str());
+    let constant = compiler.add_identifier(identifier.value.as_str());
     compiler.add_instruction(Instruction::Method(constant));
 }
 
@@ -306,7 +306,7 @@ fn compile_get(
     identifier: WithSpan<&String>,
 ) {
     compile_expr(compiler, expr);
-    let constant = compiler.add_constant(identifier.value.as_str());
+    let constant = compiler.add_identifier(identifier.value.as_str());
     compiler.add_instruction(Instruction::GetProperty(constant));
 }
 
@@ -318,7 +318,7 @@ fn compile_set(
 ) {
     compile_expr(compiler, expr);
     compile_expr(compiler, value);
-    let constant = compiler.add_constant(identifier.value.as_str());
+    let constant = compiler.add_identifier(identifier.value.as_str());
     compiler.add_instruction(Instruction::SetProperty(constant));
 }
 
@@ -346,7 +346,7 @@ fn compile_call(
             compile_expr(compiler, arg);
         }
         
-        let constant = compiler.add_constant(ident.value.as_str());
+        let constant = compiler.add_identifier(ident.value.as_str());
         compiler.add_instruction(Instruction::Invoke(constant, args.len()));
     } else {
         compile_expr(compiler, identifier);
@@ -420,7 +420,7 @@ fn compile_assign(
         compiler.add_instruction(Instruction::SetUpvalue(upvalue));
     } else {
         // Global
-        let constant = compiler.add_constant(identifier.value.as_str());
+        let constant = compiler.add_identifier(identifier.value.as_str());
         compiler.add_instruction(Instruction::SetGlobal(constant));
     }
 }
@@ -437,7 +437,7 @@ fn compile_variable(
         compiler.add_instruction(Instruction::GetUpvalue(upvalue));
     } else {
         // Global
-        let constant = compiler.add_constant(identifier.value.as_str());
+        let constant = compiler.add_identifier(identifier.value.as_str());
         compiler.add_instruction(Instruction::GetGlobal(constant));
     }
 }

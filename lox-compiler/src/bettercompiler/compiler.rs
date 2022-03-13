@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use lox_syntax::position::Diagnostic;
 use lox_syntax::position::Span;
 
@@ -23,6 +25,7 @@ pub struct Compiler {
     module: Module,
     contexts: Vec<CompilerContext>,
     errors: Vec<Diagnostic>,
+    identifiers: HashMap<String, IdentifierIndex>
 }
 
 impl CompilerContext {
@@ -108,6 +111,7 @@ impl Compiler {
             module: Module::new(),
             contexts: vec![],
             errors: vec![],
+            identifiers: HashMap::new(),
         }
     }
 
@@ -249,6 +253,16 @@ impl Compiler {
 
     pub fn add_class(&mut self, class: Class) -> ClassIndex {
         self.module.add_class(class)
+    }
+
+    pub fn add_identifier(&mut self, identifier: &str) -> IdentifierIndex {
+        if let Some(index) = self.identifiers.get(identifier) {
+            *index
+        } else {
+            let index = self.module.add_identifier(identifier);
+            self.identifiers.insert(identifier.to_string(), index);
+            index
+        }
     }
 
     pub fn resolve_upvalue(&mut self, name: &str) -> Option<StackIndex> {

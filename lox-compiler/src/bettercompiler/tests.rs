@@ -7,13 +7,14 @@ fn parse_stmt(data: &str) -> Result<Vec<WithSpan<Stmt>>, Vec<Diagnostic>> {
     lox_syntax::parse(data)
 }
 
-fn assert_first_chunk(data: &str, constants: Vec<Constant>, instructions: Vec<Instruction>) {
+fn assert_first_chunk(data: &str, constants: Vec<Constant>, identifiers: Vec<&str>, instructions: Vec<Instruction>) {
     use super::compile;
     let ast = parse_stmt(data).unwrap();
     let module = compile(&ast).unwrap();
     let chunk = module.chunk(0);
     assert_eq!(instructions, chunk.instructions());
     assert_eq!(constants, module.constants());
+    assert_eq!(identifiers, module.identifiers());
 }
 
 fn compile_code(data: &str) -> Module {
@@ -38,11 +39,16 @@ fn assert_classes(module: &Module, classes: Vec<Class>) {
     assert_eq!(classes, module.classes());
 }
 
+fn assert_identifiers(module: &Module, identifiers: Vec<&str>) {
+    assert_eq!(identifiers, module.identifiers());
+}
+
 #[test]
 fn test_stmt_print_numbers() {
     assert_first_chunk(
         "print 3;",
         vec![3.0.into()],
+        vec![],
         vec![
             Instruction::Constant(0),
             Instruction::Print,
@@ -53,6 +59,7 @@ fn test_stmt_print_numbers() {
     assert_first_chunk(
         "print 1+2;",
         vec![1.0.into(), 2.0.into()],
+        vec![],
         vec![
             Instruction::Constant(0),
             Instruction::Constant(1),
@@ -65,6 +72,7 @@ fn test_stmt_print_numbers() {
     assert_first_chunk(
         "print 1-2;",
         vec![1.0.into(), 2.0.into()],
+        vec![],
         vec![
             Instruction::Constant(0),
             Instruction::Constant(1),
@@ -76,6 +84,7 @@ fn test_stmt_print_numbers() {
     );
     assert_first_chunk(
         "print nil;",
+        vec![],
         vec![],
         vec![
             Instruction::Nil,
@@ -91,6 +100,7 @@ fn test_stmt_print_strings() {
     assert_first_chunk(
         "print \"Hello, World!\";",
         vec!["Hello, World!".into()],
+        vec![],
         vec![
             Instruction::Constant(0),
             Instruction::Print,
@@ -101,6 +111,7 @@ fn test_stmt_print_strings() {
     assert_first_chunk(
         "print \"Hello, \" + \"World!\";",
         vec!["Hello, ".into(), "World!".into()],
+        vec![],
         vec![
             Instruction::Constant(0),
             Instruction::Constant(1),
@@ -117,17 +128,19 @@ fn test_global_variables() {
     use crate::bytecode::Instruction::*;
     assert_first_chunk(
         "var x=3;",
-        vec![3.0.into(), "x".into()],
+        vec![3.0.into()],
+        vec!["x"],
         vec![
             Instruction::Constant(0),
-            Instruction::DefineGlobal(1),
+            Instruction::DefineGlobal(0),
             Instruction::Nil,
             Instruction::Return,
         ],
     );
     assert_first_chunk(
         "var x;",
-        vec!["x".into()],
+        vec![],
+        vec!["x"],
         vec![
             Instruction::Nil,
             Instruction::DefineGlobal(0),
@@ -137,11 +150,12 @@ fn test_global_variables() {
     );
     assert_first_chunk(
         "var x=3; print x;",
-        vec![3.0.into(), "x".into(), "x".into()],
+        vec![3.0.into()],
+        vec!["x"],
         vec![
             Instruction::Constant(0),
-            Instruction::DefineGlobal(1),
-            Instruction::GetGlobal(2),
+            Instruction::DefineGlobal(0),
+            Instruction::GetGlobal(0),
             Instruction::Print,
             Instruction::Nil,
             Instruction::Return,
@@ -149,12 +163,13 @@ fn test_global_variables() {
     );
     assert_first_chunk(
         "var x=3;x=2;",
-        vec![3.0.into(), "x".into(), 2.0.into(), "x".into()],
+        vec![3.0.into(), 2.0.into()],
+        vec!["x"],
         vec![
             Constant(0),
-            DefineGlobal(1),
-            Constant(2),
-            SetGlobal(3),
+            DefineGlobal(0),
+            Constant(1),
+            SetGlobal(0),
             Pop,
             Instruction::Nil,
             Instruction::Return,
@@ -168,6 +183,7 @@ fn test_local_variables() {
     assert_first_chunk(
         "{var x=3;}",
         vec![3.0.into()],
+        vec![],
         vec![
             Instruction::Constant(0),
             Instruction::Pop,
@@ -178,6 +194,7 @@ fn test_local_variables() {
     assert_first_chunk(
         "{var x=3; print x;}",
         vec![3.0.into()],
+        vec![],
         vec![
             Instruction::Constant(0),
             Instruction::GetLocal(1),
@@ -189,19 +206,20 @@ fn test_local_variables() {
     );
     assert_first_chunk(
         "var x=2; {var x=3; { var x=4; print x; } print x;} print x;",
-        vec![2.0.into(), "x".into(), 3.0.into(), 4.0.into(), "x".into()],
+        vec![2.0.into(), 3.0.into(), 4.0.into()],
+        vec!["x"],
         vec![
             Constant(0),
-            DefineGlobal(1),
+            DefineGlobal(0),
+            Constant(1),
             Constant(2),
-            Constant(3),
             GetLocal(2),
             Print,
             Pop,
             GetLocal(1),
             Print,
             Pop,
-            GetGlobal(4),
+            GetGlobal(0),
             Print,
             Instruction::Nil,
             Instruction::Return,
@@ -209,6 +227,7 @@ fn test_local_variables() {
     );
     assert_first_chunk(
         "{var x;}",
+        vec![],
         vec![],
         vec![
             Instruction::Nil,
@@ -220,6 +239,7 @@ fn test_local_variables() {
     assert_first_chunk(
         "{var x;x=2;}",
         vec![2.0.into()],
+        vec![],
         vec![
             Nil,
             Constant(0),
@@ -235,13 +255,13 @@ fn test_local_variables() {
 #[test]
 fn test_expression() {
     use crate::bytecode::Instruction::*;
-    assert_first_chunk("3;", vec![3.0.into()], vec![Constant(0), Pop, Nil, Return]);
+    assert_first_chunk("3;", vec![3.0.into()], vec![],vec![Constant(0), Pop, Nil, Return]);
 
-    assert_first_chunk("true;", vec![], vec![True, Pop, Nil, Return]);
+    assert_first_chunk("true;", vec![],  vec![],vec![True, Pop, Nil, Return]);
 
-    assert_first_chunk("false;", vec![], vec![False, Pop, Nil, Return]);
+    assert_first_chunk("false;", vec![],  vec![],vec![False, Pop, Nil, Return]);
 
-    assert_first_chunk("nil;", vec![], vec![Nil, Pop, Nil, Return]);
+    assert_first_chunk("nil;", vec![],  vec![],vec![Nil, Pop, Nil, Return]);
 }
 
 #[test]
@@ -251,6 +271,7 @@ fn test_if() {
     assert_first_chunk(
         "if(false) 3;4;",
         vec![3.0.into(), 4.0.into()],
+        vec![],
         vec![
             False,
             JumpIfFalse(5),
@@ -267,6 +288,7 @@ fn test_if() {
     assert_first_chunk(
         "if(false) 3; else 4;5;",
         vec![3.0.into(), 4.0.into(), 5.0.into()],
+        vec![],
         vec![
             False,
             JumpIfFalse(6),
@@ -292,6 +314,7 @@ fn test_logical_operators() {
     assert_first_chunk(
         "3 and 4;",
         vec![3.0.into(), 4.0.into()],
+        vec![],
         vec![
             Constant(0),
             JumpIfFalse(4),
@@ -306,6 +329,7 @@ fn test_logical_operators() {
     assert_first_chunk(
         "3 or 4;",
         vec![3.0.into(), 4.0.into()],
+        vec![],
         vec![
             Constant(0),
             JumpIfFalse(3),
@@ -326,6 +350,7 @@ fn test_equality() {
     assert_first_chunk(
         "3 < 4;",
         vec![3.0.into(), 4.0.into()],
+        vec![],
         vec![Constant(0), Constant(1), Less, Pop, Nil, Return],
     );
 }
@@ -337,6 +362,7 @@ fn test_while() {
     assert_first_chunk(
         "while(true) print 3;",
         vec![3.0.into()],
+        vec![],
         vec![
             True,
             JumpIfFalse(6),
@@ -358,6 +384,7 @@ fn test_for() {
     assert_first_chunk(
         "for(var i = 0; i < 10; i = i + 1) print i;",
         vec![0.0.into(), 10.0.into(), 1.0.into()],
+        vec![],
         vec![
             Constant(0),
             GetLocal(1),
@@ -391,8 +418,8 @@ fn test_simple_function() {
         module.chunk(0),
         vec![
             Closure(0),
-            DefineGlobal(1),
-            GetGlobal(2),
+            DefineGlobal(0),
+            GetGlobal(0),
             Call(0),
             Pop,
             Instruction::Nil,
@@ -405,13 +432,15 @@ fn test_simple_function() {
         &module,
         vec![
             3.0.into(),
-            "first".into(),
-            "first".into(),
         ],
     );
 
     assert_closures(&module, vec![
         make_fun("first", 1, 0),
+    ]);
+
+    assert_identifiers(&module, vec![
+        "first",
     ]);
 }
 
@@ -426,8 +455,8 @@ fn test_function_with_one_argument() {
         vec![
             Closure(0),
             DefineGlobal(0),
-            GetGlobal(1),
-            Constant(2),
+            GetGlobal(0),
+            Constant(0),
             Call(1),
             Pop,
             Instruction::Nil,
@@ -439,14 +468,16 @@ fn test_function_with_one_argument() {
     assert_constants(
         &module,
         vec![
-            "first".into(),
-            "first".into(),
             3.0.into(),
         ],
     );
 
     assert_closures(&module, vec![
         make_fun("first", 1, 1),
+    ]);
+
+    assert_identifiers(&module, vec![
+        "first"
     ]);
 }
 
@@ -460,9 +491,9 @@ fn test_recursive_function_with_one_argument() {
         module.chunk(0),
         vec![
             Closure(0),
-            DefineGlobal(2),
-            GetGlobal(3),
-            Constant(4),
+            DefineGlobal(0),
+            GetGlobal(0),
+            Constant(1),
             Call(1),
             Pop,
             Nil,
@@ -474,7 +505,7 @@ fn test_recursive_function_with_one_argument() {
         vec![
             GetGlobal(0),
             GetLocal(1),
-            Constant(1),
+            Constant(0),
             Add,
             Call(1),
             Print,
@@ -486,16 +517,17 @@ fn test_recursive_function_with_one_argument() {
     assert_constants(
         &module,
         vec![
-            "first".into(),
             1.0.into(),
-            "first".into(),
-            "first".into(),
             3.0.into(),
         ],
     );
 
     assert_closures(&module, vec![
         make_fun("first", 1, 1),
+    ]);
+
+    assert_identifiers(&module, vec![
+        "first"
     ]);
 }
 
@@ -511,8 +543,8 @@ fn test_functions_calling_functions() {
             Closure(0),
             DefineGlobal(1),
             Closure(1),
-            DefineGlobal(3),
-            GetGlobal(4),
+            DefineGlobal(0),
+            GetGlobal(1),
             Call(0),
             Pop,
             Instruction::Nil,
@@ -523,22 +555,23 @@ fn test_functions_calling_functions() {
         module.chunk(1),
         vec![GetGlobal(0), Call(0), Pop, Nil, Return],
     );
-    assert_instructions(module.chunk(2), vec![Constant(2), Print, Nil, Return]);
+    assert_instructions(module.chunk(2), vec![Constant(0), Print, Nil, Return]);
 
     assert_constants(
         &module,
         vec![
-            "second".into(),
-            "first".into(),
             3.0.into(),
-            "second".into(),
-            "first".into(),
         ],
     );
 
     assert_closures(&module, vec![
         make_fun("first", 1, 0),
         make_fun("second", 2, 0),
+    ]);
+
+    assert_identifiers(&module, vec![
+        "second",
+        "first",
     ]);
 }
 
@@ -607,7 +640,7 @@ fn test_function_with_return() {
         module.chunk(0),
         vec![
             Closure(0),
-            DefineGlobal(1),
+            DefineGlobal(0),
             Instruction::Nil,
             Instruction::Return,
         ],
@@ -616,11 +649,15 @@ fn test_function_with_return() {
 
     assert_constants(
         &module,
-        vec![3.0.into(), "first".into()],
+        vec![3.0.into()],
     );
 
     assert_closures(&module, vec![
         make_fun("first", 1, 0),
+    ]);
+
+    assert_identifiers(&module, vec![
+        "first"
     ]);
 }
 
@@ -762,8 +799,8 @@ fn test_scoped_upvalue() {
             Nil,
             DefineGlobal(0),
             Closure(1),
-            DefineGlobal(3),
-            GetGlobal(4),
+            DefineGlobal(1),
+            GetGlobal(1),
             Call(0),
             Pop,
             Instruction::Nil,
@@ -773,10 +810,10 @@ fn test_scoped_upvalue() {
     assert_instructions(
         module.chunk(1),
         vec![
-            Constant(1),
+            Constant(0),
             Closure(0),
             GetLocal(2),
-            SetGlobal(2),
+            SetGlobal(0),
             Pop,
             Pop,
             CloseUpvalue,
@@ -789,17 +826,18 @@ fn test_scoped_upvalue() {
     assert_constants(
         &module,
         vec![
-            "global".into(),
             3.0.into(),
-            "global".into(),
-            "main".into(),
-            "main".into(),
         ],
     );
 
     assert_closures(&module, vec![
         make_closure("one", 2, 0, vec![Upvalue::Local(1)]),
         make_closure("main", 1, 0, vec![]),
+    ]);
+
+    assert_identifiers(&module, vec![
+        "global",
+        "main",
     ]);
 }
 
@@ -825,10 +863,14 @@ fn test_complex_import() {
 
     assert_instructions(
         module.chunk(0),
-        vec![Import(0), ImportGlobal(1), DefineGlobal(2), Pop, Nil, Return],
+        vec![Import(0), ImportGlobal(0), DefineGlobal(0), Pop, Nil, Return],
     );
 
-    assert_constants(&module, vec!["foo".into(), "x".into(), "x".into()]);
+    assert_constants(&module, vec!["foo".into()]);
+
+    assert_identifiers(&module, vec![
+        "x"
+    ]);
 }
 
 #[test]
@@ -839,10 +881,14 @@ fn test_complex_local_import() {
 
     assert_instructions(
         module.chunk(0),
-        vec![Import(0), ImportGlobal(1), Pop, GetLocal(1), Print, Pop, Nil, Return],
+        vec![Import(0), ImportGlobal(0), Pop, GetLocal(1), Print, Pop, Nil, Return],
     );
 
-    assert_constants(&module, vec!["foo".into(), "x".into()]);
+    assert_constants(&module, vec!["foo".into()]);
+
+    assert_identifiers(&module, vec![
+        "x"
+    ]);
 }
 
 #[test]
@@ -853,13 +899,17 @@ fn test_empty_class_global() {
 
     assert_instructions(
         module.chunk(0),
-        vec![Class(0), DefineGlobal(0), GetGlobal(1), Pop, Nil, Return],
+        vec![Class(0), DefineGlobal(0), GetGlobal(0), Pop, Nil, Return],
     );
 
-    assert_constants(&module, vec!["Foo".into(), "Foo".into()]);
+    assert_constants(&module, vec![]);
 
     assert_classes(&module, vec![
         make_class("Foo")
+    ]);
+
+    assert_identifiers(&module, vec![
+        "Foo"
     ]);
 }
 
@@ -884,10 +934,15 @@ fn test_set_property() {
 
     assert_instructions(
         module.chunk(0),
-        vec![GetGlobal(0), Constant(1), SetProperty(2), Pop, Nil, Return],
+        vec![GetGlobal(0), Constant(0), SetProperty(1), Pop, Nil, Return],
     );
 
-    assert_constants(&module, vec!["x".into(), 3.0.into(), "test".into()]);
+    assert_constants(&module, vec![3.0.into()]);
+
+    assert_identifiers(&module, vec![
+        "x",
+        "test",
+    ]);
 }
 
 #[test]
@@ -901,7 +956,12 @@ fn test_get_property() {
         vec![GetGlobal(0), GetProperty(1), Pop, Nil, Return],
     );
 
-    assert_constants(&module, vec!["x".into(), "test".into()]);
+    assert_constants(&module, vec![]);
+
+    assert_identifiers(&module, vec![
+        "x",
+        "test",
+    ]);
 }
 
 fn make_fun(name: &str, index: usize, arity: usize) -> Closure {

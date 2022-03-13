@@ -161,11 +161,8 @@ impl Trace for Import {
 
 impl Import {
     pub fn new(module: Module, interner: &mut Interner) -> Self {
-        let symbols = module.constants().iter().map(|constant| {
-            match constant {
-                Constant::String(str) => interner.intern(str),
-                _ => Symbol::invalid(),
-            }
+        let symbols = module.identifiers().iter().map(|identifier| {
+            interner.intern(identifier)
         }).collect();
 
         Self {

@@ -8,6 +8,7 @@ pub type ArgumentCount = usize;
 pub type UpvalueIndex = usize;
 pub type ClosureIndex = usize;
 pub type ClassIndex = usize;
+pub type IdentifierIndex = usize;
 
 #[derive(Debug, PartialEq, Copy, Clone, Serialize, Deserialize)]
 pub enum Instruction {
@@ -32,28 +33,28 @@ pub enum Instruction {
     Return,
     Print,
 
-    DefineGlobal(ConstantIndex),
-    GetGlobal(ConstantIndex),
-    SetGlobal(ConstantIndex),
+    DefineGlobal(IdentifierIndex),
+    GetGlobal(IdentifierIndex),
+    SetGlobal(IdentifierIndex),
     GetLocal(StackIndex),
     SetLocal(StackIndex),
     GetUpvalue(StackIndex),
     SetUpvalue(StackIndex),
-    SetProperty(ConstantIndex),
-    GetProperty(ConstantIndex),
+    SetProperty(IdentifierIndex),
+    GetProperty(IdentifierIndex),
 
     Jump(InstructionIndex),
     JumpIfFalse(InstructionIndex),
     Call(ArgumentCount),
-    Invoke(ConstantIndex, ArgumentCount),
+    Invoke(IdentifierIndex, ArgumentCount),
     CloseUpvalue,
 
     Class(ClassIndex),
     Closure(ClosureIndex),
-    Method(ConstantIndex),
+    Method(IdentifierIndex),
 
     Import(ConstantIndex),
-    ImportGlobal(ConstantIndex),
+    ImportGlobal(IdentifierIndex),
     // etc
 }
 
@@ -119,6 +120,7 @@ pub struct Module {
     constants: Vec<Constant>,
     closures: Vec<Closure>,
     classes: Vec<Class>,
+    identifiers: Vec<String>,
 }
 
 impl std::fmt::Debug for Module {
@@ -134,6 +136,7 @@ impl Module {
             constants: vec![],
             closures: vec![],
             classes: vec![],
+            identifiers: vec![],
         }
     }
 
@@ -166,6 +169,11 @@ impl Module {
         self.classes.len() - 1
     }
 
+    pub fn add_identifier(&mut self, identifier: &str) -> IdentifierIndex {
+        self.identifiers.push(identifier.to_string());
+        self.identifiers.len() - 1
+    }
+
     pub fn constants(&self) -> &[Constant] {
         &self.constants
     }
@@ -176,6 +184,10 @@ impl Module {
 
     pub fn classes(&self) -> &[Class] {
         &self.classes
+    }
+
+    pub fn identifiers(&self) -> &[String] {
+        &self.identifiers
     }
 
     #[inline]
@@ -189,8 +201,13 @@ impl Module {
     }
 
     #[inline]
-    pub fn  class(&self, index: ClassIndex) -> &Class {
+    pub fn class(&self, index: ClassIndex) -> &Class {
         &self.classes[index]
+    }
+
+    #[inline]
+    pub fn identifier(&self, index: IdentifierIndex) -> &str {
+        &self.identifiers[index]
     }
 
     pub fn chunks(&self) -> &[Chunk] {
