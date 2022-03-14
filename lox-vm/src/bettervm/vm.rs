@@ -279,7 +279,7 @@ impl<W> Vm<W> where W: Write {
                     instance
                         .borrow_mut()
                         .fields
-                        .insert(property, *self.peek());
+                        .insert(property, self.peek());
 
                     let value = self.pop();
                     self.pop();
@@ -374,7 +374,7 @@ impl<W> Vm<W> where W: Write {
             }
             Instruction::SetGlobal(index) => {
                 let identifier = current_import.symbol(index);
-                let value = *self.peek();
+                let value = self.peek();
                 if current_import.has_global(identifier) {
                     current_import.set_global(identifier, value);
                 } else {
@@ -387,7 +387,7 @@ impl<W> Vm<W> where W: Write {
             }
             Instruction::SetLocal(index) => {
                 let index = self.current_frame().base_counter + index;
-                let value = *self.peek();
+                let value = self.peek();
                 self.stack[index] = value;
             }
             Instruction::True => self.push(Value::Boolean(true)),
@@ -446,7 +446,7 @@ impl<W> Vm<W> where W: Write {
                 self.push(self.resolve_upvalue_into_value(upvalue));
             }
             Instruction::SetUpvalue(index) => {
-                let value = *self.peek();
+                let value = self.peek();
                 let upvalue = self.current_frame().closure.upvalues[index];
                 self.set_upvalue(upvalue, value);
             }
@@ -459,7 +459,7 @@ impl<W> Vm<W> where W: Write {
                 let property = current_import.symbol(index);
                 if let Value::Instance(instance) = *self.peek_n(arity) {
                     if let Some(value) = instance.borrow().fields.get(&property) {
-                        self.rset(arity+1, *value);
+                        self.rset(arity, *value);
                         self.call(arity, *value)?;
                     } else if let Some(method) = instance.borrow().class.borrow().methods.get(&property) {
                         if method.function.arity != arity {
@@ -539,7 +539,7 @@ impl<W> Vm<W> where W: Write {
                     class,
                     fields: FxHashMap::default(),
                 }));
-                self.rset(arity+1, Value::Instance(instance.as_gc()));
+                self.rset(arity, Value::Instance(instance.as_gc()));
 
                 let init_symbol = self.interner.intern("init"); //TODO move to constructor
                 if let Some(initializer) = class.borrow().methods.get(&init_symbol) {
@@ -556,7 +556,7 @@ impl<W> Vm<W> where W: Write {
                 if callee.function.arity != arity {
                     return Err(VmError::IncorrectArity);
                 }
-                self.rset(arity+1, Value::Instance(bind.receiver));
+                self.rset(arity, Value::Instance(bind.receiver));
                 self.begin_frame(callee);
             },
             _ => return Err(VmError::InvalidCallee),
@@ -577,9 +577,8 @@ impl<W> Vm<W> where W: Write {
         self.stack.push(value)
     }
 
-    //TODO match index with n of peek_n, this is 1 off from peek_n.
     fn rset(&mut self, index: usize, value: Value) {
-        let index = self.stack.len() - index;
+        let index = self.stack.len() - index - 1;
         self.stack[index] = value;
     }
 
@@ -601,8 +600,8 @@ impl<W> Vm<W> where W: Write {
         result
     }
 
-    fn peek(&self) -> &Value {
-        self.stack.last().expect("Stack empty")
+    fn peek(&self) -> Value {
+        *self.stack.last().expect("Stack empty")
     }
 
     fn peek_n(&self, n: usize) -> &Value {
