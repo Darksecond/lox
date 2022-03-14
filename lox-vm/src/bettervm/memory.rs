@@ -2,7 +2,7 @@ use lox_bytecode::bytecode::{Chunk, Constant, ConstantIndex, Module, ClosureInde
 
 use crate::bettergc::{Gc, Trace};
 use crate::bytecode::{ChunkIndex, self};
-use std::cell::RefCell;
+use std::cell::{RefCell, Cell};
 use fxhash::FxHashMap;
 
 use super::vm::{Symbol, Interner};
@@ -77,7 +77,7 @@ impl Trace for Class {
 #[derive(Debug)]
 pub struct Closure {
     pub function: Function,
-    pub upvalues: Vec<Gc<RefCell<Upvalue>>>,
+    pub upvalues: Vec<Gc<Cell<Upvalue>>>,
 }
 
 impl Trace for Closure {

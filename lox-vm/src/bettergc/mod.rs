@@ -348,3 +348,9 @@ impl Trace for String {
     #[inline]
     fn trace(&self) {}
 }
+
+impl<T: Trace + Copy> Trace for Cell<T> {
+    fn trace(&self) {
+        self.get().trace();
+    }
+}

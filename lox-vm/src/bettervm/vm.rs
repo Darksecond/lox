@@ -3,6 +3,7 @@ use lox_bytecode::bytecode::{Chunk, Instruction};
 use super::memory::*;
 use crate::bettergc::{Gc, Trace, UniqueRoot, Heap};
 use crate::bytecode::Module;
+use std::cell::Cell;
 use std::{cell::RefCell, io::{Stdout, Write, stdout}};
 use std::collections::HashMap;
 use fxhash::FxHashMap;
@@ -110,7 +111,7 @@ pub struct Vm<W> where W: Write {
     imports: UniqueRoot<HashMap<String, Gc<Import>>>,
     frames: UniqueRoot<Vec<CallFrame>>,
     stack: UniqueRoot<Vec<Value>>,
-    upvalues: UniqueRoot<Vec<Gc<RefCell<Upvalue>>>>,
+    upvalues: UniqueRoot<Vec<Gc<Cell<Upvalue>>>>,
     stdout: W,
     interner: Interner,
     heap: Heap,
@@ -230,7 +231,7 @@ impl<W> Vm<W> where W: Write {
                                 {
                                     upvalue
                                 } else {
-                                    let root = self.heap.manage(RefCell::new(Upvalue::Open(index)));
+                                    let root = self.heap.manage(Cell::new(Upvalue::Open(index)));
                                     self.upvalues.push(root.as_gc());
                                     root.as_gc()
                                 }
@@ -442,12 +443,12 @@ impl<W> Vm<W> where W: Write {
             }
             Instruction::GetUpvalue(index) => {
                 let upvalue = self.current_frame().closure.upvalues[index];
-                self.push(self.resolve_upvalue_into_value(&*upvalue.borrow()));
+                self.push(self.resolve_upvalue_into_value(upvalue));
             }
             Instruction::SetUpvalue(index) => {
                 let value = *self.peek();
                 let upvalue = self.current_frame().closure.upvalues[index];
-                self.set_upvalue(&mut *upvalue.borrow_mut(), value);
+                self.set_upvalue(upvalue, value);
             }
             Instruction::CloseUpvalue => {
                 let index = self.stack.len() - 1;
@@ -479,23 +480,23 @@ impl<W> Vm<W> where W: Write {
 
     fn close_upvalues(&mut self, index: usize) {
         for upvalue in self.upvalues.iter() {
-            if upvalue.borrow().is_open_with_index(index) {
+            if upvalue.get().is_open_with_index(index) {
                 let value = self.stack[index];
                 upvalue.replace(Upvalue::Closed(value));
             }
         }
 
-        self.upvalues.retain(|u| u.borrow().is_open());
+        self.upvalues.retain(|u| u.get().is_open());
     }
 
-    fn find_upvalue_by_index(&self, index: usize) -> Gc<RefCell<Upvalue>> {
+    fn find_upvalue_by_index(&self, index: usize) -> Gc<Cell<Upvalue>> {
         let frame = &self.frames[self.frames.len() - 1]; //TODO Result
         frame.closure.upvalues[index]
     }
 
-    fn find_open_upvalue_with_index(&self, index: usize) -> Option<Gc<RefCell<Upvalue>>> {
+    fn find_open_upvalue_with_index(&self, index: usize) -> Option<Gc<Cell<Upvalue>>> {
         for upvalue in self.upvalues.iter().rev() {
-            if upvalue.borrow().is_open_with_index(index) {
+            if upvalue.get().is_open_with_index(index) {
                 return Some(*upvalue);
             }
         }
@@ -503,17 +504,17 @@ impl<W> Vm<W> where W: Write {
         None
     }
 
-    fn resolve_upvalue_into_value(&self, upvalue: &Upvalue) -> Value {
-        match upvalue {
-            Upvalue::Closed(value) => *value,
-            Upvalue::Open(index) => self.stack[*index],
+    fn resolve_upvalue_into_value(&self, upvalue: Gc<Cell<Upvalue>>) -> Value {
+        match upvalue.get() {
+            Upvalue::Closed(value) => value,
+            Upvalue::Open(index) => self.stack[index],
         }
     }
 
-    fn set_upvalue(&mut self, upvalue: &mut Upvalue, new_value: Value) {
-        match upvalue {
-            Upvalue::Closed(value) => *value = new_value,
-            Upvalue::Open(index) => self.stack[*index] = new_value,
+    fn set_upvalue(&mut self, upvalue: Gc<Cell<Upvalue>>, new_value: Value) {
+        match upvalue.get() {
+            Upvalue::Closed(_) => upvalue.set(Upvalue::Closed(new_value)),
+            Upvalue::Open(index) => self.stack[index] = new_value,
         }
     }
 
