@@ -87,7 +87,7 @@ impl Trace for Fiber {
 }
 
 impl Fiber {
-    pub fn new(closure: Gc<Closure>) -> Self {
+    pub fn with_closure(closure: Gc<Closure>) -> Self {
         let mut fiber = Self {
             frames: Vec::with_capacity(8192),
             stack: Vec::with_capacity(8192),

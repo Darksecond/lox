@@ -17,7 +17,7 @@ impl<W> Vm<W> where W: Write {
     pub fn with_stdout(module: Module, stdout: W) -> Self {
         let mut context = VmContext::new(stdout);
         let closure = context.prepare_interpret(module);
-        let vm = context.unique(Fiber::new(closure.as_gc()));
+        let vm = context.unique(Fiber::with_closure(closure.as_gc()));
         
         Self {
             context,

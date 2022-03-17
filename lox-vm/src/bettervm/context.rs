@@ -37,6 +37,7 @@ impl<W: Write> VmContext<W> {
         self.heap.unique(data)
     }
 
+    #[inline]
     pub fn intern(&mut self, string: &str) -> Symbol {
         self.interner.intern(string)
     }
