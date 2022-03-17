@@ -4,6 +4,7 @@ use lox_bytecode::bytecode::Module;
 use crate::bettergc::{UniqueRoot, Heap, Gc, Root, Trace};
 use super::{interner::{Interner, Symbol}, memory::{Import, Closure, Function}};
 
+//TODO Drop W because it's not 'static
 pub struct VmContext<W> where W: Write {
     pub stdout: W,
     interner: Interner,
