@@ -11,7 +11,7 @@ use fxhash::FxHashMap;
 
 //TODO Rename to VmContext
 //TODO (Try) remove W (Box<dyn Write>)
-pub struct Globals<W> where W: Write {
+pub struct VmContext<W> where W: Write {
     stdout: W,
     interner: Interner,
     imports: UniqueRoot<HashMap<String, Gc<Import>>>,
@@ -19,17 +19,17 @@ pub struct Globals<W> where W: Write {
 }
 
 //TODO Rename to Vm
-pub struct VmOuter<W> where W: Write {
-    pub vm: UniqueRoot<Vm>, //TODO Replace with Root<RefCell<Fiber>>
-    pub globals: Globals<W>, //TODO Replace with Root<VmContext<W>>
+pub struct Vm<W> where W: Write {
+    pub vm: UniqueRoot<Fiber>, //TODO Replace with Root<RefCell<Fiber>>
+    pub globals: VmContext<W>, //TODO Replace with Root<VmContext<W>>
 }
 
-impl<W> VmOuter<W> where W: Write {
+impl<W> Vm<W> where W: Write {
     pub fn with_stdout(module: Module, stdout: W) -> Self {
         let mut heap = Heap::new();
-        let vm = heap.unique(Vm::new());
+        let vm = heap.unique(Fiber::new());
         let mut outer = Self {
-            globals: Globals {
+            globals: VmContext {
                 stdout,
                 imports: heap.unique(HashMap::new()),
                 interner: Interner::new(),
@@ -120,13 +120,13 @@ impl CallFrame {
     }
 }
 
-pub struct Vm {
+pub struct Fiber {
     frames: Vec<CallFrame>,
     stack: Vec<Value>,
     upvalues: Vec<Gc<Cell<Upvalue>>>,
 }
 
-impl Trace for Vm {
+impl Trace for Fiber {
     fn trace(&self) {
         self.frames.trace();
         self.stack.trace();
@@ -134,7 +134,7 @@ impl Trace for Vm {
     }
 }
 
-impl Vm {
+impl Fiber {
     pub fn new() -> Self {
         Self {
             frames: Vec::with_capacity(8192),
@@ -143,7 +143,7 @@ impl Vm {
         }
     }
 
-    fn prepare_interpret<W: Write>(&mut self, module: Module, outer: &mut Globals<W>) {
+    fn prepare_interpret<W: Write>(&mut self, module: Module, outer: &mut VmContext<W>) {
         let import = outer.heap.manage(Import::new(module, &mut outer.interner));
         outer.imports.insert("_root".into(), import.as_gc());
 
@@ -166,7 +166,7 @@ impl Vm {
         self.current_frame().closure.function.import
     }
 
-    pub fn set_native_fn<W: Write>(&mut self, identifier: &str, code: fn(&[Value]) -> Value, outer: &mut Globals<W>) {
+    pub fn set_native_fn<W: Write>(&mut self, identifier: &str, code: fn(&[Value]) -> Value, outer: &mut VmContext<W>) {
         let native_function = NativeFunction {
             name: identifier.to_string(),
             code,
@@ -177,7 +177,7 @@ impl Vm {
         self.current_import().set_global(identifier, Value::NativeFunction(root.as_gc()))
     }
 
-    fn interpret_next<W: Write>(&mut self, outer: &mut Globals<W>) -> Result<InterpretResult, VmError> {
+    fn interpret_next<W: Write>(&mut self, outer: &mut VmContext<W>) -> Result<InterpretResult, VmError> {
         use crate::bytecode::Constant;
 
         let current_import = self.current_import();
@@ -511,7 +511,7 @@ impl Vm {
     }
 
     //TODO Reduce duplicate code paths
-    fn call<W: Write>(&mut self, arity: usize, callee: Value, outer: &mut Globals<W>) -> Result<(), VmError> {
+    fn call<W: Write>(&mut self, arity: usize, callee: Value, outer: &mut VmContext<W>) -> Result<(), VmError> {
         match callee {
             Value::Closure(callee) => {
                 if callee.function.arity != arity {
@@ -574,7 +574,7 @@ impl Vm {
         self.stack[index] = value;
     }
 
-    fn push_string<W: Write>(&mut self, string: &str, outer: &mut Globals<W>) {
+    fn push_string<W: Write>(&mut self, string: &str, outer: &mut VmContext<W>) {
         let root = outer.heap.manage(string.to_string());
         self.push(Value::String(root.as_gc()));
     }

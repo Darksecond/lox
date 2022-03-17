@@ -8,11 +8,11 @@ use crate::bytecode::Module;
 
 pub use vm::VmError;
 
-use self::vm::VmOuter;
+use self::vm::Vm;
 
 /// Add the lox standard library to a Vm instance.
 /// Right now the stdlib consists of 'clock'.
-pub fn set_stdlib<W>(outer: &mut VmOuter<W>)
+pub fn set_stdlib<W>(outer: &mut Vm<W>)
 where
     W: Write,
 {
@@ -28,7 +28,7 @@ where
 }
 
 pub fn execute(module: Module) -> Result<(), VmError> {
-    let mut vm = VmOuter::with_stdout(module, stdout());
+    let mut vm = Vm::with_stdout(module, stdout());
     set_stdlib(&mut vm);
 
     vm.interpret()
