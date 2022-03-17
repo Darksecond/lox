@@ -4,8 +4,7 @@ use crate::bettergc::{Gc, Trace};
 use crate::bytecode::{ChunkIndex, self};
 use std::cell::{RefCell, Cell};
 use fxhash::FxHashMap;
-
-use super::vm::{Symbol, Interner};
+use super::interner::{Symbol, Interner};
 
 #[derive(Debug, Copy, Clone)]
 pub enum Upvalue {

@@ -1,10 +1,11 @@
 use lox_bytecode::bytecode::{Chunk, Instruction};
 
 use super::memory::*;
-use crate::bettergc::{Gc, Trace, UniqueRoot, Heap, Root};
+use super::interner::Interner;
+use crate::bettergc::{Gc, Trace, UniqueRoot, Heap};
 use crate::bytecode::Module;
 use std::cell::Cell;
-use std::{cell::RefCell, io::{Stdout, Write, stdout}};
+use std::{cell::RefCell, io::Write};
 use std::collections::HashMap;
 use fxhash::FxHashMap;
 
@@ -15,13 +16,12 @@ pub struct Globals<W> where W: Write {
     interner: Interner,
     imports: UniqueRoot<HashMap<String, Gc<Import>>>,
     heap: Heap,
-    
 }
 
 //TODO Rename to Vm
 pub struct VmOuter<W> where W: Write {
     pub vm: UniqueRoot<Vm>, //TODO Replace with Root<RefCell<Fiber>>
-    pub globals: Globals<W>,
+    pub globals: Globals<W>, //TODO Replace with Root<VmContext<W>>
 }
 
 impl<W> VmOuter<W> where W: Write {
@@ -52,40 +52,6 @@ impl<W> VmOuter<W> where W: Write {
 
     pub fn set_native_fn(&mut self, identifier: &str, code: fn(&[Value]) -> Value) {
         self.vm.set_native_fn(identifier, code, &mut self.globals)
-    }
-}
-
-#[derive(Hash, Eq, PartialEq, Debug, Copy, Clone)]
-pub struct Symbol(u32);
-
-impl Symbol {
-    pub const fn invalid() -> Self {
-        Self(0)
-    }
-}
-
-pub struct Interner {
-    next: u32,
-    map: HashMap<String, Symbol>,
-}
-
-impl Interner {
-    pub fn new() -> Self {
-        Self {
-            next: 1,
-            map: HashMap::new(),
-        }
-    }
-
-    pub fn intern(&mut self, string: &str) -> Symbol {
-        if let Some(symbol) = self.map.get(string) {
-            *symbol
-        } else {
-            let symbol = Symbol(self.next);
-            self.next += 1;
-            self.map.insert(string.to_string(), symbol);
-            symbol
-        }
     }
 }
 

@@ -1,9 +1,10 @@
 mod memory;
 pub mod vm;
+mod interner;
+
 use std::io::{Write, stdout};
 
 use crate::bytecode::Module;
-use vm::Vm;
 
 pub use vm::VmError;
 
