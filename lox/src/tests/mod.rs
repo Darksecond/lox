@@ -30,7 +30,7 @@ fn execute(source: &str) -> (Vec<String>, TestResult) {
 
     let mut output = vec![];
     let cursor = Cursor::new(&mut output);
-    let mut vm = lox_vm::bettervm::vm::Vm::with_stdout(module, cursor);
+    let mut vm = lox_vm::bettervm::Vm::with_stdout(module, cursor);
     lox_vm::bettervm::set_stdlib(&mut vm);
     let result = match vm.interpret() {
         Ok(_) => TestResult::Ok,

@@ -2,45 +2,13 @@ use lox_bytecode::bytecode::{Chunk, Instruction};
 
 use super::context::VmContext;
 use super::memory::*;
-use crate::bettergc::{Gc, Trace, UniqueRoot};
-use crate::bytecode::Module;
+use crate::bettergc::{Gc, Trace};
 use std::cell::Cell;
 use std::{cell::RefCell, io::Write};
 use fxhash::FxHashMap;
 
-pub struct Vm<W> where W: Write {
-    pub vm: UniqueRoot<Fiber>, //TODO Replace with Root<RefCell<Fiber>>
-    pub context: VmContext<W>, //TODO Replace with Root<VmContext<W>>
-}
-
-impl<W> Vm<W> where W: Write {
-    pub fn with_stdout(module: Module, stdout: W) -> Self {
-        let mut context = VmContext::new(stdout);
-        let vm = context.unique(Fiber::new());
-        let mut outer = Self {
-            context,
-            vm,
-        };
-
-        outer.vm.prepare_interpret(module, &mut outer.context);
-        outer
-    }
-
-    pub fn interpret(&mut self) -> Result<(), VmError> {
-        while self.vm.interpret_next(&mut self.context)? == InterpretResult::More {
-            self.context.collect();
-        }
-
-        Ok(())
-    }
-
-    pub fn set_native_fn(&mut self, identifier: &str, code: fn(&[Value]) -> Value) {
-        self.vm.set_native_fn(identifier, code, &mut self.context)
-    }
-}
-
 #[derive(PartialEq)]
-enum InterpretResult {
+pub enum InterpretResult {
     Done,
     More,
 }
@@ -119,31 +87,17 @@ impl Trace for Fiber {
 }
 
 impl Fiber {
-    pub fn new() -> Self {
-        Self {
+    pub fn new(closure: Gc<Closure>) -> Self {
+        let mut fiber = Self {
             frames: Vec::with_capacity(8192),
             stack: Vec::with_capacity(8192),
             upvalues: Vec::with_capacity(8192),
-        }
-    }
-
-    fn prepare_interpret<W: Write>(&mut self, module: Module, context: &mut VmContext<W>) {
-        let import = Import::new(module, &mut context.interner);
-        let import = context.manage(import);
-        context.imports.insert("_root".into(), import.as_gc());
-
-        let function = Function {
-            arity: 0,
-            chunk_index: 0,
-            name: "top".into(),
-            import: import.as_gc(),
         };
-        let closure = context.manage(Closure {
-            upvalues: vec![],
-            function,
-        });
-        self.push(Value::Closure(closure.as_gc()));
-        self.frames.push(CallFrame::new(closure.as_gc(), 0));
+
+        fiber.push(Value::Closure(closure));
+        fiber.begin_frame(closure);
+
+        fiber
     }
 
     #[inline]
@@ -162,7 +116,8 @@ impl Fiber {
         self.current_import().set_global(identifier, Value::NativeFunction(root.as_gc()))
     }
 
-    fn interpret_next<W: Write>(&mut self, outer: &mut VmContext<W>) -> Result<InterpretResult, VmError> {
+    #[inline]
+    pub fn interpret_next<W: Write>(&mut self, outer: &mut VmContext<W>) -> Result<InterpretResult, VmError> {
         use crate::bytecode::Constant;
 
         let current_import = self.current_import();

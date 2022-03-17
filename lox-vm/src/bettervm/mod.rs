@@ -4,12 +4,39 @@ mod interner;
 mod context;
 
 use std::io::{Write, stdout};
-
-use crate::bytecode::Module;
-
+use crate::{bytecode::Module, bettergc::UniqueRoot};
 pub use vm::VmError;
+use self::{vm::{Fiber, InterpretResult}, context::VmContext, memory::Value};
 
-use self::vm::Vm;
+pub struct Vm<W> where W: Write {
+    pub vm: UniqueRoot<Fiber>, //TODO Replace with Root<RefCell<Fiber>>
+    pub context: VmContext<W>, //TODO Replace with Root<VmContext<W>>
+}
+
+impl<W> Vm<W> where W: Write {
+    pub fn with_stdout(module: Module, stdout: W) -> Self {
+        let mut context = VmContext::new(stdout);
+        let closure = context.prepare_interpret(module);
+        let vm = context.unique(Fiber::new(closure.as_gc()));
+        
+        Self {
+            context,
+            vm,
+        }
+    }
+
+    pub fn interpret(&mut self) -> Result<(), VmError> {
+        while self.vm.interpret_next(&mut self.context)? == InterpretResult::More {
+            self.context.collect();
+        }
+
+        Ok(())
+    }
+
+    pub fn set_native_fn(&mut self, identifier: &str, code: fn(&[Value]) -> Value) {
+        self.vm.set_native_fn(identifier, code, &mut self.context)
+    }
+}
 
 /// Add the lox standard library to a Vm instance.
 /// Right now the stdlib consists of 'clock'.
