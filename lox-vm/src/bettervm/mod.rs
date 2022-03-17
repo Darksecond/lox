@@ -1,6 +1,7 @@
 mod memory;
 pub mod vm;
 mod interner;
+mod context;
 
 use std::io::{Write, stdout};
 

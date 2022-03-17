@@ -1,57 +1,41 @@
 use lox_bytecode::bytecode::{Chunk, Instruction};
 
+use super::context::VmContext;
 use super::memory::*;
-use super::interner::Interner;
-use crate::bettergc::{Gc, Trace, UniqueRoot, Heap};
+use crate::bettergc::{Gc, Trace, UniqueRoot};
 use crate::bytecode::Module;
 use std::cell::Cell;
 use std::{cell::RefCell, io::Write};
-use std::collections::HashMap;
 use fxhash::FxHashMap;
 
-//TODO Rename to VmContext
-//TODO (Try) remove W (Box<dyn Write>)
-pub struct VmContext<W> where W: Write {
-    stdout: W,
-    interner: Interner,
-    imports: UniqueRoot<HashMap<String, Gc<Import>>>,
-    heap: Heap,
-}
-
-//TODO Rename to Vm
 pub struct Vm<W> where W: Write {
     pub vm: UniqueRoot<Fiber>, //TODO Replace with Root<RefCell<Fiber>>
-    pub globals: VmContext<W>, //TODO Replace with Root<VmContext<W>>
+    pub context: VmContext<W>, //TODO Replace with Root<VmContext<W>>
 }
 
 impl<W> Vm<W> where W: Write {
     pub fn with_stdout(module: Module, stdout: W) -> Self {
-        let mut heap = Heap::new();
-        let vm = heap.unique(Fiber::new());
+        let mut context = VmContext::new(stdout);
+        let vm = context.unique(Fiber::new());
         let mut outer = Self {
-            globals: VmContext {
-                stdout,
-                imports: heap.unique(HashMap::new()),
-                interner: Interner::new(),
-                heap,
-            },
+            context,
             vm,
         };
 
-        outer.vm.prepare_interpret(module, &mut outer.globals);
+        outer.vm.prepare_interpret(module, &mut outer.context);
         outer
     }
 
     pub fn interpret(&mut self) -> Result<(), VmError> {
-        while self.vm.interpret_next(&mut self.globals)? == InterpretResult::More {
-            self.globals.heap.collect();
+        while self.vm.interpret_next(&mut self.context)? == InterpretResult::More {
+            self.context.collect();
         }
 
         Ok(())
     }
 
     pub fn set_native_fn(&mut self, identifier: &str, code: fn(&[Value]) -> Value) {
-        self.vm.set_native_fn(identifier, code, &mut self.globals)
+        self.vm.set_native_fn(identifier, code, &mut self.context)
     }
 }
 
@@ -143,9 +127,10 @@ impl Fiber {
         }
     }
 
-    fn prepare_interpret<W: Write>(&mut self, module: Module, outer: &mut VmContext<W>) {
-        let import = outer.heap.manage(Import::new(module, &mut outer.interner));
-        outer.imports.insert("_root".into(), import.as_gc());
+    fn prepare_interpret<W: Write>(&mut self, module: Module, context: &mut VmContext<W>) {
+        let import = Import::new(module, &mut context.interner);
+        let import = context.manage(import);
+        context.imports.insert("_root".into(), import.as_gc());
 
         let function = Function {
             arity: 0,
@@ -153,7 +138,7 @@ impl Fiber {
             name: "top".into(),
             import: import.as_gc(),
         };
-        let closure = outer.heap.manage(Closure {
+        let closure = context.manage(Closure {
             upvalues: vec![],
             function,
         });
@@ -173,7 +158,7 @@ impl Fiber {
         };
         
         let identifier = outer.interner.intern(identifier);
-        let root = outer.heap.manage(native_function);
+        let root = outer.manage(native_function);
         self.current_import().set_global(identifier, Value::NativeFunction(root.as_gc()))
     }
 
@@ -223,7 +208,7 @@ impl Fiber {
                                 {
                                     upvalue
                                 } else {
-                                    let root = outer.heap.manage(Cell::new(Upvalue::Open(index)));
+                                    let root = outer.manage(Cell::new(Upvalue::Open(index)));
                                     self.upvalues.push(root.as_gc());
                                     root.as_gc()
                                 }
@@ -235,7 +220,7 @@ impl Fiber {
                     })
                     .collect();
 
-                let closure_root = outer.heap.manage(Closure {
+                let closure_root = outer.manage(Closure {
                     function: Function::new(&closure.function, current_import),
                     upvalues,
                 });
@@ -243,7 +228,7 @@ impl Fiber {
             }
             Instruction::Class(index) => {
                 let class = current_import.class(index);
-                let class = outer.heap.manage(RefCell::new(Class {
+                let class = outer.manage(RefCell::new(Class {
                     name: class.name.clone(),
                     methods: FxHashMap::default(),
                 }));
@@ -286,7 +271,7 @@ impl Fiber {
                     if let Some(value) = instance.borrow().fields.get(&property) {
                         self.push(*value);
                     } else if let Some(method) = instance.borrow().class.borrow().methods.get(&property) {
-                        let bind = outer.heap.manage(BoundMethod {
+                        let bind = outer.manage(BoundMethod {
                             receiver: instance,
                             method: *method,
                         });
@@ -527,7 +512,7 @@ impl Fiber {
                 self.push(result);
             }
             Value::Class(class) => {
-                let instance = outer.heap.manage(RefCell::new(Instance {
+                let instance = outer.manage(RefCell::new(Instance {
                     class,
                     fields: FxHashMap::default(),
                 }));
@@ -575,7 +560,7 @@ impl Fiber {
     }
 
     fn push_string<W: Write>(&mut self, string: &str, outer: &mut VmContext<W>) {
-        let root = outer.heap.manage(string.to_string());
+        let root = outer.manage(string.to_string());
         self.push(Value::String(root.as_gc()));
     }
 
