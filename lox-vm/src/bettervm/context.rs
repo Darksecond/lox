@@ -2,12 +2,12 @@ use std::{io::Write, collections::HashMap};
 use lox_bytecode::bytecode::Module;
 
 use crate::bettergc::{UniqueRoot, Heap, Gc, Root, Trace};
-use super::{interner::Interner, memory::{Import, Closure, Function}};
+use super::{interner::{Interner, Symbol}, memory::{Import, Closure, Function}};
 
 pub struct VmContext<W> where W: Write {
     pub stdout: W,
-    pub interner: Interner,
-    pub imports: UniqueRoot<HashMap<String, Gc<Import>>>,
+    interner: Interner,
+    imports: UniqueRoot<HashMap<String, Gc<Import>>>,
 
     heap: Heap,
 }
@@ -35,6 +35,10 @@ impl<W: Write> VmContext<W> {
 
     pub fn unique<T: Trace>(&mut self, data: T) -> UniqueRoot<T> {
         self.heap.unique(data)
+    }
+
+    pub fn intern(&mut self, string: &str) -> Symbol {
+        self.interner.intern(string)
     }
 
     pub fn prepare_interpret(&mut self, module: Module) -> Root<Closure> {

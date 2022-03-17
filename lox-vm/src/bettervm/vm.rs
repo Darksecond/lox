@@ -105,19 +105,19 @@ impl Fiber {
         self.current_frame().closure.function.import
     }
 
-    pub fn set_native_fn<W: Write>(&mut self, identifier: &str, code: fn(&[Value]) -> Value, outer: &mut VmContext<W>) {
+    pub fn set_native_fn<W: Write>(&mut self, identifier: &str, code: fn(&[Value]) -> Value, context: &mut VmContext<W>) {
         let native_function = NativeFunction {
             name: identifier.to_string(),
             code,
         };
         
-        let identifier = outer.interner.intern(identifier);
-        let root = outer.manage(native_function);
+        let identifier = context.intern(identifier);
+        let root = context.manage(native_function);
         self.current_import().set_global(identifier, Value::NativeFunction(root.as_gc()))
     }
 
     #[inline]
-    pub fn interpret_next<W: Write>(&mut self, outer: &mut VmContext<W>) -> Result<InterpretResult, VmError> {
+    pub fn interpret_next<W: Write>(&mut self, context: &mut VmContext<W>) -> Result<InterpretResult, VmError> {
         use crate::bytecode::Constant;
 
         let current_import = self.current_import();
@@ -141,7 +141,7 @@ impl Fiber {
         match instr {
             Instruction::Constant(index) => match current_import.constant(index) {
                 Constant::Number(n) => self.push(Value::Number(*n)),
-                Constant::String(string) => self.push_string(string, outer),
+                Constant::String(string) => self.push_string(string, context),
             },
 
             Instruction::Import(_) => unimplemented!(),
@@ -163,7 +163,7 @@ impl Fiber {
                                 {
                                     upvalue
                                 } else {
-                                    let root = outer.manage(Cell::new(Upvalue::Open(index)));
+                                    let root = context.manage(Cell::new(Upvalue::Open(index)));
                                     self.upvalues.push(root.as_gc());
                                     root.as_gc()
                                 }
@@ -175,7 +175,7 @@ impl Fiber {
                     })
                     .collect();
 
-                let closure_root = outer.manage(Closure {
+                let closure_root = context.manage(Closure {
                     function: Function::new(&closure.function, current_import),
                     upvalues,
                 });
@@ -183,7 +183,7 @@ impl Fiber {
             }
             Instruction::Class(index) => {
                 let class = current_import.class(index);
-                let class = outer.manage(RefCell::new(Class {
+                let class = context.manage(RefCell::new(Class {
                     name: class.name.clone(),
                     methods: FxHashMap::default(),
                 }));
@@ -226,7 +226,7 @@ impl Fiber {
                     if let Some(value) = instance.borrow().fields.get(&property) {
                         self.push(*value);
                     } else if let Some(method) = instance.borrow().class.borrow().methods.get(&property) {
-                        let bind = outer.manage(BoundMethod {
+                        let bind = context.manage(BoundMethod {
                             receiver: instance,
                             method: *method,
                         });
@@ -239,18 +239,18 @@ impl Fiber {
                 }
             }
             Instruction::Print => match self.pop() {
-                Value::Number(n) => writeln!(outer.stdout, "{}", n).expect("Could not write to stdout"),
-                Value::Nil => writeln!(outer.stdout, "nil").expect("Could not write to stdout"),
-                Value::Boolean(boolean) => writeln!(outer.stdout, "{}", boolean).expect("Could not write to stdout"),
-                Value::String(string) => writeln!(outer.stdout, "{}", string).expect("Could not write to stdout"),
-                Value::NativeFunction(_function) => writeln!(outer.stdout, "<native fn>").expect("Could not write to stdout"),
-                Value::Closure(closure) => writeln!(outer.stdout, "<fn {}>", closure.function.name).expect("Could not write to stdout"),
-                Value::Class(class) => writeln!(outer.stdout, "{}", class.borrow().name).expect("Could not write to stdout"),
+                Value::Number(n) => writeln!(context.stdout, "{}", n).expect("Could not write to stdout"),
+                Value::Nil => writeln!(context.stdout, "nil").expect("Could not write to stdout"),
+                Value::Boolean(boolean) => writeln!(context.stdout, "{}", boolean).expect("Could not write to stdout"),
+                Value::String(string) => writeln!(context.stdout, "{}", string).expect("Could not write to stdout"),
+                Value::NativeFunction(_function) => writeln!(context.stdout, "<native fn>").expect("Could not write to stdout"),
+                Value::Closure(closure) => writeln!(context.stdout, "<fn {}>", closure.function.name).expect("Could not write to stdout"),
+                Value::Class(class) => writeln!(context.stdout, "{}", class.borrow().name).expect("Could not write to stdout"),
                 Value::Instance(instance) => {
-                    writeln!(outer.stdout, "{} instance", instance.borrow().class.borrow().name).expect("Could not write to stdout")
+                    writeln!(context.stdout, "{} instance", instance.borrow().class.borrow().name).expect("Could not write to stdout")
                 },
-                Value::BoundMethod(bind) => writeln!(outer.stdout, "<fn {}>", bind.method.function.name).expect("Could not write to stdout"),
-                Value::Import(_) => writeln!(outer.stdout, "<import>").expect("Could not write to stdout"),
+                Value::BoundMethod(bind) => writeln!(context.stdout, "<fn {}>", bind.method.function.name).expect("Could not write to stdout"),
+                Value::Import(_) => writeln!(context.stdout, "<import>").expect("Could not write to stdout"),
             },
             Instruction::Nil => self.push(Value::Nil),
             Instruction::Return => {
@@ -272,7 +272,7 @@ impl Fiber {
             }
             Instruction::Add => match (self.pop(), self.pop()) {
                 (Value::Number(b), Value::Number(a)) => self.push(Value::Number(a + b)),
-                (Value::String(b), Value::String(a)) => self.push_string(&format!("{}{}", a, b), outer),
+                (Value::String(b), Value::String(a)) => self.push_string(&format!("{}{}", a, b), context),
                 _ => return Err(VmError::UnexpectedValue),
             },
             Instruction::Subtract => match (self.pop(), self.pop()) {
@@ -363,7 +363,7 @@ impl Fiber {
             }
             Instruction::Call(arity) => {
                 let callee = *self.peek_n(arity);
-                self.call(arity, callee, outer)?;
+                self.call(arity, callee, context)?;
             }
             Instruction::Negate => match self.pop() {
                 Value::Number(n) => self.push(Value::Number(-n)),
@@ -392,7 +392,7 @@ impl Fiber {
                 if let Value::Instance(instance) = *self.peek_n(arity) {
                     if let Some(value) = instance.borrow().fields.get(&property) {
                         self.rset(arity, *value);
-                        self.call(arity, *value, outer)?;
+                        self.call(arity, *value, context)?;
                     } else if let Some(method) = instance.borrow().class.borrow().methods.get(&property) {
                         if method.function.arity != arity {
                             return Err(VmError::IncorrectArity);
@@ -473,7 +473,7 @@ impl Fiber {
                 }));
                 self.rset(arity, Value::Instance(instance.as_gc()));
 
-                let init_symbol = outer.interner.intern("init"); //TODO move to constructor
+                let init_symbol = outer.intern("init"); //TODO move to constructor
                 if let Some(initializer) = class.borrow().methods.get(&init_symbol) {
                     if initializer.function.arity != arity {
                         return Err(VmError::IncorrectArity);
