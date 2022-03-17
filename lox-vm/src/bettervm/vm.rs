@@ -1,12 +1,59 @@
 use lox_bytecode::bytecode::{Chunk, Instruction};
 
 use super::memory::*;
-use crate::bettergc::{Gc, Trace, UniqueRoot, Heap};
+use crate::bettergc::{Gc, Trace, UniqueRoot, Heap, Root};
 use crate::bytecode::Module;
 use std::cell::Cell;
 use std::{cell::RefCell, io::{Stdout, Write, stdout}};
 use std::collections::HashMap;
 use fxhash::FxHashMap;
+
+//TODO Rename to VmContext
+//TODO (Try) remove W (Box<dyn Write>)
+pub struct Globals<W> where W: Write {
+    stdout: W,
+    interner: Interner,
+    imports: UniqueRoot<HashMap<String, Gc<Import>>>,
+    heap: Heap,
+    
+}
+
+//TODO Rename to Vm
+pub struct VmOuter<W> where W: Write {
+    pub vm: UniqueRoot<Vm>, //TODO Replace with Root<RefCell<Fiber>>
+    pub globals: Globals<W>,
+}
+
+impl<W> VmOuter<W> where W: Write {
+    pub fn with_stdout(module: Module, stdout: W) -> Self {
+        let mut heap = Heap::new();
+        let vm = heap.unique(Vm::new());
+        let mut outer = Self {
+            globals: Globals {
+                stdout,
+                imports: heap.unique(HashMap::new()),
+                interner: Interner::new(),
+                heap,
+            },
+            vm,
+        };
+
+        outer.vm.prepare_interpret(module, &mut outer.globals);
+        outer
+    }
+
+    pub fn interpret(&mut self) -> Result<(), VmError> {
+        while self.vm.interpret_next(&mut self.globals)? == InterpretResult::More {
+            self.globals.heap.collect();
+        }
+
+        Ok(())
+    }
+
+    pub fn set_native_fn(&mut self, identifier: &str, code: fn(&[Value]) -> Value) {
+        self.vm.set_native_fn(identifier, code, &mut self.globals)
+    }
+}
 
 #[derive(Hash, Eq, PartialEq, Debug, Copy, Clone)]
 pub struct Symbol(u32);
@@ -107,45 +154,32 @@ impl CallFrame {
     }
 }
 
-pub struct Vm<W> where W: Write {
-    imports: UniqueRoot<HashMap<String, Gc<Import>>>,
-    frames: UniqueRoot<Vec<CallFrame>>,
-    stack: UniqueRoot<Vec<Value>>,
-    upvalues: UniqueRoot<Vec<Gc<Cell<Upvalue>>>>,
-    stdout: W,
-    interner: Interner,
-    heap: Heap,
+pub struct Vm {
+    frames: Vec<CallFrame>,
+    stack: Vec<Value>,
+    upvalues: Vec<Gc<Cell<Upvalue>>>,
 }
 
-impl Vm<Stdout> {
-    pub fn new(module: Module) -> Self {
-        Vm::with_stdout(module, stdout())
+impl Trace for Vm {
+    fn trace(&self) {
+        self.frames.trace();
+        self.stack.trace();
+        self.upvalues.trace();
     }
 }
 
-impl<W> Vm<W> where W: Write {
-    pub fn with_stdout(module: Module, stdout: W) -> Self {
-        let mut heap = Heap::new();
-        let mut vm = Vm {
-            frames: heap.unique(Vec::with_capacity(8192)),
-            stack: heap.unique(Vec::with_capacity(8192)),
-            upvalues: heap.unique(Vec::with_capacity(8192)),
-            stdout,
-            imports: heap.unique(HashMap::new()),
-            interner: Interner::new(),
-            heap,
-        };
-
-        //TODO reserve frames/upvalues/stack
-
-        vm.prepare_interpret(module);
-
-        vm
+impl Vm {
+    pub fn new() -> Self {
+        Self {
+            frames: Vec::with_capacity(8192),
+            stack: Vec::with_capacity(8192),
+            upvalues: Vec::with_capacity(8192),
+        }
     }
 
-    fn prepare_interpret(&mut self, module: Module) {
-        let import = self.heap.manage(Import::new(module, &mut self.interner));
-        self.imports.insert("_root".into(), import.as_gc());
+    fn prepare_interpret<W: Write>(&mut self, module: Module, outer: &mut Globals<W>) {
+        let import = outer.heap.manage(Import::new(module, &mut outer.interner));
+        outer.imports.insert("_root".into(), import.as_gc());
 
         let function = Function {
             arity: 0,
@@ -153,7 +187,7 @@ impl<W> Vm<W> where W: Write {
             name: "top".into(),
             import: import.as_gc(),
         };
-        let closure = self.heap.manage(Closure {
+        let closure = outer.heap.manage(Closure {
             upvalues: vec![],
             function,
         });
@@ -166,26 +200,18 @@ impl<W> Vm<W> where W: Write {
         self.current_frame().closure.function.import
     }
 
-    pub fn interpret(&mut self) -> Result<(), VmError> {
-        while self.interpret_next()? == InterpretResult::More {
-            self.heap.collect();
-        }
-
-        Ok(())
-    }
-
-    pub fn set_native_fn(&mut self, identifier: &str, code: fn(&[Value]) -> Value) {
+    pub fn set_native_fn<W: Write>(&mut self, identifier: &str, code: fn(&[Value]) -> Value, outer: &mut Globals<W>) {
         let native_function = NativeFunction {
             name: identifier.to_string(),
             code,
         };
         
-        let identifier = self.interner.intern(identifier);
-        let root = self.heap.manage(native_function);
+        let identifier = outer.interner.intern(identifier);
+        let root = outer.heap.manage(native_function);
         self.current_import().set_global(identifier, Value::NativeFunction(root.as_gc()))
     }
 
-    fn interpret_next(&mut self) -> Result<InterpretResult, VmError> {
+    fn interpret_next<W: Write>(&mut self, outer: &mut Globals<W>) -> Result<InterpretResult, VmError> {
         use crate::bytecode::Constant;
 
         let current_import = self.current_import();
@@ -209,7 +235,7 @@ impl<W> Vm<W> where W: Write {
         match instr {
             Instruction::Constant(index) => match current_import.constant(index) {
                 Constant::Number(n) => self.push(Value::Number(*n)),
-                Constant::String(string) => self.push_string(string),
+                Constant::String(string) => self.push_string(string, outer),
             },
 
             Instruction::Import(_) => unimplemented!(),
@@ -231,7 +257,7 @@ impl<W> Vm<W> where W: Write {
                                 {
                                     upvalue
                                 } else {
-                                    let root = self.heap.manage(Cell::new(Upvalue::Open(index)));
+                                    let root = outer.heap.manage(Cell::new(Upvalue::Open(index)));
                                     self.upvalues.push(root.as_gc());
                                     root.as_gc()
                                 }
@@ -243,7 +269,7 @@ impl<W> Vm<W> where W: Write {
                     })
                     .collect();
 
-                let closure_root = self.heap.manage(Closure {
+                let closure_root = outer.heap.manage(Closure {
                     function: Function::new(&closure.function, current_import),
                     upvalues,
                 });
@@ -251,7 +277,7 @@ impl<W> Vm<W> where W: Write {
             }
             Instruction::Class(index) => {
                 let class = current_import.class(index);
-                let class = self.heap.manage(RefCell::new(Class {
+                let class = outer.heap.manage(RefCell::new(Class {
                     name: class.name.clone(),
                     methods: FxHashMap::default(),
                 }));
@@ -294,7 +320,7 @@ impl<W> Vm<W> where W: Write {
                     if let Some(value) = instance.borrow().fields.get(&property) {
                         self.push(*value);
                     } else if let Some(method) = instance.borrow().class.borrow().methods.get(&property) {
-                        let bind = self.heap.manage(BoundMethod {
+                        let bind = outer.heap.manage(BoundMethod {
                             receiver: instance,
                             method: *method,
                         });
@@ -307,18 +333,18 @@ impl<W> Vm<W> where W: Write {
                 }
             }
             Instruction::Print => match self.pop() {
-                Value::Number(n) => writeln!(self.stdout, "{}", n).expect("Could not write to stdout"),
-                Value::Nil => writeln!(self.stdout, "nil").expect("Could not write to stdout"),
-                Value::Boolean(boolean) => writeln!(self.stdout, "{}", boolean).expect("Could not write to stdout"),
-                Value::String(string) => writeln!(self.stdout, "{}", string).expect("Could not write to stdout"),
-                Value::NativeFunction(_function) => writeln!(self.stdout, "<native fn>").expect("Could not write to stdout"),
-                Value::Closure(closure) => writeln!(self.stdout, "<fn {}>", closure.function.name).expect("Could not write to stdout"),
-                Value::Class(class) => writeln!(self.stdout, "{}", class.borrow().name).expect("Could not write to stdout"),
+                Value::Number(n) => writeln!(outer.stdout, "{}", n).expect("Could not write to stdout"),
+                Value::Nil => writeln!(outer.stdout, "nil").expect("Could not write to stdout"),
+                Value::Boolean(boolean) => writeln!(outer.stdout, "{}", boolean).expect("Could not write to stdout"),
+                Value::String(string) => writeln!(outer.stdout, "{}", string).expect("Could not write to stdout"),
+                Value::NativeFunction(_function) => writeln!(outer.stdout, "<native fn>").expect("Could not write to stdout"),
+                Value::Closure(closure) => writeln!(outer.stdout, "<fn {}>", closure.function.name).expect("Could not write to stdout"),
+                Value::Class(class) => writeln!(outer.stdout, "{}", class.borrow().name).expect("Could not write to stdout"),
                 Value::Instance(instance) => {
-                    writeln!(self.stdout, "{} instance", instance.borrow().class.borrow().name).expect("Could not write to stdout")
+                    writeln!(outer.stdout, "{} instance", instance.borrow().class.borrow().name).expect("Could not write to stdout")
                 },
-                Value::BoundMethod(bind) => writeln!(self.stdout, "<fn {}>", bind.method.function.name).expect("Could not write to stdout"),
-                Value::Import(_) => writeln!(self.stdout, "<import>").expect("Could not write to stdout"),
+                Value::BoundMethod(bind) => writeln!(outer.stdout, "<fn {}>", bind.method.function.name).expect("Could not write to stdout"),
+                Value::Import(_) => writeln!(outer.stdout, "<import>").expect("Could not write to stdout"),
             },
             Instruction::Nil => self.push(Value::Nil),
             Instruction::Return => {
@@ -340,7 +366,7 @@ impl<W> Vm<W> where W: Write {
             }
             Instruction::Add => match (self.pop(), self.pop()) {
                 (Value::Number(b), Value::Number(a)) => self.push(Value::Number(a + b)),
-                (Value::String(b), Value::String(a)) => self.push_string(&format!("{}{}", a, b)),
+                (Value::String(b), Value::String(a)) => self.push_string(&format!("{}{}", a, b), outer),
                 _ => return Err(VmError::UnexpectedValue),
             },
             Instruction::Subtract => match (self.pop(), self.pop()) {
@@ -431,7 +457,7 @@ impl<W> Vm<W> where W: Write {
             }
             Instruction::Call(arity) => {
                 let callee = *self.peek_n(arity);
-                self.call(arity, callee)?;
+                self.call(arity, callee, outer)?;
             }
             Instruction::Negate => match self.pop() {
                 Value::Number(n) => self.push(Value::Number(-n)),
@@ -460,7 +486,7 @@ impl<W> Vm<W> where W: Write {
                 if let Value::Instance(instance) = *self.peek_n(arity) {
                     if let Some(value) = instance.borrow().fields.get(&property) {
                         self.rset(arity, *value);
-                        self.call(arity, *value)?;
+                        self.call(arity, *value, outer)?;
                     } else if let Some(method) = instance.borrow().class.borrow().methods.get(&property) {
                         if method.function.arity != arity {
                             return Err(VmError::IncorrectArity);
@@ -519,7 +545,7 @@ impl<W> Vm<W> where W: Write {
     }
 
     //TODO Reduce duplicate code paths
-    fn call(&mut self, arity: usize, callee: Value) -> Result<(), VmError> {
+    fn call<W: Write>(&mut self, arity: usize, callee: Value, outer: &mut Globals<W>) -> Result<(), VmError> {
         match callee {
             Value::Closure(callee) => {
                 if callee.function.arity != arity {
@@ -535,13 +561,13 @@ impl<W> Vm<W> where W: Write {
                 self.push(result);
             }
             Value::Class(class) => {
-                let instance = self.heap.manage(RefCell::new(Instance {
+                let instance = outer.heap.manage(RefCell::new(Instance {
                     class,
                     fields: FxHashMap::default(),
                 }));
                 self.rset(arity, Value::Instance(instance.as_gc()));
 
-                let init_symbol = self.interner.intern("init"); //TODO move to constructor
+                let init_symbol = outer.interner.intern("init"); //TODO move to constructor
                 if let Some(initializer) = class.borrow().methods.get(&init_symbol) {
                     if initializer.function.arity != arity {
                         return Err(VmError::IncorrectArity);
@@ -582,8 +608,8 @@ impl<W> Vm<W> where W: Write {
         self.stack[index] = value;
     }
 
-    fn push_string(&mut self, string: &str) {
-        let root = self.heap.manage(string.to_string());
+    fn push_string<W: Write>(&mut self, string: &str, outer: &mut Globals<W>) {
+        let root = outer.heap.manage(string.to_string());
         self.push(Value::String(root.as_gc()));
     }
 

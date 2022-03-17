@@ -1,19 +1,21 @@
 mod memory;
 pub mod vm;
-use std::io::{Write};
+use std::io::{Write, stdout};
 
 use crate::bytecode::Module;
 use vm::Vm;
 
 pub use vm::VmError;
 
+use self::vm::VmOuter;
+
 /// Add the lox standard library to a Vm instance.
 /// Right now the stdlib consists of 'clock'.
-pub fn set_stdlib<W>(vm: &mut Vm<W>)
+pub fn set_stdlib<W>(outer: &mut VmOuter<W>)
 where
     W: Write,
 {
-    vm.set_native_fn("clock", |_args| {
+    outer.set_native_fn("clock", |_args| {
         use std::time::{SystemTime, UNIX_EPOCH};
 
         let time = SystemTime::now()
@@ -25,7 +27,7 @@ where
 }
 
 pub fn execute(module: Module) -> Result<(), VmError> {
-    let mut vm = Vm::new(module);
+    let mut vm = VmOuter::with_stdout(module, stdout());
     set_stdlib(&mut vm);
 
     vm.interpret()
