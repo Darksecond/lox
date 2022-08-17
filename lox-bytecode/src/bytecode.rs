@@ -10,54 +10,6 @@ pub type ClosureIndex = usize;
 pub type ClassIndex = usize;
 pub type IdentifierIndex = usize;
 
-#[derive(Debug, PartialEq, Copy, Clone, Serialize, Deserialize)]
-pub enum Instruction {
-    Constant(ConstantIndex),
-    True,
-    False,
-    Nil,
-
-    Negate,
-    Add,
-    Subtract,
-    Multiply,
-    Divide,
-
-    Not,
-    Equal,
-    Greater,
-    Less,
-
-    Pop,
-
-    Return,
-    Print,
-
-    DefineGlobal(IdentifierIndex),
-    GetGlobal(IdentifierIndex),
-    SetGlobal(IdentifierIndex),
-    GetLocal(StackIndex),
-    SetLocal(StackIndex),
-    GetUpvalue(StackIndex),
-    SetUpvalue(StackIndex),
-    SetProperty(IdentifierIndex),
-    GetProperty(IdentifierIndex),
-
-    Jump(InstructionIndex),
-    JumpIfFalse(InstructionIndex),
-    Call(ArgumentCount),
-    Invoke(IdentifierIndex, ArgumentCount),
-    CloseUpvalue,
-
-    Class(ClassIndex),
-    Closure(ClosureIndex),
-    Method(IdentifierIndex),
-
-    Import(ConstantIndex),
-    ImportGlobal(IdentifierIndex),
-    // etc
-}
-
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub struct Class {
     pub name: String,
@@ -111,7 +63,7 @@ impl From<Function> for Closure {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Chunk {
-    instructions: Vec<Instruction>,
+    instructions: Vec<u8>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -222,36 +174,54 @@ impl Chunk {
         }
     }
 
-    pub fn add_instruction(&mut self, instruction: Instruction) -> InstructionIndex {
-        self.instructions.push(instruction);
+    pub fn add_u8(&mut self, value: u8) -> InstructionIndex {
+        self.instructions.push(value);
         self.instructions.len() - 1
+    }
+
+    pub fn add_u32(&mut self, value: u32) -> InstructionIndex {
+        let bytes = value.to_le_bytes();
+        for i in 0..4 {
+            self.instructions.push(bytes[i]);
+        }
+
+        self.instructions.len() - 4
+    }
+
+    pub fn set_u32(&mut self, index: InstructionIndex, value: u32) {
+        let bytes = value.to_le_bytes();
+        for i in 0..4 {
+            self.instructions[index+i] = bytes[i];
+        }
     }
 
     pub fn instruction_index(&self) -> InstructionIndex {
         self.instructions.len()
     }
 
+    //TODO rework this
     pub fn patch_instruction(&mut self, index: InstructionIndex) {
         let current = self.instruction_index();
         self.patch_instruction_to(index, current)
     }
 
+    //TODO rework this
     pub fn patch_instruction_to(&mut self, index: InstructionIndex, to: InstructionIndex) {
-        match self.instructions[index] {
-            Instruction::JumpIfFalse(ref mut placeholder) => *placeholder = to,
-            Instruction::Jump(ref mut placeholder) => *placeholder = to,
-            _ => (), // Nothing to patch
-        };
+        self.set_u32(index, to as _);
     }
 
-    #[inline]
-    pub fn instructions(&self) -> &[Instruction] {
+    pub fn as_slice(&self) -> &[u8] {
         &self.instructions
     }
 
-    #[inline]
-    pub fn instruction(&self, pc: usize) -> Instruction {
-        // self.instructions[pc]
+    #[inline(always)]
+    pub fn get_u8(&self, pc: usize) -> u8 {
         unsafe { *self.instructions.get_unchecked(pc) }
+    }
+
+    #[inline(always)]
+    pub fn get_u32(&self, pc: usize) -> u32 {
+        let bytes = unsafe { self.instructions.get_unchecked(pc..pc+4) };
+        u32::from_le_bytes(bytes.try_into().unwrap())
     }
 }

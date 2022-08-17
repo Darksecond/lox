@@ -5,3 +5,4 @@
 flamegraph.svg
 perf.data
 perf.data.old
+.DS_Store

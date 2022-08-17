@@ -109,10 +109,16 @@ impl Heap {
         root
     }
 
-    #[inline]
     pub fn root<T: 'static + Trace + ?Sized>(&mut self, obj: Gc<T>) -> Root<T> {
         obj.allocation().root();
         Root { ptr: obj.ptr }
+    }
+
+    pub fn gc<T: 'static + Trace>(&mut self, data: T) -> Gc<T> {
+        let gc = Gc {
+            ptr: self.allocate(data),
+        };
+        gc
     }
 
     pub fn manage<T: 'static + Trace>(&mut self, data: T) -> Root<T> {
@@ -124,15 +130,13 @@ impl Heap {
     }
 
     #[inline]
-    pub fn collect(&mut self) -> usize {
+    pub fn collect(&mut self) {
         if self.bytes_allocated > self.threshold {
-            self.force_collect()
-        } else {
-            0
+            self.force_collect();
         }
     }
 
-    fn force_collect(&mut self) -> usize {
+    fn force_collect(&mut self) {
         self.mark();
         let bytes = self.bytes_marked();
         self.sweep();
@@ -140,14 +144,13 @@ impl Heap {
         self.bytes_allocated -= bytes;
         self.threshold = (self.bytes_allocated as f32 * Self::THRESHOLD_ADJ) as usize;
         self.threshold += 100; // Offset by 100 so it never reaches 0
-
-        bytes
     }
 
     fn mark(&mut self) {
         for object in &self.objects {
             object.unmark();
         }
+
         self.objects
             .iter()
             .filter(|o| o.header.roots.load(Ordering::Relaxed) > 0)
@@ -350,6 +353,7 @@ impl Trace for String {
 }
 
 impl<T: Trace + Copy> Trace for Cell<T> {
+    #[inline]
     fn trace(&self) {
         self.get().trace();
     }

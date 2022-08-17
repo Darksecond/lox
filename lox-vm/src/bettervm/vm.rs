@@ -1,7 +1,9 @@
-use lox_bytecode::bytecode::{Chunk, Instruction};
+use lox_bytecode::bytecode::Chunk;
+use lox_bytecode::opcode;
 
 use super::context::VmContext;
 use super::memory::*;
+use super::stack::Stack;
 use crate::bettergc::{Gc, Trace};
 use std::cell::Cell;
 use std::{cell::RefCell, io::Write};
@@ -13,6 +15,7 @@ pub enum InterpretResult {
     More,
 }
 
+//TODO thiserror
 #[derive(Debug)]
 pub enum VmError {
     StackEmpty,
@@ -36,6 +39,7 @@ struct CallFrame {
 }
 
 impl Trace for CallFrame {
+    #[inline]
     fn trace(&self) {
         self.closure.trace();
     }
@@ -60,9 +64,16 @@ impl CallFrame {
     }
 
     #[inline]
-    pub fn next_instruction(&mut self) -> Instruction {
-        let instr = self.chunk().instruction(self.program_counter);
+    pub fn next_u8(&mut self) -> u8 {
+        let instr = self.chunk().get_u8(self.program_counter);
         self.program_counter += 1;
+        instr
+    }
+
+    #[inline]
+    pub fn next_u32(&mut self) -> u32 {
+        let instr = self.chunk().get_u32(self.program_counter);
+        self.program_counter += 4;
         instr
     }
 
@@ -74,7 +85,7 @@ impl CallFrame {
 
 pub struct Fiber {
     frames: Vec<CallFrame>,
-    stack: Vec<Value>,
+    stack: Stack,
     upvalues: Vec<Gc<Cell<Upvalue>>>,
 }
 
@@ -89,9 +100,9 @@ impl Trace for Fiber {
 impl Fiber {
     pub fn with_closure(closure: Gc<Closure>) -> Self {
         let mut fiber = Self {
-            frames: Vec::with_capacity(8192),
-            stack: Vec::with_capacity(8192),
-            upvalues: Vec::with_capacity(8192),
+            frames: Vec::with_capacity(2048),
+            stack: Stack::new(2048),
+            upvalues: Vec::with_capacity(2048),
         };
 
         fiber.push(Value::Closure(closure));
@@ -100,7 +111,6 @@ impl Fiber {
         fiber
     }
 
-    #[inline]
     fn current_import(&self) -> Gc<Import> {
         self.current_frame().closure.function.import
     }
@@ -110,78 +120,44 @@ impl Fiber {
             name: identifier.to_string(),
             code,
         };
-        
+
         let identifier = context.intern(identifier);
         let root = context.manage(native_function);
         self.current_import().set_global(identifier, Value::NativeFunction(root.as_gc()))
     }
 
-    #[inline]
+    #[inline(always)]
     pub fn interpret_next<W: Write>(&mut self, context: &mut VmContext<W>) -> Result<InterpretResult, VmError> {
-        use crate::bytecode::Constant;
-
         let current_import = self.current_import();
 
         let instr = {
             let frame = self.current_frame_mut();
-            frame.next_instruction()
+            frame.next_u8()
         };
 
-        if false {
-            // DEBUG
-            println!("stack len: {}", self.stack.len());
-            println!("stack: {:?}", self.stack);
-            println!("");
-            println!("stack len: {}", self.stack.len());
-            println!("globals: {:?}", current_import.globals.borrow());
-            println!("{:?}", instr);
-            println!("");
-        }
-
         match instr {
-            Instruction::Constant(index) => match current_import.constant(index) {
-                Constant::Number(n) => self.push(Value::Number(*n)),
-                Constant::String(string) => self.push_string(string, context),
+            opcode::CONSTANT => {
+                let index = self.current_frame_mut().next_u32() as _;
+
+                self.op_constant(index, context);
             },
 
-            Instruction::Import(_) => unimplemented!(),
-            Instruction::ImportGlobal(_) => unimplemented!(),
-            
-            Instruction::Closure(index) => {
-                let closure = current_import.closure(index);
-                let upvalues = closure
-                    .upvalues
-                    .iter()
-                    .map(|u| {
-                        match u {
-                            crate::bytecode::Upvalue::Local(index) => {
-                                let frame = &self.frames[self.frames.len() - 1]; //TODO Result // Get the enclosing frame
-                                let base = frame.base_counter;
-                                let index = base + *index;
+            opcode::IMPORT => {
+                let _index: usize = self.current_frame_mut().next_u32() as _;
+                unimplemented!()
+            },
+            opcode::IMPORT_GLOBAL => {
+                let _index: usize = self.current_frame_mut().next_u32() as _;
+                unimplemented!()
+            },
 
-                                if let Some(upvalue) = self.find_open_upvalue_with_index(index)
-                                {
-                                    upvalue
-                                } else {
-                                    let root = context.manage(Cell::new(Upvalue::Open(index)));
-                                    self.upvalues.push(root.as_gc());
-                                    root.as_gc()
-                                }
-                            }
-                            crate::bytecode::Upvalue::Upvalue(u) => {
-                                self.find_upvalue_by_index(*u)
-                            }
-                        }
-                    })
-                    .collect();
-
-                let closure_root = context.manage(Closure {
-                    function: Function::new(&closure.function, current_import),
-                    upvalues,
-                });
-                self.push(Value::Closure(closure_root.as_gc()));
+            opcode::CLOSURE => {
+                let index = self.current_frame_mut().next_u32() as _;
+                self.op_closure(index, context);
             }
-            Instruction::Class(index) => {
+            opcode::CLASS => {
+                let index = self.current_frame_mut().next_u32() as _;
+
                 let class = current_import.class(index);
                 let class = context.manage(RefCell::new(Class {
                     name: class.name.clone(),
@@ -191,7 +167,9 @@ impl Fiber {
             }
             //TODO Rewrite if's to improve error handling
             //TODO Pretty sure it leaves the stack clean, but double check
-            Instruction::Method(index) => {
+            opcode::METHOD => {
+                let index = self.current_frame_mut().next_u32() as _;
+
                 let identifier = current_import.symbol(index);
                 if let Value::Class(class) = self.peek_n(1) {
                     if let Value::Closure(closure) = self.peek_n(0) {
@@ -205,61 +183,23 @@ impl Fiber {
 
                 self.pop();
             },
-            Instruction::SetProperty(index) => {
-                let property = current_import.symbol(index);
-                if let Value::Instance(instance) = self.peek_n(1) {
-                    instance
-                        .borrow_mut()
-                        .fields
-                        .insert(property, self.peek());
-
-                    let value = self.pop();
-                    self.pop();
-                    self.push(value);
-                } else {
-                    return Err(VmError::UnexpectedValue);
-                }
+            opcode::SET_PROPERTY => {
+                let index = self.current_frame_mut().next_u32() as _;
+                self.op_set_property(index)?;
             }
-            Instruction::GetProperty(index) => {
-                let property = current_import.symbol(index);
-                if let Value::Instance(instance) = self.pop() {
-                    if let Some(value) = instance.borrow().fields.get(&property) {
-                        self.push(*value);
-                    } else if let Some(method) = instance.borrow().class.borrow().methods.get(&property) {
-                        let bind = context.manage(BoundMethod {
-                            receiver: instance,
-                            method: *method,
-                        });
-                        self.push(Value::BoundMethod(bind.as_gc()));
-                    } else {
-                        return Err(VmError::UndefinedProperty);
-                    };
-                } else {
-                    return Err(VmError::UnexpectedValue);
-                }
+            opcode::GET_PROPERTY => {
+                let index = self.current_frame_mut().next_u32() as _;
+                self.op_get_property(index, context)?;
             }
-            Instruction::Print => match self.pop() {
-                Value::Number(n) => writeln!(context.stdout, "{}", n).expect("Could not write to stdout"),
-                Value::Nil => writeln!(context.stdout, "nil").expect("Could not write to stdout"),
-                Value::Boolean(boolean) => writeln!(context.stdout, "{}", boolean).expect("Could not write to stdout"),
-                Value::String(string) => writeln!(context.stdout, "{}", string).expect("Could not write to stdout"),
-                Value::NativeFunction(_function) => writeln!(context.stdout, "<native fn>").expect("Could not write to stdout"),
-                Value::Closure(closure) => writeln!(context.stdout, "<fn {}>", closure.function.name).expect("Could not write to stdout"),
-                Value::Class(class) => writeln!(context.stdout, "{}", class.borrow().name).expect("Could not write to stdout"),
-                Value::Instance(instance) => {
-                    writeln!(context.stdout, "{} instance", instance.borrow().class.borrow().name).expect("Could not write to stdout")
-                },
-                Value::BoundMethod(bind) => writeln!(context.stdout, "<fn {}>", bind.method.function.name).expect("Could not write to stdout"),
-                Value::Import(_) => writeln!(context.stdout, "<import>").expect("Could not write to stdout"),
+            opcode::PRINT => {
+                self.op_print(context);
             },
-            Instruction::Nil => self.push(Value::Nil),
-            Instruction::Return => {
+            opcode::NIL => self.push(Value::Nil),
+            opcode::RETURN => {
                 let result = self.pop();
-                let frame = self.frames.pop().expect("no frame");
+                let frame = self.frames.pop().ok_or(VmError::FrameEmpty)?;
 
-                for i in frame.base_counter..self.stack.len() {
-                    self.close_upvalues(i);
-                }
+                self.close_upvalues(frame.base_counter..self.stack.len());
 
                 self.stack.truncate(frame.base_counter);
 
@@ -270,151 +210,322 @@ impl Fiber {
 
                 self.push(result);
             }
-            Instruction::Add => match (self.pop(), self.pop()) {
-                (Value::Number(b), Value::Number(a)) => self.push(Value::Number(a + b)),
-                (Value::String(b), Value::String(a)) => self.push_string(&format!("{}{}", a, b), context),
-                _ => return Err(VmError::UnexpectedValue),
+            opcode::ADD => {
+                self.op_add(context)?;
             },
-            Instruction::Subtract => match (self.pop(), self.pop()) {
+            opcode::SUBTRACT => match (self.pop(), self.pop()) {
                 (Value::Number(b), Value::Number(a)) => self.push(Value::Number(a - b)),
                 _ => return Err(VmError::UnexpectedValue),
             },
-            Instruction::Multiply => match (self.pop(), self.pop()) {
+            opcode::MULTIPLY => match (self.pop(), self.pop()) {
                 (Value::Number(b), Value::Number(a)) => self.push(Value::Number(a * b)),
                 _ => return Err(VmError::UnexpectedValue),
             },
-            Instruction::Divide => match (self.pop(), self.pop()) {
+            opcode::DIVIDE => match (self.pop(), self.pop()) {
                 (Value::Number(b), Value::Number(a)) => self.push(Value::Number(a / b)),
                 _ => return Err(VmError::UnexpectedValue),
             },
-            Instruction::Pop => {
+            opcode::POP => {
                 self.pop();
             }
-            Instruction::DefineGlobal(index) => {
+            opcode::DEFINE_GLOBAL => {
+                let index = self.current_frame_mut().next_u32() as _;
+
                 let identifier = current_import.symbol(index);
                 let value = self.pop();
                 current_import.set_global(identifier, value);
             }
-            Instruction::GetGlobal(index) => {
-                let identifier = current_import.symbol(index);
-                let value = current_import.global(identifier);
-                if let Some(value) = value {
-                    self.push(value);
-                } else {
-                    return Err(VmError::GlobalNotDefined);
-                }
+            opcode::GET_GLOBAL => {
+                let index = self.current_frame_mut().next_u32() as _;
+                self.op_get_global(index)?;
             }
-            Instruction::SetGlobal(index) => {
-                let identifier = current_import.symbol(index);
-                let value = self.peek();
-                if current_import.has_global(identifier) {
-                    current_import.set_global(identifier, value);
-                } else {
-                    return Err(VmError::GlobalNotDefined);
-                }
+            opcode::SET_GLOBAL => {
+                let index = self.current_frame_mut().next_u32() as _;
+                self.op_set_global(index)?;
             }
-            Instruction::GetLocal(index) => {
-                let index = self.current_frame().base_counter + index;
-                self.push(self.stack[index]);
+            opcode::GET_LOCAL => {
+                let index: usize = self.current_frame_mut().next_u32() as _;
+                self.op_get_local(index);
             }
-            Instruction::SetLocal(index) => {
-                let index = self.current_frame().base_counter + index;
-                let value = self.peek();
-                self.stack[index] = value;
+            opcode::SET_LOCAL => {
+                let index: usize = self.current_frame_mut().next_u32() as _;
+
+                self.op_set_local(index);
             }
-            Instruction::True => self.push(Value::Boolean(true)),
-            Instruction::False => self.push(Value::Boolean(false)),
-            Instruction::JumpIfFalse(to) => {
+            opcode::TRUE => self.push(Value::Boolean(true)),
+            opcode::FALSE => self.push(Value::Boolean(false)),
+            opcode::JUMP_IF_FALSE => {
+                let to = self.current_frame_mut().next_u32() as _;
                 if self.peek().is_falsey() {
                     self.current_frame_mut().set_pc(to);
                 }
-            }
-            Instruction::Jump(to) => {
+            },
+            opcode::JUMP => {
+                let to = self.current_frame_mut().next_u32() as _;
                 self.current_frame_mut().set_pc(to);
-            }
-            Instruction::Less => match (self.pop(), self.pop()) {
+            },
+            opcode::LESS => match (self.pop(), self.pop()) {
                 (Value::Number(b), Value::Number(a)) => self.push((a < b).into()),
                 _ => return Err(VmError::UnexpectedValue),
             },
-            Instruction::Greater => match (self.pop(), self.pop()) {
+            opcode::GREATER => match (self.pop(), self.pop()) {
                 (Value::Number(b), Value::Number(a)) => self.push((a > b).into()),
                 _ => return Err(VmError::UnexpectedValue),
             },
-            Instruction::Equal => {
-                let b = self.pop();
-                let a = self.pop();
-
-                if Value::is_same_type(&a, &b) {
-                    match (b, a) {
-                        (Value::Number(b), Value::Number(a)) => self.push((a == b).into()),
-                        (Value::Boolean(b), Value::Boolean(a)) => self.push((a == b).into()),
-                        (Value::String(b), Value::String(a)) => self.push((*a == *b).into()),
-                        (Value::Closure(b), Value::Closure(a)) => self.push((Gc::ptr_eq(&a, &b)).into()),
-                        (Value::NativeFunction(b), Value::NativeFunction(a)) => self.push((Gc::ptr_eq(&a, &b)).into()),
-                        (Value::Nil, Value::Nil) => self.push(true.into()),
-                        (Value::BoundMethod(b), Value::BoundMethod(a)) => self.push((Gc::ptr_eq(&a, &b)).into()),
-                        (Value::Class(b), Value::Class(a)) => self.push((Gc::ptr_eq(&a, &b)).into()),
-                        (Value::Instance(b), Value::Instance(a)) => self.push((Gc::ptr_eq(&a, &b)).into()),
-                        _ => unimplemented!(),
-                    };
-                } else {
-                    self.push(false.into())
-                }
+            opcode::EQUAL => {
+                self.op_equal();
             }
-            Instruction::Call(arity) => {
+            opcode::CALL => {
+                let arity = self.current_frame_mut().next_u32() as _;
+
                 let callee = *self.peek_n(arity);
                 self.call(arity, callee, context)?;
             }
-            Instruction::Negate => match self.pop() {
+            opcode::NEGATE => match self.pop() {
                 Value::Number(n) => self.push(Value::Number(-n)),
                 _ => return Err(VmError::UnexpectedValue),
             },
-            Instruction::Not => {
+            opcode::NOT => {
                 let is_falsey = self.pop().is_falsey();
                 self.push(is_falsey.into());
             }
-            Instruction::GetUpvalue(index) => {
-                let upvalue = self.current_frame().closure.upvalues[index];
-                self.push(self.resolve_upvalue_into_value(upvalue));
+            opcode::GET_UPVALUE => {
+                let index: usize = self.current_frame_mut().next_u32() as _;
+                self.op_get_upvalue(index);
             }
-            Instruction::SetUpvalue(index) => {
-                let value = self.peek();
-                let upvalue = self.current_frame().closure.upvalues[index];
-                self.set_upvalue(upvalue, value);
+            opcode::SET_UPVALUE => {
+                let index: usize = self.current_frame_mut().next_u32() as _;
+
+                self.op_set_upvalue(index);
             }
-            Instruction::CloseUpvalue => {
+            opcode::CLOSE_UPVALUE => {
                 let index = self.stack.len() - 1;
-                self.close_upvalues(index);
+                self.close_upvalues(index..index+1);
                 self.pop();
             }
-            Instruction::Invoke(index, arity) => {
-                let property = current_import.symbol(index);
-                if let Value::Instance(instance) = *self.peek_n(arity) {
-                    if let Some(value) = instance.borrow().fields.get(&property) {
-                        self.rset(arity, *value);
-                        self.call(arity, *value, context)?;
-                    } else if let Some(method) = instance.borrow().class.borrow().methods.get(&property) {
-                        if method.function.arity != arity {
-                            return Err(VmError::IncorrectArity);
-                        }
-                        self.begin_frame(*method);
-                    } else {
-                        return Err(VmError::UndefinedProperty);
-                    };
-                } else {
-                    return Err(VmError::UnexpectedValue);
-                }
+            opcode::INVOKE => {
+                let index = self.current_frame_mut().next_u32() as _;
+                let arity = self.current_frame_mut().next_u32() as _;
+
+                self.op_invoke(index, arity, context)?;
             }
+            _ => unreachable!(),
         }
 
         Ok(InterpretResult::More)
     }
 
-    fn close_upvalues(&mut self, index: usize) {
-        for upvalue in self.upvalues.iter() {
-            if upvalue.get().is_open_with_index(index) {
-                let value = self.stack[index];
-                upvalue.replace(Upvalue::Closed(value));
+    fn op_constant<W: Write>(&mut self, index: usize, context: &mut VmContext<W>) {
+        use crate::bytecode::Constant;
+        let current_import = self.current_import();
+        match current_import.constant(index) {
+            Constant::Number(n) => self.push(Value::Number(*n)),
+            Constant::String(string) => self.push_string(string, context),
+        }
+    }
+
+    fn op_add<W: Write>(&mut self, context: &mut VmContext<W>) -> Result<(), VmError> {
+        match (self.pop(), self.pop()) {
+            (Value::Number(b), Value::Number(a)) => self.push(Value::Number(a + b)),
+            (Value::String(b), Value::String(a)) => self.push_string(format!("{}{}", a, b), context),
+            _ => return Err(VmError::UnexpectedValue),
+        }
+
+        Ok(())
+    }
+
+    fn op_get_upvalue(&mut self, index: usize) {
+        let upvalue = self.current_frame().closure.upvalues[index];
+        self.push(self.resolve_upvalue_into_value(upvalue));
+    }
+
+    fn op_print<W: Write>(&mut self, context: &mut VmContext<W>) {
+        match self.pop() {
+            Value::Number(n) => writeln!(context.stdout, "{}", n).expect("Could not write to stdout"),
+            Value::Nil => writeln!(context.stdout, "nil").expect("Could not write to stdout"),
+            Value::Boolean(boolean) => writeln!(context.stdout, "{}", boolean).expect("Could not write to stdout"),
+            Value::String(string) => writeln!(context.stdout, "{}", string).expect("Could not write to stdout"),
+            Value::NativeFunction(_function) => writeln!(context.stdout, "<native fn>").expect("Could not write to stdout"),
+            Value::Closure(closure) => writeln!(context.stdout, "<fn {}>", closure.function.name).expect("Could not write to stdout"),
+            Value::Class(class) => writeln!(context.stdout, "{}", class.borrow().name).expect("Could not write to stdout"),
+            Value::Instance(instance) => {
+                writeln!(context.stdout, "{} instance", instance.borrow().class.borrow().name).expect("Could not write to stdout")
+            },
+            Value::BoundMethod(bind) => writeln!(context.stdout, "<fn {}>", bind.method.function.name).expect("Could not write to stdout"),
+            Value::Import(_) => writeln!(context.stdout, "<import>").expect("Could not write to stdout"),
+        }
+    }
+
+    fn op_set_upvalue(&mut self, index: usize) {
+        let value = self.peek();
+        let upvalue = self.current_frame().closure.upvalues[index];
+        self.set_upvalue(upvalue, *value);
+    }
+
+    fn op_get_local(&mut self, index: usize) {
+        let index = self.current_frame().base_counter + index;
+        self.push(*self.stack.get(index));
+    }
+
+    fn op_set_local(&mut self, index: usize) {
+        let index = self.current_frame().base_counter + index;
+        let value = self.peek();
+        self.stack.set(index, *value);
+    }
+
+    fn op_equal(&mut self) {
+        let b = self.pop();
+        let a = self.pop();
+
+        if Value::is_same_type(&a, &b) {
+            match (b, a) {
+                (Value::Number(b), Value::Number(a)) => self.push((a == b).into()),
+                (Value::Boolean(b), Value::Boolean(a)) => self.push((a == b).into()),
+                (Value::String(b), Value::String(a)) => self.push((*a == *b).into()),
+                (Value::Closure(b), Value::Closure(a)) => self.push((Gc::ptr_eq(&a, &b)).into()),
+                (Value::NativeFunction(b), Value::NativeFunction(a)) => self.push((Gc::ptr_eq(&a, &b)).into()),
+                (Value::Nil, Value::Nil) => self.push(true.into()),
+                (Value::BoundMethod(b), Value::BoundMethod(a)) => self.push((Gc::ptr_eq(&a, &b)).into()),
+                (Value::Class(b), Value::Class(a)) => self.push((Gc::ptr_eq(&a, &b)).into()),
+                (Value::Instance(b), Value::Instance(a)) => self.push((Gc::ptr_eq(&a, &b)).into()),
+                _ => unimplemented!(),
+            };
+        } else {
+            self.push(false.into())
+        }
+    }
+
+    fn op_get_global(&mut self, index: usize) -> Result<(), VmError> {
+        let current_import = self.current_import();
+        let identifier = current_import.symbol(index);
+        let value = current_import.global(identifier);
+        if let Some(value) = value {
+            self.push(value);
+        } else {
+            return Err(VmError::GlobalNotDefined);
+        }
+
+        Ok(())
+    }
+
+    fn op_set_global(&mut self, index: usize) -> Result<(), VmError> {
+        let current_import = self.current_import();
+        let identifier = current_import.symbol(index);
+        let value = self.peek();
+        if current_import.has_global(identifier) {
+            current_import.set_global(identifier, *value);
+        } else {
+            return Err(VmError::GlobalNotDefined);
+        }
+
+        Ok(())
+    }
+
+    fn op_set_property(&mut self, index: usize) -> Result<(), VmError> {
+        let current_import = self.current_import();
+        let property = current_import.symbol(index);
+        if let Value::Instance(instance) = self.peek_n(1) {
+            instance
+                .borrow_mut()
+                .fields
+                .insert(property, *self.peek());
+
+            let value = self.pop();
+            self.pop();
+            self.push(value);
+        } else {
+            return Err(VmError::UnexpectedValue);
+        }
+
+        Ok(())
+    }
+
+    fn op_get_property<W: Write>(&mut self, index: usize, context: &mut VmContext<W>) -> Result<(), VmError> {
+        let current_import = self.current_import();
+        let property = current_import.symbol(index);
+        if let Value::Instance(instance) = self.pop() {
+            if let Some(value) = instance.borrow().fields.get(&property) {
+                self.push(*value);
+            } else if let Some(method) = instance.borrow().class.borrow().methods.get(&property) {
+                let bind = context.manage(BoundMethod {
+                    receiver: instance,
+                    method: *method,
+                });
+                self.push(Value::BoundMethod(bind.as_gc()));
+            } else {
+                return Err(VmError::UndefinedProperty);
+            };
+        } else {
+            return Err(VmError::UnexpectedValue);
+        }
+        Ok(())
+    }
+
+    fn op_closure<W: Write>(&mut self, index: usize, context: &mut VmContext<W>) {
+        let current_import = self.current_import();
+        let closure = current_import.closure(index);
+        let base = self.current_frame().base_counter;
+        let upvalues = closure
+            .upvalues
+            .iter()
+            .map(|u| {
+                match u {
+                    crate::bytecode::Upvalue::Local(index) => {
+                        let index = base + *index;
+
+                        if let Some(upvalue) = self.find_open_upvalue_with_index(index)
+                        {
+                            upvalue
+                        } else {
+                            let root = context.manage(Cell::new(Upvalue::Open(index)));
+                            self.upvalues.push(root.as_gc());
+                            root.as_gc()
+                        }
+                    }
+                    crate::bytecode::Upvalue::Upvalue(u) => {
+                        self.find_upvalue_by_index(*u)
+                    }
+                }
+            })
+        .collect();
+
+        let closure_root = context.manage(Closure {
+            function: Function::new(&closure.function, current_import),
+            upvalues,
+        });
+        self.push(Value::Closure(closure_root.as_gc()));
+    }
+
+    fn op_invoke<W: Write>(&mut self, index: usize, arity: usize, context: &mut VmContext<W>) -> Result<(), VmError> {
+        let current_import = self.current_import();
+        let property = current_import.symbol(index);
+        if let Value::Instance(instance) = *self.peek_n(arity) {
+            if let Some(value) = instance.borrow().fields.get(&property) {
+                self.rset(arity, *value);
+                self.call(arity, *value, context)?;
+            } else if let Some(method) = instance.borrow().class.borrow().methods.get(&property) {
+                if method.function.arity != arity {
+                    return Err(VmError::IncorrectArity);
+                }
+                self.begin_frame(*method);
+            } else {
+                return Err(VmError::UndefinedProperty);
+            };
+        } else {
+            return Err(VmError::UnexpectedValue);
+        }
+
+        Ok(())
+    }
+
+    //TODO investigate
+    fn close_upvalues(&mut self, indexes: std::ops::Range<usize>) {
+        for index in indexes {
+            for upvalue in self.upvalues.iter() {
+                if upvalue.get().is_open_with_index(index) {
+                    let value = *self.stack.get(index);
+                    upvalue.replace(Upvalue::Closed(value));
+                }
             }
         }
 
@@ -422,7 +533,7 @@ impl Fiber {
     }
 
     fn find_upvalue_by_index(&self, index: usize) -> Gc<Cell<Upvalue>> {
-        let frame = &self.frames[self.frames.len() - 1]; //TODO Result
+        let frame = self.current_frame();
         frame.closure.upvalues[index]
     }
 
@@ -439,14 +550,14 @@ impl Fiber {
     fn resolve_upvalue_into_value(&self, upvalue: Gc<Cell<Upvalue>>) -> Value {
         match upvalue.get() {
             Upvalue::Closed(value) => value,
-            Upvalue::Open(index) => self.stack[index],
+            Upvalue::Open(index) => *self.stack.get(index),
         }
     }
 
     fn set_upvalue(&mut self, upvalue: Gc<Cell<Upvalue>>, new_value: Value) {
         match upvalue.get() {
             Upvalue::Closed(_) => upvalue.set(Upvalue::Closed(new_value)),
-            Upvalue::Open(index) => self.stack[index] = new_value,
+            Upvalue::Open(index) => self.stack.set(index, new_value),
         }
     }
 
@@ -510,19 +621,19 @@ impl Fiber {
     }
 
     fn rset(&mut self, index: usize, value: Value) {
-        let index = self.stack.len() - index - 1;
-        self.stack[index] = value;
+        self.stack.rset(index, value);
     }
 
-    fn push_string<W: Write>(&mut self, string: &str, outer: &mut VmContext<W>) {
-        let root = outer.manage(string.to_string());
+    fn push_string<W: Write>(&mut self, string: impl Into<String>, outer: &mut VmContext<W>) {
+        let root = outer.manage(string.into());
         self.push(Value::String(root.as_gc()));
     }
 
     fn pop(&mut self) -> Value {
-        self.stack.pop().expect("Stack empty")
+        self.stack.pop()
     }
 
+    //TODO investigate
     fn pop_n(&mut self, n: usize) -> Vec<Value> {
         let mut result = Vec::with_capacity(n);
         while result.len() < n {
@@ -532,12 +643,12 @@ impl Fiber {
         result
     }
 
-    fn peek(&self) -> Value {
-        *self.stack.last().expect("Stack empty")
+    fn peek(&self) -> &Value {
+        self.stack.peek_n(0)
     }
 
     fn peek_n(&self, n: usize) -> &Value {
-        self.stack.get(self.stack.len() - n - 1).expect("Stack not deep enough")
+        self.stack.peek_n(n)
     }
 
     fn begin_frame(&mut self, closure: Gc<Closure>) {

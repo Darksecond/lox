@@ -14,7 +14,7 @@ pub enum Upvalue {
 
 impl Upvalue {
     #[inline]
-    pub fn is_open_with_index(&self, index: usize) -> bool {
+    pub const fn is_open_with_index(&self, index: usize) -> bool {
         match self {
             Self::Open(i) => {
                 if *i == index {
@@ -28,7 +28,7 @@ impl Upvalue {
     }
 
     #[inline]
-    pub fn is_open(&self) -> bool {
+    pub const fn is_open(&self) -> bool {
         match self {
             Self::Open(_) => true,
             Self::Closed(_) => false,
@@ -197,14 +197,17 @@ impl Import {
         self.module.closure(index)
     }
 
+    #[inline]
     pub fn set_global(&self, key: Symbol, value: Value) -> () {
         self.globals.borrow_mut().insert(key, value);
     }
 
+    #[inline]
     pub fn has_global(&self, key: Symbol) -> bool {
         self.globals.borrow().contains_key(&key)
     }
 
+    #[inline]
     pub fn global(&self, key: Symbol) -> Option<Value> {
         self.globals.borrow().get(&key).cloned()
     }
@@ -253,7 +256,7 @@ impl Value {
     }
 
     #[inline]
-    pub fn is_same_type(a: &Value, b: &Value) -> bool {
+    pub const fn is_same_type(a: &Value, b: &Value) -> bool {
         match (b, a) {
             (Value::Number(_), Value::Number(_)) => true,
             (Value::Boolean(_), Value::Boolean(_)) => true,

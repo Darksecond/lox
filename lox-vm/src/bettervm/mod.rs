@@ -2,6 +2,7 @@ mod memory;
 pub mod vm;
 mod interner;
 mod context;
+mod stack;
 
 use std::io::{Write, stdout};
 use crate::{bytecode::Module, bettergc::UniqueRoot};
@@ -9,7 +10,7 @@ pub use vm::VmError;
 use self::{vm::{Fiber, InterpretResult}, context::VmContext, memory::Value};
 
 pub struct Vm<W> where W: Write {
-    pub vm: UniqueRoot<Fiber>, //TODO Replace with Root<RefCell<Fiber>>
+    pub fiber: UniqueRoot<Fiber>, //TODO Replace with Root<RefCell<Fiber>>
     pub context: VmContext<W>, //TODO Replace with Root<VmContext<W>>
 }
 
@@ -21,20 +22,24 @@ impl<W> Vm<W> where W: Write {
         
         Self {
             context,
-            vm,
+            fiber: vm,
         }
     }
 
     pub fn interpret(&mut self) -> Result<(), VmError> {
-        while self.vm.interpret_next(&mut self.context)? == InterpretResult::More {
+        loop {
+            for _ in 0..1000 {
+                match self.fiber.interpret_next(&mut self.context)? {
+                    InterpretResult::Done => return Ok(()),
+                    InterpretResult::More => (),
+                }
+            }
             self.context.collect();
         }
-
-        Ok(())
     }
 
     pub fn set_native_fn(&mut self, identifier: &str, code: fn(&[Value]) -> Value) {
-        self.vm.set_native_fn(identifier, code, &mut self.context)
+        self.fiber.set_native_fn(identifier, code, &mut self.context)
     }
 }
 

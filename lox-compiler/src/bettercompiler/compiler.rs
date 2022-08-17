@@ -5,6 +5,7 @@ use lox_syntax::position::Span;
 
 use super::locals::*;
 use crate::bytecode::*;
+use lox_bytecode::opcode;
 
 #[derive(Copy, Clone, PartialEq)]
 pub enum ContextType {
@@ -99,9 +100,9 @@ impl Compiler {
     fn end_scope(&mut self) {
         for local in self.current_context_mut().locals.end_scope().iter().rev() {
             if local.captured() {
-                self.add_instruction(Instruction::CloseUpvalue);
+                self.add_u8(opcode::CLOSE_UPVALUE);
             } else {
-                self.add_instruction(Instruction::Pop);
+                self.add_u8(opcode::POP);
             }
         }
     }
@@ -200,8 +201,12 @@ impl Compiler {
         })
     }
 
-    pub fn add_instruction(&mut self, instruction: Instruction) -> InstructionIndex {
-        self.current_chunk_mut().add_instruction(instruction)
+    pub fn add_u8(&mut self, instruction: u8) -> InstructionIndex {
+        self.current_chunk_mut().add_u8(instruction)
+    }
+
+    pub fn add_u32(&mut self, instruction: u32) -> InstructionIndex {
+        self.current_chunk_mut().add_u32(instruction)
     }
 
     pub fn patch_instruction(&mut self, index: InstructionIndex) {
