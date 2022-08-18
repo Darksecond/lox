@@ -73,7 +73,7 @@ fn compile_import(compiler: &mut Compiler, path: &WithSpan<String>, identifiers:
     if let Some(identifiers) = identifiers {
         for identifier in identifiers {
             declare_variable(compiler, identifier.as_ref());
-            
+
             let constant = compiler.add_identifier(identifier.value.as_str());
             compiler.add_u8(opcode::IMPORT_GLOBAL);
             compiler.add_u32(constant as _);
@@ -96,7 +96,7 @@ fn compile_class(
         name: identifier.value.to_string()
     });
     compiler.add_u8(opcode::CLASS);
-    compiler.add_u32(constant as _);
+    compiler.add_u8(constant as _);
     define_variable(compiler, identifier.value);
 
     compile_variable(compiler, identifier);
@@ -359,11 +359,11 @@ fn compile_call(
         for arg in args {
             compile_expr(compiler, arg);
         }
-        
+
         let constant = compiler.add_identifier(ident.value.as_str());
         compiler.add_u8(opcode::INVOKE);
+        compiler.add_u8(args.len() as _);
         compiler.add_u32(constant as _);
-        compiler.add_u32(args.len() as _);
     } else {
         compile_expr(compiler, identifier);
 
@@ -372,7 +372,7 @@ fn compile_call(
         }
 
         compiler.add_u8(opcode::CALL);
-        compiler.add_u32(args.len() as _);
+        compiler.add_u8(args.len() as _);
     }
 }
 

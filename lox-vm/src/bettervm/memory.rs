@@ -2,7 +2,7 @@ use lox_bytecode::bytecode::{Chunk, Constant, ConstantIndex, Module, ClosureInde
 
 use crate::bettergc::{Gc, Trace};
 use crate::bytecode::{ChunkIndex, self};
-use std::cell::{RefCell, Cell};
+use std::cell::{Cell, UnsafeCell};
 use fxhash::FxHashMap;
 use super::interner::{Symbol, Interner};
 
@@ -48,28 +48,89 @@ impl Trace for Upvalue {
 
 #[derive(Debug)]
 pub struct Instance {
-    pub class: Gc<RefCell<Class>>,
-    pub fields: FxHashMap<Symbol, Value>,
+    pub class: Gc<Class>,
+    fields: UnsafeCell<FxHashMap<Symbol, Value>>,
+}
+
+impl Instance {
+    pub fn new(klass: Gc<Class>) -> Self {
+        Self {
+            class: klass,
+            fields: Default::default(),
+        }
+    }
+
+    #[inline]
+    pub fn field(&self, symbol: &Symbol) -> Option<&Value> {
+        self.fields().get(symbol)
+    }
+
+    #[inline]
+    pub fn set_field(&self, symbol: Symbol, value: Value) {
+        self.fields_mut().insert(symbol, value);
+    }
+
+    fn fields(&self) -> &FxHashMap<Symbol, Value> {
+        unsafe {
+            &*self.fields.get()
+        }
+    }
+
+    fn fields_mut(&self) -> &mut FxHashMap<Symbol, Value> {
+        unsafe {
+            &mut *self.fields.get()
+        }
+    }
 }
 
 impl Trace for Instance {
     #[inline]
     fn trace(&self) {
         self.class.trace();
-        self.fields.trace();
+        self.fields().trace();
     }
 }
 
 #[derive(Debug)]
 pub struct Class {
     pub name: String,
-    pub methods: FxHashMap<Symbol, Gc<Closure>>,
+    methods: UnsafeCell<FxHashMap<Symbol, Gc<Closure>>>,
+}
+
+impl Class {
+    pub fn new(name: String) -> Self {
+        Self {
+            name,
+            methods: Default::default(),
+        }
+    }
+
+    #[inline]
+    pub fn method(&self, symbol: &Symbol) -> Option<&Gc<Closure>> {
+        self.methods().get(symbol)
+    }
+
+    pub fn set_method(&self, symbol: Symbol, closure: Gc<Closure>) {
+        self.methods_mut().insert(symbol, closure);
+    }
+
+    fn methods(&self) -> &FxHashMap<Symbol, Gc<Closure>> {
+        unsafe {
+            &*self.methods.get()
+        }
+    }
+
+    fn methods_mut(&self) -> &mut FxHashMap<Symbol, Gc<Closure>> {
+        unsafe {
+            &mut *self.methods.get()
+        }
+    }
 }
 
 impl Trace for Class {
     #[inline]
     fn trace(&self) {
-        self.methods.trace();
+        self.methods().trace();
     }
 }
 
@@ -132,7 +193,7 @@ impl Function {
 
 #[derive(Debug, Copy, Clone)]
 pub struct BoundMethod {
-    pub receiver: Gc<RefCell<Instance>>,
+    pub receiver: Gc<Instance>,
     pub method: Gc<Closure>,
 }
 
@@ -147,14 +208,14 @@ impl Trace for BoundMethod {
 #[derive(Debug)]
 pub struct Import {
     module: Module,
-    pub globals: RefCell<FxHashMap<Symbol, Value>>,
+    pub globals: UnsafeCell<FxHashMap<Symbol, Value>>,
     pub symbols: Vec<Symbol>,
 }
 
 impl Trace for Import {
     #[inline]
     fn trace(&self) {
-        self.globals.trace();
+        self.globals().trace();
     }
 }
 
@@ -166,8 +227,20 @@ impl Import {
 
         Self {
             module,
-            globals: RefCell::new(FxHashMap::default()),
+            globals: UnsafeCell::new(FxHashMap::default()),
             symbols,
+        }
+    }
+
+    fn globals(&self) -> &FxHashMap<Symbol, Value> {
+        unsafe {
+            &*self.globals.get()
+        }
+    }
+
+    fn globals_mut(&self) -> &mut FxHashMap<Symbol, Value> {
+        unsafe {
+            &mut *self.globals.get()
         }
     }
 
@@ -199,17 +272,17 @@ impl Import {
 
     #[inline]
     pub fn set_global(&self, key: Symbol, value: Value) -> () {
-        self.globals.borrow_mut().insert(key, value);
+        self.globals_mut().insert(key, value);
     }
 
     #[inline]
     pub fn has_global(&self, key: Symbol) -> bool {
-        self.globals.borrow().contains_key(&key)
+        self.globals().contains_key(&key)
     }
 
     #[inline]
     pub fn global(&self, key: Symbol) -> Option<Value> {
-        self.globals.borrow().get(&key).cloned()
+        self.globals().get(&key).cloned()
     }
 }
 
@@ -221,8 +294,8 @@ pub enum Value {
     BoundMethod(Gc<BoundMethod>),
     NativeFunction(Gc<NativeFunction>),
     Boolean(bool),
-    Class(Gc<RefCell<Class>>),
-    Instance(Gc<RefCell<Instance>>),
+    Class(Gc<Class>),
+    Instance(Gc<Instance>),
     Import(Gc<Import>),
     Nil,
 }
@@ -279,6 +352,23 @@ impl From<bool> for Value {
             Value::Boolean(true)
         } else {
             Value::Boolean(false)
+        }
+    }
+}
+
+impl std::fmt::Display for Value {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Value::Number(n) => write!(f, "{}", n),
+            Value::Nil => write!(f, "nil"),
+            Value::Boolean(boolean) => write!(f, "{}", boolean),
+            Value::String(string) => write!(f, "{}", string),
+            Value::NativeFunction(_function) => write!(f, "<native fn>"),
+            Value::Closure(closure) => write!(f, "<fn {}>", closure.function.name),
+            Value::Class(class) => write!(f, "{}", class.name),
+            Value::Instance(instance) => write!(f, "{} instance", instance.class.name),
+            Value::BoundMethod(bind) => write!(f, "<fn {}>", bind.method.function.name),
+            Value::Import(_) => write!(f, "<import>"),
         }
     }
 }

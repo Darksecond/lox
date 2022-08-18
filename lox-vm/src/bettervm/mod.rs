@@ -5,12 +5,12 @@ mod context;
 mod stack;
 
 use std::io::{Write, stdout};
-use crate::{bytecode::Module, bettergc::UniqueRoot};
+use crate::bytecode::Module;
 pub use vm::VmError;
 use self::{vm::{Fiber, InterpretResult}, context::VmContext, memory::Value};
 
 pub struct Vm<W> where W: Write {
-    pub fiber: UniqueRoot<Fiber>, //TODO Replace with Root<RefCell<Fiber>>
+    pub fiber: Fiber, //TODO Replace with Root<RefCell<Fiber>>
     pub context: VmContext<W>, //TODO Replace with Root<VmContext<W>>
 }
 
@@ -18,8 +18,8 @@ impl<W> Vm<W> where W: Write {
     pub fn with_stdout(module: Module, stdout: W) -> Self {
         let mut context = VmContext::new(stdout);
         let closure = context.prepare_interpret(module);
-        let vm = context.unique(Fiber::with_closure(closure.as_gc()));
-        
+        let vm = Fiber::with_closure(closure);
+
         Self {
             context,
             fiber: vm,
@@ -28,13 +28,11 @@ impl<W> Vm<W> where W: Write {
 
     pub fn interpret(&mut self) -> Result<(), VmError> {
         loop {
-            for _ in 0..1000 {
-                match self.fiber.interpret_next(&mut self.context)? {
-                    InterpretResult::Done => return Ok(()),
-                    InterpretResult::More => (),
-                }
+            match self.fiber.interpret_next(&mut self.context)? {
+                InterpretResult::Done => return Ok(()),
+                InterpretResult::More => (),
             }
-            self.context.collect();
+            self.context.collect(&self.fiber);
         }
     }
 

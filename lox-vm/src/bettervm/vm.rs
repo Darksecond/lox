@@ -6,8 +6,7 @@ use super::memory::*;
 use super::stack::Stack;
 use crate::bettergc::{Gc, Trace};
 use std::cell::Cell;
-use std::{cell::RefCell, io::Write};
-use fxhash::FxHashMap;
+use std::io::Write;
 
 #[derive(PartialEq)]
 pub enum InterpretResult {
@@ -87,9 +86,13 @@ pub struct Fiber {
     frames: Vec<CallFrame>,
     stack: Stack,
     upvalues: Vec<Gc<Cell<Upvalue>>>,
+
+    // We use a pointer for the current call frame becaeuse this is way faster than using last().
+    current_frame: *mut CallFrame,
 }
 
 impl Trace for Fiber {
+    #[inline]
     fn trace(&self) {
         self.frames.trace();
         self.stack.trace();
@@ -103,9 +106,10 @@ impl Fiber {
             frames: Vec::with_capacity(2048),
             stack: Stack::new(2048),
             upvalues: Vec::with_capacity(2048),
+            current_frame: std::ptr::null_mut(),
         };
 
-        fiber.push(Value::Closure(closure));
+        fiber.stack.push(Value::Closure(closure));
         fiber.begin_frame(closure);
 
         fiber
@@ -123,189 +127,139 @@ impl Fiber {
 
         let identifier = context.intern(identifier);
         let root = context.manage(native_function);
-        self.current_import().set_global(identifier, Value::NativeFunction(root.as_gc()))
+        self.current_import().set_global(identifier, Value::NativeFunction(root))
     }
 
-    #[inline(always)]
+    #[inline]
     pub fn interpret_next<W: Write>(&mut self, context: &mut VmContext<W>) -> Result<InterpretResult, VmError> {
-        let current_import = self.current_import();
-
-        let instr = {
-            let frame = self.current_frame_mut();
-            frame.next_u8()
-        };
+        let instr = self.next_u8();
 
         match instr {
             opcode::CONSTANT => {
-                let index = self.current_frame_mut().next_u32() as _;
-
+                let index = self.next_u32() as _;
                 self.op_constant(index, context);
             },
-
             opcode::IMPORT => {
-                let _index: usize = self.current_frame_mut().next_u32() as _;
+                let _index: usize = self.next_u32() as _;
                 unimplemented!()
             },
             opcode::IMPORT_GLOBAL => {
-                let _index: usize = self.current_frame_mut().next_u32() as _;
+                let _index: usize = self.next_u32() as _;
                 unimplemented!()
             },
-
             opcode::CLOSURE => {
-                let index = self.current_frame_mut().next_u32() as _;
+                let index = self.next_u32() as _;
                 self.op_closure(index, context);
             }
             opcode::CLASS => {
-                let index = self.current_frame_mut().next_u32() as _;
-
-                let class = current_import.class(index);
-                let class = context.manage(RefCell::new(Class {
-                    name: class.name.clone(),
-                    methods: FxHashMap::default(),
-                }));
-                self.push(Value::Class(class.as_gc()));
+                let index = self.next_u8() as _;
+                self.op_class(index, context);
             }
-            //TODO Rewrite if's to improve error handling
-            //TODO Pretty sure it leaves the stack clean, but double check
             opcode::METHOD => {
-                let index = self.current_frame_mut().next_u32() as _;
-
-                let identifier = current_import.symbol(index);
-                if let Value::Class(class) = self.peek_n(1) {
-                    if let Value::Closure(closure) = self.peek_n(0) {
-                        class.borrow_mut().methods.insert(identifier, *closure);
-                    } else {
-                        return Err(VmError::UnexpectedConstant);
-                    }
-                } else {
-                    return Err(VmError::UnexpectedConstant);
-                }
-
-                self.pop();
+                let index = self.next_u32() as _;
+                self.op_method(index)?;
             },
             opcode::SET_PROPERTY => {
-                let index = self.current_frame_mut().next_u32() as _;
+                let index = self.next_u32() as _;
                 self.op_set_property(index)?;
             }
             opcode::GET_PROPERTY => {
-                let index = self.current_frame_mut().next_u32() as _;
+                let index = self.next_u32() as _;
                 self.op_get_property(index, context)?;
             }
             opcode::PRINT => {
                 self.op_print(context);
             },
-            opcode::NIL => self.push(Value::Nil),
+            opcode::NIL => {
+                self.op_nil();
+            },
             opcode::RETURN => {
-                let result = self.pop();
-                let frame = self.frames.pop().ok_or(VmError::FrameEmpty)?;
-
-                self.close_upvalues(frame.base_counter..self.stack.len());
-
-                self.stack.truncate(frame.base_counter);
-
-                if self.frames.len() == 0 {
-                    // We are done interpreting, don't push a result as it'll be nil
-                    return Ok(InterpretResult::Done);
+                if let Some(result) = self.op_return()? {
+                    return Ok(result);
                 }
-
-                self.push(result);
             }
             opcode::ADD => {
                 self.op_add(context)?;
             },
-            opcode::SUBTRACT => match (self.pop(), self.pop()) {
-                (Value::Number(b), Value::Number(a)) => self.push(Value::Number(a - b)),
-                _ => return Err(VmError::UnexpectedValue),
+            opcode::SUBTRACT => {
+                self.op_subtract()?;
             },
-            opcode::MULTIPLY => match (self.pop(), self.pop()) {
-                (Value::Number(b), Value::Number(a)) => self.push(Value::Number(a * b)),
-                _ => return Err(VmError::UnexpectedValue),
+            opcode::MULTIPLY => {
+                self.op_multiply()?;
             },
-            opcode::DIVIDE => match (self.pop(), self.pop()) {
-                (Value::Number(b), Value::Number(a)) => self.push(Value::Number(a / b)),
-                _ => return Err(VmError::UnexpectedValue),
+            opcode::DIVIDE => {
+                self.op_divide()?;
             },
             opcode::POP => {
-                self.pop();
+                self.op_pop();
             }
             opcode::DEFINE_GLOBAL => {
-                let index = self.current_frame_mut().next_u32() as _;
-
-                let identifier = current_import.symbol(index);
-                let value = self.pop();
-                current_import.set_global(identifier, value);
+                let index = self.next_u32() as _;
+                self.op_define_global(index);
             }
             opcode::GET_GLOBAL => {
-                let index = self.current_frame_mut().next_u32() as _;
+                let index = self.next_u32() as _;
                 self.op_get_global(index)?;
             }
             opcode::SET_GLOBAL => {
-                let index = self.current_frame_mut().next_u32() as _;
+                let index = self.next_u32() as _;
                 self.op_set_global(index)?;
             }
             opcode::GET_LOCAL => {
-                let index: usize = self.current_frame_mut().next_u32() as _;
+                let index = self.next_u32() as _;
                 self.op_get_local(index);
             }
             opcode::SET_LOCAL => {
-                let index: usize = self.current_frame_mut().next_u32() as _;
-
+                let index = self.next_u32() as _;
                 self.op_set_local(index);
             }
-            opcode::TRUE => self.push(Value::Boolean(true)),
-            opcode::FALSE => self.push(Value::Boolean(false)),
+            opcode::TRUE => {
+                self.op_bool(true);
+            },
+            opcode::FALSE => {
+                self.op_bool(false);
+            },
             opcode::JUMP_IF_FALSE => {
-                let to = self.current_frame_mut().next_u32() as _;
-                if self.peek().is_falsey() {
-                    self.current_frame_mut().set_pc(to);
-                }
+                let to = self.next_u32() as _;
+                self.op_jump_if_false(to);
             },
             opcode::JUMP => {
-                let to = self.current_frame_mut().next_u32() as _;
-                self.current_frame_mut().set_pc(to);
+                let to = self.next_u32() as _;
+                self.op_jump(to);
             },
-            opcode::LESS => match (self.pop(), self.pop()) {
-                (Value::Number(b), Value::Number(a)) => self.push((a < b).into()),
-                _ => return Err(VmError::UnexpectedValue),
+            opcode::LESS => {
+                self.op_less()?;
             },
-            opcode::GREATER => match (self.pop(), self.pop()) {
-                (Value::Number(b), Value::Number(a)) => self.push((a > b).into()),
-                _ => return Err(VmError::UnexpectedValue),
+            opcode::GREATER => {
+                self.op_greater()?;
             },
             opcode::EQUAL => {
                 self.op_equal();
             }
             opcode::CALL => {
-                let arity = self.current_frame_mut().next_u32() as _;
-
-                let callee = *self.peek_n(arity);
-                self.call(arity, callee, context)?;
+                let arity = self.next_u8() as _;
+                self.op_call(arity, context)?;
             }
-            opcode::NEGATE => match self.pop() {
-                Value::Number(n) => self.push(Value::Number(-n)),
-                _ => return Err(VmError::UnexpectedValue),
+            opcode::NEGATE => {
+                self.op_negate()?;
             },
             opcode::NOT => {
-                let is_falsey = self.pop().is_falsey();
-                self.push(is_falsey.into());
+                self.op_not();
             }
             opcode::GET_UPVALUE => {
-                let index: usize = self.current_frame_mut().next_u32() as _;
+                let index = self.next_u32() as _;
                 self.op_get_upvalue(index);
             }
             opcode::SET_UPVALUE => {
-                let index: usize = self.current_frame_mut().next_u32() as _;
-
+                let index = self.next_u32() as _;
                 self.op_set_upvalue(index);
             }
             opcode::CLOSE_UPVALUE => {
-                let index = self.stack.len() - 1;
-                self.close_upvalues(index..index+1);
-                self.pop();
+                self.op_close_upvalue();
             }
             opcode::INVOKE => {
-                let index = self.current_frame_mut().next_u32() as _;
-                let arity = self.current_frame_mut().next_u32() as _;
+                let arity = self.next_u8() as _;
+                let index = self.next_u32() as _;
 
                 self.op_invoke(index, arity, context)?;
             }
@@ -315,18 +269,149 @@ impl Fiber {
         Ok(InterpretResult::More)
     }
 
+    fn op_jump(&mut self, to: usize) {
+        self.current_frame_mut().set_pc(to);
+    }
+
+    fn op_jump_if_false(&mut self, to: usize) {
+        if self.stack.peek_n(0).is_falsey() {
+            self.current_frame_mut().set_pc(to);
+        }
+    }
+
+    fn op_class<W: Write>(&mut self, index: usize, context: &mut VmContext<W>) {
+        let current_import = self.current_import();
+        let class = current_import.class(index);
+        let class = context.manage(Class::new(class.name.clone()));
+        self.stack.push(Value::Class(class));
+    }
+
+    fn op_bool(&mut self, value: bool) {
+        self.stack.push(Value::Boolean(value));
+    }
+
+    fn op_nil(&mut self) {
+        self.stack.push(Value::Nil);
+    }
+
+    //TODO Rewrite if's to improve error handling
+    //TODO Pretty sure it leaves the stack clean, but double check
+    fn op_method(&mut self, index: usize) -> Result<(), VmError> {
+        let current_import = self.current_import();
+        let identifier = current_import.symbol(index);
+        if let Value::Class(class) = self.stack.peek_n(1) {
+            if let Value::Closure(closure) = self.stack.peek_n(0) {
+                class.set_method(identifier, *closure);
+            } else {
+                return Err(VmError::UnexpectedConstant);
+            }
+        } else {
+            return Err(VmError::UnexpectedConstant);
+        }
+
+        self.stack.pop();
+        Ok(())
+    }
+
+    fn op_return(&mut self) -> Result<Option<InterpretResult>, VmError> {
+        let result = self.stack.pop();
+        let frame = self.end_frame()?;
+
+        self.close_upvalues(frame.base_counter..self.stack.len());
+
+        self.stack.truncate(frame.base_counter);
+
+        if self.frames.len() == 0 {
+            // We are done interpreting, don't push a result as it'll be nil
+            return Ok(Some(InterpretResult::Done));
+        }
+
+        self.stack.push(result);
+
+        Ok(None)
+    }
+
+    fn op_pop(&mut self) {
+        self.stack.pop();
+    }
+
+    fn op_call<W: Write>(&mut self, arity: usize, context: &mut VmContext<W>) -> Result<(), VmError> {
+        let callee = *self.stack.peek_n(arity);
+        self.call(arity, callee, context)?;
+        Ok(())
+    }
+
     fn op_constant<W: Write>(&mut self, index: usize, context: &mut VmContext<W>) {
         use crate::bytecode::Constant;
         let current_import = self.current_import();
         match current_import.constant(index) {
-            Constant::Number(n) => self.push(Value::Number(*n)),
+            Constant::Number(n) => self.stack.push(Value::Number(*n)),
             Constant::String(string) => self.push_string(string, context),
         }
     }
 
+    fn op_greater(&mut self) -> Result<(), VmError> {
+        match (self.stack.pop(), self.stack.pop()) {
+            (Value::Number(b), Value::Number(a)) => self.stack.push((a > b).into()),
+            _ => return Err(VmError::UnexpectedValue),
+        }
+
+        Ok(())
+    }
+
+    fn op_less(&mut self) -> Result<(), VmError> {
+        match (self.stack.pop(), self.stack.pop()) {
+            (Value::Number(b), Value::Number(a)) => self.stack.push((a < b).into()),
+            _ => return Err(VmError::UnexpectedValue),
+        }
+
+        Ok(())
+    }
+
+    fn op_negate(&mut self) -> Result<(), VmError> {
+        match self.stack.pop() {
+            Value::Number(n) => self.stack.push(Value::Number(-n)),
+            _ => return Err(VmError::UnexpectedValue),
+        }
+
+        Ok(())
+    }
+
+    fn op_not(&mut self) {
+        let is_falsey = self.stack.pop().is_falsey();
+        self.stack.push(is_falsey.into());
+    }
+
+    fn op_divide(&mut self) -> Result<(), VmError> {
+        match (self.stack.pop(), self.stack.pop()) {
+            (Value::Number(b), Value::Number(a)) => self.stack.push(Value::Number(a / b)),
+            _ => return Err(VmError::UnexpectedValue),
+        }
+
+        Ok(())
+    }
+
+    fn op_multiply(&mut self) -> Result<(), VmError> {
+        match (self.stack.pop(), self.stack.pop()) {
+            (Value::Number(b), Value::Number(a)) => self.stack.push(Value::Number(a * b)),
+            _ => return Err(VmError::UnexpectedValue),
+        }
+
+        Ok(())
+    }
+
+    fn op_subtract(&mut self) -> Result<(), VmError> {
+        match (self.stack.pop(), self.stack.pop()) {
+            (Value::Number(b), Value::Number(a)) => self.stack.push(Value::Number(a - b)),
+            _ => return Err(VmError::UnexpectedValue),
+        }
+
+        Ok(())
+    }
+
     fn op_add<W: Write>(&mut self, context: &mut VmContext<W>) -> Result<(), VmError> {
-        match (self.pop(), self.pop()) {
-            (Value::Number(b), Value::Number(a)) => self.push(Value::Number(a + b)),
+        match (self.stack.pop(), self.stack.pop()) {
+            (Value::Number(b), Value::Number(a)) => self.stack.push(Value::Number(a + b)),
             (Value::String(b), Value::String(a)) => self.push_string(format!("{}{}", a, b), context),
             _ => return Err(VmError::UnexpectedValue),
         }
@@ -336,63 +421,63 @@ impl Fiber {
 
     fn op_get_upvalue(&mut self, index: usize) {
         let upvalue = self.current_frame().closure.upvalues[index];
-        self.push(self.resolve_upvalue_into_value(upvalue));
-    }
-
-    fn op_print<W: Write>(&mut self, context: &mut VmContext<W>) {
-        match self.pop() {
-            Value::Number(n) => writeln!(context.stdout, "{}", n).expect("Could not write to stdout"),
-            Value::Nil => writeln!(context.stdout, "nil").expect("Could not write to stdout"),
-            Value::Boolean(boolean) => writeln!(context.stdout, "{}", boolean).expect("Could not write to stdout"),
-            Value::String(string) => writeln!(context.stdout, "{}", string).expect("Could not write to stdout"),
-            Value::NativeFunction(_function) => writeln!(context.stdout, "<native fn>").expect("Could not write to stdout"),
-            Value::Closure(closure) => writeln!(context.stdout, "<fn {}>", closure.function.name).expect("Could not write to stdout"),
-            Value::Class(class) => writeln!(context.stdout, "{}", class.borrow().name).expect("Could not write to stdout"),
-            Value::Instance(instance) => {
-                writeln!(context.stdout, "{} instance", instance.borrow().class.borrow().name).expect("Could not write to stdout")
-            },
-            Value::BoundMethod(bind) => writeln!(context.stdout, "<fn {}>", bind.method.function.name).expect("Could not write to stdout"),
-            Value::Import(_) => writeln!(context.stdout, "<import>").expect("Could not write to stdout"),
-        }
+        self.stack.push(self.resolve_upvalue_into_value(upvalue));
     }
 
     fn op_set_upvalue(&mut self, index: usize) {
-        let value = self.peek();
+        let value = self.stack.peek_n(0);
         let upvalue = self.current_frame().closure.upvalues[index];
         self.set_upvalue(upvalue, *value);
     }
 
+    fn op_close_upvalue(&mut self) {
+        let index = self.stack.len() - 1;
+        self.close_upvalues(index..index+1);
+        self.stack.pop();
+    }
+
+    fn op_print<W: Write>(&mut self, context: &mut VmContext<W>) {
+        writeln!(context.stdout, "{}", self.stack.pop()).expect("Could not write to stdout");
+    }
+
     fn op_get_local(&mut self, index: usize) {
         let index = self.current_frame().base_counter + index;
-        self.push(*self.stack.get(index));
+        self.stack.push(*self.stack.get(index));
     }
 
     fn op_set_local(&mut self, index: usize) {
         let index = self.current_frame().base_counter + index;
-        let value = self.peek();
+        let value = self.stack.peek_n(0);
         self.stack.set(index, *value);
     }
 
     fn op_equal(&mut self) {
-        let b = self.pop();
-        let a = self.pop();
+        let b = self.stack.pop();
+        let a = self.stack.pop();
 
         if Value::is_same_type(&a, &b) {
             match (b, a) {
-                (Value::Number(b), Value::Number(a)) => self.push((a == b).into()),
-                (Value::Boolean(b), Value::Boolean(a)) => self.push((a == b).into()),
-                (Value::String(b), Value::String(a)) => self.push((*a == *b).into()),
-                (Value::Closure(b), Value::Closure(a)) => self.push((Gc::ptr_eq(&a, &b)).into()),
-                (Value::NativeFunction(b), Value::NativeFunction(a)) => self.push((Gc::ptr_eq(&a, &b)).into()),
-                (Value::Nil, Value::Nil) => self.push(true.into()),
-                (Value::BoundMethod(b), Value::BoundMethod(a)) => self.push((Gc::ptr_eq(&a, &b)).into()),
-                (Value::Class(b), Value::Class(a)) => self.push((Gc::ptr_eq(&a, &b)).into()),
-                (Value::Instance(b), Value::Instance(a)) => self.push((Gc::ptr_eq(&a, &b)).into()),
+                (Value::Number(b), Value::Number(a)) => self.stack.push((a == b).into()),
+                (Value::Boolean(b), Value::Boolean(a)) => self.stack.push((a == b).into()),
+                (Value::String(b), Value::String(a)) => self.stack.push((*a == *b).into()),
+                (Value::Closure(b), Value::Closure(a)) => self.stack.push((Gc::ptr_eq(&a, &b)).into()),
+                (Value::NativeFunction(b), Value::NativeFunction(a)) => self.stack.push((Gc::ptr_eq(&a, &b)).into()),
+                (Value::Nil, Value::Nil) => self.stack.push(true.into()),
+                (Value::BoundMethod(b), Value::BoundMethod(a)) => self.stack.push((Gc::ptr_eq(&a, &b)).into()),
+                (Value::Class(b), Value::Class(a)) => self.stack.push((Gc::ptr_eq(&a, &b)).into()),
+                (Value::Instance(b), Value::Instance(a)) => self.stack.push((Gc::ptr_eq(&a, &b)).into()),
                 _ => unimplemented!(),
             };
         } else {
-            self.push(false.into())
+            self.stack.push(false.into())
         }
+    }
+
+    fn op_define_global(&mut self, index: usize) {
+        let current_import = self.current_import();
+        let identifier = current_import.symbol(index);
+        let value = self.stack.pop();
+        current_import.set_global(identifier, value);
     }
 
     fn op_get_global(&mut self, index: usize) -> Result<(), VmError> {
@@ -400,7 +485,7 @@ impl Fiber {
         let identifier = current_import.symbol(index);
         let value = current_import.global(identifier);
         if let Some(value) = value {
-            self.push(value);
+            self.stack.push(value);
         } else {
             return Err(VmError::GlobalNotDefined);
         }
@@ -411,7 +496,7 @@ impl Fiber {
     fn op_set_global(&mut self, index: usize) -> Result<(), VmError> {
         let current_import = self.current_import();
         let identifier = current_import.symbol(index);
-        let value = self.peek();
+        let value = self.stack.peek_n(0);
         if current_import.has_global(identifier) {
             current_import.set_global(identifier, *value);
         } else {
@@ -424,15 +509,12 @@ impl Fiber {
     fn op_set_property(&mut self, index: usize) -> Result<(), VmError> {
         let current_import = self.current_import();
         let property = current_import.symbol(index);
-        if let Value::Instance(instance) = self.peek_n(1) {
-            instance
-                .borrow_mut()
-                .fields
-                .insert(property, *self.peek());
+        if let Value::Instance(instance) = self.stack.peek_n(1) {
+            instance.set_field(property, *self.stack.peek_n(0));
 
-            let value = self.pop();
-            self.pop();
-            self.push(value);
+            let value = self.stack.pop();
+            self.stack.pop();
+            self.stack.push(value);
         } else {
             return Err(VmError::UnexpectedValue);
         }
@@ -443,15 +525,15 @@ impl Fiber {
     fn op_get_property<W: Write>(&mut self, index: usize, context: &mut VmContext<W>) -> Result<(), VmError> {
         let current_import = self.current_import();
         let property = current_import.symbol(index);
-        if let Value::Instance(instance) = self.pop() {
-            if let Some(value) = instance.borrow().fields.get(&property) {
-                self.push(*value);
-            } else if let Some(method) = instance.borrow().class.borrow().methods.get(&property) {
+        if let Value::Instance(instance) = self.stack.pop() {
+            if let Some(value) = instance.field(&property) {
+                self.stack.push(*value);
+            } else if let Some(method) = instance.class.method(&property) {
                 let bind = context.manage(BoundMethod {
                     receiver: instance,
                     method: *method,
                 });
-                self.push(Value::BoundMethod(bind.as_gc()));
+                self.stack.push(Value::BoundMethod(bind));
             } else {
                 return Err(VmError::UndefinedProperty);
             };
@@ -478,8 +560,8 @@ impl Fiber {
                             upvalue
                         } else {
                             let root = context.manage(Cell::new(Upvalue::Open(index)));
-                            self.upvalues.push(root.as_gc());
-                            root.as_gc()
+                            self.upvalues.push(root);
+                            root
                         }
                     }
                     crate::bytecode::Upvalue::Upvalue(u) => {
@@ -493,17 +575,17 @@ impl Fiber {
             function: Function::new(&closure.function, current_import),
             upvalues,
         });
-        self.push(Value::Closure(closure_root.as_gc()));
+        self.stack.push(Value::Closure(closure_root));
     }
 
     fn op_invoke<W: Write>(&mut self, index: usize, arity: usize, context: &mut VmContext<W>) -> Result<(), VmError> {
         let current_import = self.current_import();
         let property = current_import.symbol(index);
-        if let Value::Instance(instance) = *self.peek_n(arity) {
-            if let Some(value) = instance.borrow().fields.get(&property) {
-                self.rset(arity, *value);
+        if let Value::Instance(instance) = *self.stack.peek_n(arity) {
+            if let Some(value) = instance.field(&property) {
+                self.stack.rset(arity, *value);
                 self.call(arity, *value, context)?;
-            } else if let Some(method) = instance.borrow().class.borrow().methods.get(&property) {
+            } else if let Some(method) = instance.class.method(&property) {
                 if method.function.arity != arity {
                     return Err(VmError::IncorrectArity);
                 }
@@ -573,19 +655,16 @@ impl Fiber {
             Value::NativeFunction(callee) => {
                 let mut args = self.pop_n(arity);
                 args.reverse();
-                self.pop(); // discard callee
+                self.stack.pop(); // discard callee
                 let result = (callee.code)(&args);
-                self.push(result);
+                self.stack.push(result);
             }
             Value::Class(class) => {
-                let instance = outer.manage(RefCell::new(Instance {
-                    class,
-                    fields: FxHashMap::default(),
-                }));
-                self.rset(arity, Value::Instance(instance.as_gc()));
+                let instance = outer.manage(Instance::new(class));
+                self.stack.rset(arity, Value::Instance(instance));
 
                 let init_symbol = outer.intern("init"); //TODO move to constructor
-                if let Some(initializer) = class.borrow().methods.get(&init_symbol) {
+                if let Some(initializer) = class.method(&init_symbol) {
                     if initializer.function.arity != arity {
                         return Err(VmError::IncorrectArity);
                     }
@@ -599,7 +678,7 @@ impl Fiber {
                 if callee.function.arity != arity {
                     return Err(VmError::IncorrectArity);
                 }
-                self.rset(arity, Value::Instance(bind.receiver));
+                self.stack.rset(arity, Value::Instance(bind.receiver));
                 self.begin_frame(callee);
             },
             _ => return Err(VmError::InvalidCallee),
@@ -609,49 +688,57 @@ impl Fiber {
     }
 
     fn current_frame(&self) -> &CallFrame {
-        self.frames.last().expect("No frame")
+        unsafe {
+            &*self.current_frame
+        }
     }
 
     fn current_frame_mut(&mut self) -> &mut CallFrame {
-        self.frames.last_mut().expect("No frame")
-    }
-
-    fn push(&mut self, value: Value) {
-        self.stack.push(value)
-    }
-
-    fn rset(&mut self, index: usize, value: Value) {
-        self.stack.rset(index, value);
+        unsafe {
+            &mut *self.current_frame
+        }
     }
 
     fn push_string<W: Write>(&mut self, string: impl Into<String>, outer: &mut VmContext<W>) {
         let root = outer.manage(string.into());
-        self.push(Value::String(root.as_gc()));
-    }
-
-    fn pop(&mut self) -> Value {
-        self.stack.pop()
+        self.stack.push(Value::String(root));
     }
 
     //TODO investigate
     fn pop_n(&mut self, n: usize) -> Vec<Value> {
         let mut result = Vec::with_capacity(n);
-        while result.len() < n {
-            result.push(self.pop());
+        for _ in 0..n {
+            result.push(self.stack.pop());
         }
 
         result
     }
 
-    fn peek(&self) -> &Value {
-        self.stack.peek_n(0)
-    }
-
-    fn peek_n(&self, n: usize) -> &Value {
-        self.stack.peek_n(n)
-    }
-
     fn begin_frame(&mut self, closure: Gc<Closure>) {
         self.frames.push(CallFrame::new(closure, self.stack.len() - closure.function.arity - 1));
+
+        // We don't just offset(1) here because Vec might reallocate contents.
+        unsafe {
+            self.current_frame = self.frames.as_mut_ptr().add(self.frames.len() - 1);
+        }
+    }
+
+    fn end_frame(&mut self) -> Result<CallFrame, VmError> {
+        let frame = self.frames.pop().ok_or(VmError::FrameEmpty)?;
+
+        // This might result in a invalid pointer 
+        // because we might point to 1 below the Vector if it's empty.
+        unsafe {
+            self.current_frame = self.current_frame.offset(-1);
+        }
+        Ok(frame)
+    }
+
+    fn next_u32(&mut self) -> u32 {
+        self.current_frame_mut().next_u32()
+    }
+
+    fn next_u8(&mut self) -> u8 {
+        self.current_frame_mut().next_u8()
     }
 }

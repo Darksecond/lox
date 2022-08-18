@@ -1,8 +1,7 @@
 use std::cell::Cell;
 use std::fmt;
-use std::ops::{Deref, DerefMut};
+use std::ops::Deref;
 use std::ptr::NonNull;
-use std::sync::atomic::{AtomicUsize, Ordering};
 
 pub trait Trace {
     fn trace(&self);
@@ -16,7 +15,6 @@ impl fmt::Debug for dyn Trace {
 
 #[derive(Debug)]
 struct Header {
-    roots: AtomicUsize,
     marked: Cell<bool>,
 }
 
@@ -37,27 +35,9 @@ pub struct Gc<T: 'static + Trace + ?Sized> {
     ptr: NonNull<Allocation<T>>,
 }
 
-pub struct Root<T: 'static + Trace + ?Sized> {
-    ptr: NonNull<Allocation<T>>,
-}
-
-pub struct UniqueRoot<T: 'static + Trace + ?Sized> {
-    ptr: NonNull<Allocation<T>>,
-}
-
 impl<T: 'static + Trace + ?Sized> Allocation<T> {
     fn unmark(&self) {
         self.header.marked.set(false);
-    }
-
-    #[inline]
-    fn root(&self) {
-        self.header.roots.fetch_add(1, Ordering::Relaxed);
-    }
-
-    #[inline]
-    fn unroot(&self) {
-        self.header.roots.fetch_sub(1, Ordering::Relaxed);
     }
 }
 impl<T: 'static + Trace + ?Sized> Trace for Allocation<T> {
@@ -71,7 +51,6 @@ impl<T: 'static + Trace + ?Sized> Trace for Allocation<T> {
 impl Default for Header {
     fn default() -> Self {
         Header {
-            roots: AtomicUsize::new(0),
             marked: Cell::new(false),
         }
     }
@@ -99,46 +78,22 @@ impl Heap {
         ptr
     }
 
-    /// Create a UniqueRoot, it cannot be Copied or Cloned, but it is mutably dereferencing.
-    /// Which means it's ideal for Root containers and such.
-    pub fn unique<T: 'static + Trace>(&mut self, data: T) -> UniqueRoot<T> {
-        let root = UniqueRoot {
+    pub fn manage<T: 'static + Trace>(&mut self, data: T) -> Gc<T> {
+        Gc {
             ptr: self.allocate(data),
-        };
-        root.allocation().root();
-        root
-    }
-
-    pub fn root<T: 'static + Trace + ?Sized>(&mut self, obj: Gc<T>) -> Root<T> {
-        obj.allocation().root();
-        Root { ptr: obj.ptr }
-    }
-
-    pub fn gc<T: 'static + Trace>(&mut self, data: T) -> Gc<T> {
-        let gc = Gc {
-            ptr: self.allocate(data),
-        };
-        gc
-    }
-
-    pub fn manage<T: 'static + Trace>(&mut self, data: T) -> Root<T> {
-        let root = Root {
-            ptr: self.allocate(data),
-        };
-        root.allocation().root();
-        root
-    }
-
-    #[inline]
-    pub fn collect(&mut self) {
-        if self.bytes_allocated > self.threshold {
-            self.force_collect();
         }
     }
 
-    fn force_collect(&mut self) {
-        self.mark();
-        let bytes = self.bytes_marked();
+    #[inline]
+    pub fn collect(&mut self, roots: &[&dyn Trace]) {
+        if self.bytes_allocated > self.threshold {
+            self.force_collect(roots);
+        }
+    }
+
+    fn force_collect(&mut self, roots: &[&dyn Trace]) {
+        self.mark(roots);
+        let bytes = self.bytes_unmarked();
         self.sweep();
 
         self.bytes_allocated -= bytes;
@@ -146,14 +101,13 @@ impl Heap {
         self.threshold += 100; // Offset by 100 so it never reaches 0
     }
 
-    fn mark(&mut self) {
+    fn mark(&mut self, roots: &[&dyn Trace]) {
         for object in &self.objects {
             object.unmark();
         }
 
-        self.objects
+        roots
             .iter()
-            .filter(|o| o.header.roots.load(Ordering::Relaxed) > 0)
             .for_each(|o| o.trace());
     }
 
@@ -161,7 +115,7 @@ impl Heap {
         self.objects.retain(|o| o.header.marked.get());
     }
 
-    fn bytes_marked(&self) -> usize {
+    fn bytes_unmarked(&self) -> usize {
         let mut bytes = 0;
         for object in &self.objects {
             if !object.header.marked.get() {
@@ -175,7 +129,7 @@ impl Heap {
 impl<T: 'static + Trace + ?Sized> Gc<T> {
     #[inline]
     fn allocation(&self) -> &Allocation<T> {
-        unsafe { &self.ptr.as_ref() }
+        unsafe { self.ptr.as_ref() }
     }
 
     #[inline]
@@ -190,6 +144,7 @@ impl<T: 'static + Trace + ?Sized> Clone for Gc<T> {
         *self
     }
 }
+
 impl<T: 'static + Trace + ?Sized> Deref for Gc<T> {
     type Target = T;
 
@@ -198,6 +153,7 @@ impl<T: 'static + Trace + ?Sized> Deref for Gc<T> {
         &self.allocation().data
     }
 }
+
 impl<T: fmt::Debug + 'static + Trace + ?Sized> fmt::Debug for Gc<T> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let inner: &T = &*self;
@@ -214,94 +170,6 @@ impl<T: 'static + Trace + ?Sized> Trace for Gc<T> {
     #[inline]
     fn trace(&self) {
         self.allocation().trace();
-    }
-}
-
-impl<T: 'static + Trace + ?Sized> Trace for Root<T> {
-    #[inline]
-    fn trace(&self) {
-        self.allocation().trace();
-    }
-}
-impl<T: 'static + Trace + ?Sized> Clone for Root<T> {
-    #[inline]
-    fn clone(&self) -> Root<T> {
-        self.allocation().root();
-        Root { ptr: self.ptr }
-    }
-}
-impl<T: 'static + Trace + ?Sized> Root<T> {
-    #[inline]
-    fn allocation(&self) -> &Allocation<T> {
-        unsafe { &self.ptr.as_ref() }
-    }
-
-    #[inline]
-    pub fn as_gc(&self) -> Gc<T> {
-        Gc { ptr: self.ptr }
-    }
-}
-impl<T: 'static + Trace + ?Sized> Drop for Root<T> {
-    #[inline]
-    fn drop(&mut self) {
-        self.allocation().unroot();
-    }
-}
-impl<T: 'static + Trace + ?Sized> Deref for Root<T> {
-    type Target = T;
-
-    #[inline]
-    fn deref(&self) -> &T {
-        &self.allocation().data
-    }
-}
-impl<T: fmt::Debug + 'static + Trace + ?Sized> fmt::Debug for Root<T> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let inner: &T = &*self;
-        write!(f, "Root({:?})", inner)
-    }
-}
-
-impl<T: 'static + Trace + ?Sized> Trace for UniqueRoot<T> {
-    #[inline]
-    fn trace(&self) {
-        self.allocation().trace();
-    }
-}
-impl<T: 'static + Trace + ?Sized> UniqueRoot<T> {
-    #[inline]
-    fn allocation_mut(&mut self) -> &mut Allocation<T> {
-        unsafe { self.ptr.as_mut() }
-    }
-
-    #[inline]
-    fn allocation(&self) -> &Allocation<T> {
-        unsafe { &self.ptr.as_ref() }
-    }
-}
-impl<T: 'static + Trace + ?Sized> Drop for UniqueRoot<T> {
-    fn drop(&mut self) {
-        self.allocation().unroot();
-    }
-}
-impl<T: 'static + Trace + ?Sized> Deref for UniqueRoot<T> {
-    type Target = T;
-
-    #[inline]
-    fn deref(&self) -> &T {
-        &self.allocation().data
-    }
-}
-impl<T: 'static + Trace + ?Sized> DerefMut for UniqueRoot<T> {
-    #[inline]
-    fn deref_mut(&mut self) -> &mut T {
-        &mut self.allocation_mut().data
-    }
-}
-impl<T: fmt::Debug + 'static + Trace + ?Sized> fmt::Debug for UniqueRoot<T> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let inner: &T = &*self;
-        write!(f, "UniqueRoot({:?})", inner)
     }
 }
 
