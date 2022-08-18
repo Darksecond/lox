@@ -1,31 +1,28 @@
-use std::{io::Write, collections::HashMap};
+use std::collections::HashMap;
 use lox_bytecode::bytecode::Module;
-//use crate::bettervm::Value;
 
 use crate::bettergc::{Heap, Gc, Trace};
 use super::{interner::{Interner, Symbol}, memory::{Import, Closure, Function}};
 
-//TODO Drop W because it's not 'static
-pub struct VmContext<W> where W: Write {
-    pub stdout: W,
-    //pub print: fn(&Value),
+pub struct VmContext {
+    pub print: for<'r> fn(&'r str),
     interner: Interner,
     imports: HashMap<String, Gc<Import>>,
 
     heap: Heap,
 }
 
-impl<W: Write> Trace for VmContext<W> {
+impl Trace for VmContext {
     fn trace(&self) {
         self.imports.trace();
     }
 }
 
-impl<W: Write> VmContext<W> {
-    pub fn new(stdout: W) -> Self {
+impl VmContext {
+    pub fn new(print: for<'r> fn(&'r str)) -> Self {
         let heap = Heap::new();
         Self {
-            stdout,
+            print,
             interner: Interner::new(),
             imports: HashMap::new(),
             heap,

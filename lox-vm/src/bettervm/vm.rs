@@ -6,7 +6,6 @@ use super::memory::*;
 use super::stack::Stack;
 use crate::bettergc::{Gc, Trace};
 use std::cell::Cell;
-use std::io::Write;
 
 #[derive(PartialEq)]
 pub enum InterpretResult {
@@ -119,7 +118,7 @@ impl Fiber {
         self.current_frame().closure.function.import
     }
 
-    pub fn set_native_fn<W: Write>(&mut self, identifier: &str, code: fn(&[Value]) -> Value, context: &mut VmContext<W>) {
+    pub fn set_native_fn(&mut self, identifier: &str, code: fn(&[Value]) -> Value, context: &mut VmContext) {
         let native_function = NativeFunction {
             name: identifier.to_string(),
             code,
@@ -131,7 +130,7 @@ impl Fiber {
     }
 
     #[inline]
-    pub fn interpret_next<W: Write>(&mut self, context: &mut VmContext<W>) -> Result<InterpretResult, VmError> {
+    pub fn interpret_next(&mut self, context: &mut VmContext) -> Result<InterpretResult, VmError> {
         let instr = self.next_u8();
 
         match instr {
@@ -279,7 +278,7 @@ impl Fiber {
         }
     }
 
-    fn op_class<W: Write>(&mut self, index: usize, context: &mut VmContext<W>) {
+    fn op_class(&mut self, index: usize, context: &mut VmContext) {
         let current_import = self.current_import();
         let class = current_import.class(index);
         let class = context.manage(Class::new(class.name.clone()));
@@ -335,13 +334,13 @@ impl Fiber {
         self.stack.pop();
     }
 
-    fn op_call<W: Write>(&mut self, arity: usize, context: &mut VmContext<W>) -> Result<(), VmError> {
+    fn op_call(&mut self, arity: usize, context: &mut VmContext) -> Result<(), VmError> {
         let callee = *self.stack.peek_n(arity);
         self.call(arity, callee, context)?;
         Ok(())
     }
 
-    fn op_constant<W: Write>(&mut self, index: usize, context: &mut VmContext<W>) {
+    fn op_constant(&mut self, index: usize, context: &mut VmContext) {
         use crate::bytecode::Constant;
         let current_import = self.current_import();
         match current_import.constant(index) {
@@ -409,7 +408,7 @@ impl Fiber {
         Ok(())
     }
 
-    fn op_add<W: Write>(&mut self, context: &mut VmContext<W>) -> Result<(), VmError> {
+    fn op_add(&mut self, context: &mut VmContext) -> Result<(), VmError> {
         match (self.stack.pop(), self.stack.pop()) {
             (Value::Number(b), Value::Number(a)) => self.stack.push(Value::Number(a + b)),
             (Value::String(b), Value::String(a)) => self.push_string(format!("{}{}", a, b), context),
@@ -436,8 +435,9 @@ impl Fiber {
         self.stack.pop();
     }
 
-    fn op_print<W: Write>(&mut self, context: &mut VmContext<W>) {
-        writeln!(context.stdout, "{}", self.stack.pop()).expect("Could not write to stdout");
+    //TODO consider redesigning
+    fn op_print(&mut self, context: &mut VmContext) {
+        (context.print)(&format!("{}", self.stack.pop()));
     }
 
     fn op_get_local(&mut self, index: usize) {
@@ -522,7 +522,7 @@ impl Fiber {
         Ok(())
     }
 
-    fn op_get_property<W: Write>(&mut self, index: usize, context: &mut VmContext<W>) -> Result<(), VmError> {
+    fn op_get_property(&mut self, index: usize, context: &mut VmContext) -> Result<(), VmError> {
         let current_import = self.current_import();
         let property = current_import.symbol(index);
         if let Value::Instance(instance) = self.stack.pop() {
@@ -543,7 +543,7 @@ impl Fiber {
         Ok(())
     }
 
-    fn op_closure<W: Write>(&mut self, index: usize, context: &mut VmContext<W>) {
+    fn op_closure(&mut self, index: usize, context: &mut VmContext) {
         let current_import = self.current_import();
         let closure = current_import.closure(index);
         let base = self.current_frame().base_counter;
@@ -578,7 +578,7 @@ impl Fiber {
         self.stack.push(Value::Closure(closure_root));
     }
 
-    fn op_invoke<W: Write>(&mut self, index: usize, arity: usize, context: &mut VmContext<W>) -> Result<(), VmError> {
+    fn op_invoke(&mut self, index: usize, arity: usize, context: &mut VmContext) -> Result<(), VmError> {
         let current_import = self.current_import();
         let property = current_import.symbol(index);
         if let Value::Instance(instance) = *self.stack.peek_n(arity) {
@@ -644,7 +644,7 @@ impl Fiber {
     }
 
     //TODO Reduce duplicate code paths
-    fn call<W: Write>(&mut self, arity: usize, callee: Value, outer: &mut VmContext<W>) -> Result<(), VmError> {
+    fn call(&mut self, arity: usize, callee: Value, outer: &mut VmContext) -> Result<(), VmError> {
         match callee {
             Value::Closure(callee) => {
                 if callee.function.arity != arity {
@@ -699,7 +699,7 @@ impl Fiber {
         }
     }
 
-    fn push_string<W: Write>(&mut self, string: impl Into<String>, outer: &mut VmContext<W>) {
+    fn push_string(&mut self, string: impl Into<String>, outer: &mut VmContext) {
         let root = outer.manage(string.into());
         self.stack.push(Value::String(root));
     }

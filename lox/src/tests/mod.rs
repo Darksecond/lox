@@ -1,5 +1,3 @@
-use std::io::Cursor;
-
 use regex::Regex;
 
 fn parse_expects(source: &str, regex: Regex, field: usize) -> Vec<String> {
@@ -21,6 +19,11 @@ enum TestResult {
     RuntimeError,
 }
 
+use std::sync::Mutex;
+thread_local! {
+    static DATA: Mutex<Vec<String>> = Mutex::new(Vec::new());
+}
+
 //TODO Handle errors
 fn execute(source: &str) -> (Vec<String>, TestResult) {
     let module = match lox_compiler::compile(source) {
@@ -28,9 +31,13 @@ fn execute(source: &str) -> (Vec<String>, TestResult) {
         Err(_) => return (vec![], TestResult::CompileError),
     };
 
-    let mut output = vec![];
-    let cursor = Cursor::new(&mut output);
-    let mut vm = lox_vm::bettervm::Vm::with_stdout(module, cursor);
+    fn print(value: &str) {
+        DATA.with(|data| {
+            data.lock().unwrap().push(value.into());
+        });
+    }
+
+    let mut vm = lox_vm::bettervm::Vm::with_stdout(module, print);
     lox_vm::bettervm::set_stdlib(&mut vm);
     let result = match vm.interpret() {
         Ok(_) => TestResult::Ok,
@@ -40,7 +47,14 @@ fn execute(source: &str) -> (Vec<String>, TestResult) {
         },
     };
 
-    let output = String::from_utf8(output).unwrap();
+    let output = {
+        DATA.with(|data| {
+            let mut guard = data.lock().unwrap();
+            std::mem::take(&mut *guard)
+        })
+    };
+
+    let output = output.join("\n");
 
     (output.lines().map(|l| l.to_owned()).collect(), result)
 }

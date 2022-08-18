@@ -4,19 +4,18 @@ mod interner;
 mod context;
 mod stack;
 
-use std::io::{Write, stdout};
 use crate::bytecode::Module;
 pub use vm::VmError;
 use self::{vm::{Fiber, InterpretResult}, context::VmContext, memory::Value};
 
-pub struct Vm<W> where W: Write {
+pub struct Vm {
     pub fiber: Fiber, //TODO Replace with Root<RefCell<Fiber>>
-    pub context: VmContext<W>, //TODO Replace with Root<VmContext<W>>
+    pub context: VmContext,
 }
 
-impl<W> Vm<W> where W: Write {
-    pub fn with_stdout(module: Module, stdout: W) -> Self {
-        let mut context = VmContext::new(stdout);
+impl Vm {
+    pub fn with_stdout(module: Module, print: for<'r> fn(&'r str)) -> Self {
+        let mut context = VmContext::new(print);
         let closure = context.prepare_interpret(module);
         let vm = Fiber::with_closure(closure);
 
@@ -43,10 +42,7 @@ impl<W> Vm<W> where W: Write {
 
 /// Add the lox standard library to a Vm instance.
 /// Right now the stdlib consists of 'clock'.
-pub fn set_stdlib<W>(outer: &mut Vm<W>)
-where
-    W: Write,
-{
+pub fn set_stdlib(outer: &mut Vm) {
     outer.set_native_fn("clock", |_args| {
         use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -59,8 +55,12 @@ where
 }
 
 pub fn execute(module: Module) -> Result<(), VmError> {
-    let mut vm = Vm::with_stdout(module, stdout());
+    let mut vm = Vm::with_stdout(module, print_stdout);
     set_stdlib(&mut vm);
 
     vm.interpret()
+}
+
+pub fn print_stdout(value: &str) {
+    println!("{}", value);
 }
