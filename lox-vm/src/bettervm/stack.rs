@@ -18,21 +18,18 @@ impl Stack {
         }
     }
 
-    #[inline]
     pub fn len(&self) -> usize {
         unsafe {
             self.top.offset_from(self.bottom) as usize
         }
     }
 
-    #[inline]
     pub fn truncate(&mut self, top: usize) {
         unsafe {
             self.top = self.bottom.add(top);
         }
     }
 
-    #[inline]
     pub fn push(&mut self, value: Value) {
         unsafe {
             ptr::write(self.top, value);
@@ -40,15 +37,13 @@ impl Stack {
         }
     }
 
-    #[inline]
     pub fn pop(&mut self) -> Value {
         unsafe {
             self.top = self.top.sub(1);
-            ptr::read(self.top as _)
+            ptr::read(self.top)
         }
     }
 
-    #[inline]
     pub fn rset(&mut self, n: usize, value: Value) {
         unsafe {
             let ptr = self.top.sub(n+1);
@@ -56,7 +51,6 @@ impl Stack {
         }
     }
 
-    #[inline]
     pub fn set(&mut self, index: usize, value: Value) {
         unsafe {
             let ptr = self.bottom.add(index);
@@ -64,17 +58,23 @@ impl Stack {
         }
     }
 
-    #[inline]
     pub fn get(&self, index: usize) -> &Value {
         unsafe {
             &*self.bottom.add(index)
         }
     }
 
-    #[inline]
     pub fn peek_n(&self, n: usize) -> &Value {
         unsafe {
             &*self.top.sub(n+1)
+        }
+    }
+
+    pub fn pop_n(&mut self, n: usize) -> Vec<Value> {
+        unsafe {
+            self.top = self.top.sub(n);
+            let slice = std::ptr::slice_from_raw_parts(self.top, n);
+            (*slice).into()
         }
     }
 }

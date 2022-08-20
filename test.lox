@@ -19,7 +19,7 @@ var zoo = Zoo();
 var sum = 0;
 var start = clock();
 var batch = 0;
-while (clock() - start < 2) {
+while (clock() - start < 5) {
   for (var i = 0; i < 10000; i = i + 1) {
     sum = sum + zoo.ant()
               + zoo.banana()

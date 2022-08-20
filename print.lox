@@ -1,2 +1,13 @@
 print "Hello, World!";
-printx("Hello", ", World!");
+
+
+fun test() {
+  var x = 123;
+  fun test2() {
+    print x;
+  }
+
+  test2();
+}
+
+test();

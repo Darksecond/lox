@@ -13,7 +13,19 @@ pub enum Upvalue {
 }
 
 impl Upvalue {
-    #[inline]
+    pub const fn is_open_with_range(&self, index: usize) -> Option<usize> {
+        match self {
+            Self::Open(i) => {
+                if *i >= index {
+                    Some(*i)
+                } else {
+                    None
+                }
+            }
+            Self::Closed(_) => None,
+        }
+    }
+
     pub const fn is_open_with_index(&self, index: usize) -> bool {
         match self {
             Self::Open(i) => {
@@ -27,7 +39,6 @@ impl Upvalue {
         }
     }
 
-    #[inline]
     pub const fn is_open(&self) -> bool {
         match self {
             Self::Open(_) => true,
@@ -60,12 +71,10 @@ impl Instance {
         }
     }
 
-    #[inline]
-    pub fn field(&self, symbol: &Symbol) -> Option<&Value> {
-        self.fields().get(symbol)
+    pub fn field(&self, symbol: &Symbol) -> Option<Value> {
+        self.fields().get(symbol).cloned()
     }
 
-    #[inline]
     pub fn set_field(&self, symbol: Symbol, value: Value) {
         self.fields_mut().insert(symbol, value);
     }
@@ -105,9 +114,8 @@ impl Class {
         }
     }
 
-    #[inline]
-    pub fn method(&self, symbol: &Symbol) -> Option<&Gc<Closure>> {
-        self.methods().get(symbol)
+    pub fn method(&self, symbol: Symbol) -> Option<Gc<Closure>> {
+        self.methods().get(&symbol).cloned()
     }
 
     pub fn set_method(&self, symbol: Symbol, closure: Gc<Closure>) {
@@ -244,43 +252,38 @@ impl Import {
         }
     }
 
-    #[inline]
     pub fn symbol(&self, index: ConstantIndex) -> Symbol {
-        unsafe { *self.symbols.get_unchecked(index) }
+        unsafe {
+            *self.symbols.get_unchecked(index)
+        }
     }
 
-    #[inline]
     pub fn chunk(&self, index: usize) -> &Chunk {
         self.module.chunk(index)
     }
 
-    #[inline]
     pub fn constant(&self, index: ConstantIndex) -> &Constant {
         self.module.constant(index)
     }
 
-    #[inline]
+    //TODO rename to make it clear this is not an alive closure.
     pub fn class(&self, index: ClassIndex) -> &bytecode::Class {
         self.module.class(index)
     }
 
     //TODO rename to make it clear this is not an alive closure.
-    #[inline]
     pub fn closure(&self, index: ClosureIndex) -> &bytecode::Closure {
         self.module.closure(index)
     }
 
-    #[inline]
-    pub fn set_global(&self, key: Symbol, value: Value) -> () {
+    pub fn set_global(&self, key: Symbol, value: Value) {
         self.globals_mut().insert(key, value);
     }
 
-    #[inline]
     pub fn has_global(&self, key: Symbol) -> bool {
         self.globals().contains_key(&key)
     }
 
-    #[inline]
     pub fn global(&self, key: Symbol) -> Option<Value> {
         self.globals().get(&key).cloned()
     }
@@ -319,16 +322,15 @@ impl Trace for Value {
 }
 
 impl Value {
-    #[inline]
-    pub fn is_falsey(&self) -> bool {
+    pub const fn is_falsey(&self) -> bool {
         match self {
-            Value::Boolean(boolean) => !boolean,
+            Value::Boolean(true) => false,
+            Value::Boolean(false) => true,
             Value::Nil => true,
             _ => false,
         }
     }
 
-    #[inline]
     pub const fn is_same_type(a: &Value, b: &Value) -> bool {
         match (b, a) {
             (Value::Number(_), Value::Number(_)) => true,

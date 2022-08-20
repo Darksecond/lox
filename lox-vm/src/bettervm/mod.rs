@@ -1,42 +1,34 @@
 mod memory;
-pub mod vm;
+mod vm;
 mod interner;
-mod context;
 mod stack;
+mod ops;
+mod fiber;
 
 use crate::bytecode::Module;
 pub use vm::VmError;
-use self::{vm::{Fiber, InterpretResult}, context::VmContext, memory::Value};
+use self::{vm::Fiber, memory::Value};
 
 pub struct Vm {
     pub fiber: Fiber, //TODO Replace with Root<RefCell<Fiber>>
-    pub context: VmContext,
 }
 
 impl Vm {
     pub fn with_stdout(module: Module, print: for<'r> fn(&'r str)) -> Self {
-        let mut context = VmContext::new(print);
-        let closure = context.prepare_interpret(module);
-        let vm = Fiber::with_closure(closure);
+        let mut vm = Fiber::new(print);
+        vm.with_module(module);
 
         Self {
-            context,
             fiber: vm,
         }
     }
 
     pub fn interpret(&mut self) -> Result<(), VmError> {
-        loop {
-            match self.fiber.interpret_next(&mut self.context)? {
-                InterpretResult::Done => return Ok(()),
-                InterpretResult::More => (),
-            }
-            self.context.collect(&self.fiber);
-        }
+        self.fiber.interpret()
     }
 
     pub fn set_native_fn(&mut self, identifier: &str, code: fn(&[Value]) -> Value) {
-        self.fiber.set_native_fn(identifier, code, &mut self.context)
+        self.fiber.set_native_fn(identifier, code)
     }
 }
 

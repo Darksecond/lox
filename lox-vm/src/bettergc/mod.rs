@@ -86,12 +86,17 @@ impl Heap {
 
     #[inline]
     pub fn collect(&mut self, roots: &[&dyn Trace]) {
-        if self.bytes_allocated > self.threshold {
+        if self.should_collect() {
             self.force_collect(roots);
         }
     }
 
-    fn force_collect(&mut self, roots: &[&dyn Trace]) {
+    #[inline]
+    pub fn should_collect(&self) -> bool {
+        self.bytes_allocated > self.threshold
+    }
+
+    pub fn force_collect(&mut self, roots: &[&dyn Trace]) {
         self.mark(roots);
         let bytes = self.bytes_unmarked();
         self.sweep();

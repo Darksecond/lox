@@ -94,7 +94,9 @@ impl Module {
 
     #[inline]
     pub fn chunk(&self, index: ChunkIndex) -> &Chunk {
-        &self.chunks[index]
+        unsafe {
+            &*self.chunks.get_unchecked(index)
+        }
     }
 
     pub fn chunk_mut(&mut self, index: ChunkIndex) -> &mut Chunk {
@@ -212,6 +214,10 @@ impl Chunk {
 
     pub fn as_slice(&self) -> &[u8] {
         &self.instructions
+    }
+
+    pub fn as_ptr(&self) -> *const u8 {
+        self.instructions.as_ptr()
     }
 
     #[inline(always)]
