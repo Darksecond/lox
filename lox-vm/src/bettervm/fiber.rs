@@ -100,7 +100,7 @@ impl Thread {
     }
 
     pub fn end_frame(&mut self) -> Option<Signal> {
-        if let Some(_) = self.frames.pop() {
+        if self.frames.pop().is_some() {
             unsafe {
                 self.current_frame = self.current_frame.offset(-1);
             }

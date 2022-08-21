@@ -7,7 +7,7 @@ use crate::bettervm::fiber::Thread;
 use std::collections::HashMap;
 use std::cell::RefCell;
 
-#[derive(PartialEq, Copy, Clone)]
+#[derive(PartialEq, Eq, Copy, Clone)]
 pub enum Signal {
     Done,
     More,
@@ -15,7 +15,7 @@ pub enum Signal {
 }
 
 //TODO thiserror
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum VmError {
     StackEmpty,
     FrameEmpty,
@@ -93,11 +93,11 @@ impl Fiber {
             name: "top".into(),
             import,
         };
-        let closure = self.manage(Closure {
+
+        self.manage(Closure {
             upvalues: vec![],
             function,
-        });
-        closure
+        })
     }
 
 

@@ -29,11 +29,7 @@ impl Upvalue {
     pub const fn is_open_with_index(&self, index: usize) -> bool {
         match self {
             Self::Open(i) => {
-                if *i == index {
-                    true
-                } else {
-                    false
-                }
+                *i == index
             }
             Self::Closed(_) => false,
         }
@@ -76,18 +72,13 @@ impl Instance {
     }
 
     pub fn set_field(&self, symbol: Symbol, value: Value) {
-        self.fields_mut().insert(symbol, value);
+        let fields = unsafe { &mut *self.fields.get() };
+        fields.insert(symbol, value);
     }
 
     fn fields(&self) -> &FxHashMap<Symbol, Value> {
         unsafe {
             &*self.fields.get()
-        }
-    }
-
-    fn fields_mut(&self) -> &mut FxHashMap<Symbol, Value> {
-        unsafe {
-            &mut *self.fields.get()
         }
     }
 }
@@ -119,18 +110,13 @@ impl Class {
     }
 
     pub fn set_method(&self, symbol: Symbol, closure: Gc<Closure>) {
-        self.methods_mut().insert(symbol, closure);
+        let methods = unsafe { &mut *self.methods.get() };
+        methods.insert(symbol, closure);
     }
 
     fn methods(&self) -> &FxHashMap<Symbol, Gc<Closure>> {
         unsafe {
             &*self.methods.get()
-        }
-    }
-
-    fn methods_mut(&self) -> &mut FxHashMap<Symbol, Gc<Closure>> {
-        unsafe {
-            &mut *self.methods.get()
         }
     }
 }
@@ -246,12 +232,6 @@ impl Import {
         }
     }
 
-    fn globals_mut(&self) -> &mut FxHashMap<Symbol, Value> {
-        unsafe {
-            &mut *self.globals.get()
-        }
-    }
-
     pub fn symbol(&self, index: ConstantIndex) -> Symbol {
         unsafe {
             *self.symbols.get_unchecked(index)
@@ -277,7 +257,8 @@ impl Import {
     }
 
     pub fn set_global(&self, key: Symbol, value: Value) {
-        self.globals_mut().insert(key, value);
+        let globals = unsafe { &mut *self.globals.get() };
+        globals.insert(key, value);
     }
 
     pub fn has_global(&self, key: Symbol) -> bool {
@@ -332,19 +313,18 @@ impl Value {
     }
 
     pub const fn is_same_type(a: &Value, b: &Value) -> bool {
-        match (b, a) {
-            (Value::Number(_), Value::Number(_)) => true,
-            (Value::Boolean(_), Value::Boolean(_)) => true,
-            (Value::String(_), Value::String(_)) => true,
-            (Value::NativeFunction(_), Value::NativeFunction(_)) => true,
-            (Value::Closure(_), Value::Closure(_)) => true,
-            (Value::BoundMethod(_), Value::BoundMethod(_)) => true,
-            (Value::Nil, Value::Nil) => true,
-            (Value::Class(_), Value::Class(_)) => true,
-            (Value::Instance(_), Value::Instance(_)) => true,
-            (Value::Import(_), Value::Import(_)) => true,
-            _ => false,
-        }
+        matches!((b,a), 
+                 (Value::Number(_), Value::Number(_))
+                 | (Value::Boolean(_), Value::Boolean(_))
+                 | (Value::String(_), Value::String(_))
+                 | (Value::NativeFunction(_), Value::NativeFunction(_))
+                 | (Value::Closure(_), Value::Closure(_))
+                 | (Value::BoundMethod(_), Value::BoundMethod(_))
+                 | (Value::Nil, Value::Nil)
+                 | (Value::Class(_), Value::Class(_))
+                 | (Value::Instance(_), Value::Instance(_))
+                 | (Value::Import(_), Value::Import(_))
+                )
     }
 }
 

@@ -10,25 +10,25 @@ pub type ClosureIndex = usize;
 pub type ClassIndex = usize;
 pub type IdentifierIndex = usize;
 
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Class {
     pub name: String,
 }
 
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Closure {
     pub function: Function,
     pub upvalues: Vec<Upvalue>,
 }
 
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Upvalue {
     Local(StackIndex),
     Upvalue(UpvalueIndex),
 }
 
 //TODO Merge this into Closure, we'll wait until methods are implemented though
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Function {
     pub name: String,
     pub chunk_index: ChunkIndex,
@@ -95,7 +95,7 @@ impl Module {
     #[inline]
     pub fn chunk(&self, index: ChunkIndex) -> &Chunk {
         unsafe {
-            &*self.chunks.get_unchecked(index)
+            self.chunks.get_unchecked(index)
         }
     }
 

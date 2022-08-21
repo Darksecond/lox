@@ -161,13 +161,13 @@ impl<T: 'static + Trace + ?Sized> Deref for Gc<T> {
 
 impl<T: fmt::Debug + 'static + Trace + ?Sized> fmt::Debug for Gc<T> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let inner: &T = &*self;
+        let inner: &T = &**self;
         write!(f, "Gc({:?})", inner)
     }
 }
 impl<T: fmt::Display + 'static + Trace + ?Sized> fmt::Display for Gc<T> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let inner: &T = &*self;
+        let inner: &T = &**self;
         inner.fmt(f)
     }
 }
