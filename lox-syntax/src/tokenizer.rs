@@ -130,6 +130,8 @@ impl<'a> Lexer<'a> {
             ')' => Some(Token::RightParen),
             '{' => Some(Token::LeftBrace),
             '}' => Some(Token::RightBrace),
+            '[' => Some(Token::LeftBracket),
+            ']' => Some(Token::RightBracket),
             ',' => Some(Token::Comma),
             '-' => Some(Token::Minus),
             '+' => Some(Token::Plus),
