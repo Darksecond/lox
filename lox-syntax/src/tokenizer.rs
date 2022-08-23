@@ -305,5 +305,7 @@ mod tests {
             vec![Token::Identifier("orchid".to_string())]
         );
         assert_eq!(tokenize("or"), vec![Token::Or]);
+        assert_eq!(tokenize("["), vec![Token::LeftBracket]);
+        assert_eq!(tokenize("]"), vec![Token::RightBracket]);
     }
 }

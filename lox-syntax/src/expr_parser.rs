@@ -17,6 +17,7 @@ enum Precedence {
     Factor,     // * /
     Unary,      // ! -
     Call,       // ()
+    List,       // []
     Primary,
 }
 
@@ -36,6 +37,7 @@ impl<'a> From<TokenKind> for Precedence {
             TokenKind::Bang => Precedence::Unary, // Minus is already specified, but I think this is only for infix ops
             TokenKind::LeftParen => Precedence::Call,
             TokenKind::Dot => Precedence::Call,
+            TokenKind::LeftBracket => Precedence::List,
             _ => Precedence::None,
         }
     }
@@ -68,6 +70,7 @@ fn parse_infix(it: &mut Parser, left: WithSpan<Expr>) -> Result<WithSpan<Expr>, 
         TokenKind::Or | TokenKind::And => parse_logical(it, left),
         TokenKind::Equal => parse_assign(it, left),
         TokenKind::LeftParen => parse_call(it, left),
+        TokenKind::LeftBracket => parse_list_get(it, left),
         TokenKind::Dot => parse_get(it, left),
         _ => {
             it.error(&format!("Unexpected {}", it.peek_token().value), it.peek_token().span);
@@ -88,11 +91,21 @@ fn parse_prefix(it: &mut Parser) -> Result<WithSpan<Expr>, ()> {
         | TokenKind::String => parse_primary(it),
         TokenKind::Bang | TokenKind::Minus => parse_unary(it),
         TokenKind::LeftParen => parse_grouping(it),
+        TokenKind::LeftBracket => parse_list(it),
         _ => {
             it.error(&format!("Unexpected {}", it.peek_token().value), it.peek_token().span);
             Err(())
         },
     }
+}
+
+fn parse_list_get(it: &mut Parser, left: WithSpan<Expr>) -> Result<WithSpan<Expr>, ()> {
+    it.expect(TokenKind::LeftBracket)?;
+    let right = parse_expr(it, Precedence::None)?;
+    let end = it.expect(TokenKind::RightBracket)?;
+    let span = Span::union(&left, end);
+
+    Ok(WithSpan::new(Expr::ListGet(Box::new(left), Box::new(right)), span))
 }
 
 fn parse_get(it: &mut Parser, left: WithSpan<Expr>) -> Result<WithSpan<Expr>, ()> {
@@ -137,6 +150,7 @@ fn parse_assign(it: &mut Parser, left: WithSpan<Expr>) -> Result<WithSpan<Expr>,
     match &left.value {
         Expr::Variable(i) => Ok(WithSpan::new(Expr::Assign(i.clone(), Box::new(right)), span)),
         Expr::Get(l, i) => Ok(WithSpan::new(Expr::Set(l.clone(), i.clone(), Box::new(right)), span)),
+        Expr::ListGet(l, i) => Ok(WithSpan::new(Expr::ListSet(l.clone(), i.clone(), Box::new(right)), span)),
         _ => {
             it.error(&format!("Invalid left value"), left.span);
             Err(())
@@ -150,6 +164,27 @@ fn parse_logical(it: &mut Parser, left: WithSpan<Expr>) -> Result<WithSpan<Expr>
     let right = parse_expr(it, precedence)?;
     let span = Span::union(&left, &right);
     Ok(WithSpan::new(Expr::Logical(Box::new(left), operator, Box::new(right)), span))
+}
+
+fn parse_list_items(it: &mut Parser) -> Result<Vec<WithSpan<Expr>>, ()> {
+    let mut args = Vec::new();
+    if !it.check(TokenKind::RightBracket) {
+        args.push(parse_expr(it, Precedence::None)?);
+        while it.check(TokenKind::Comma) {
+            it.expect(TokenKind::Comma)?;
+            args.push(parse_expr(it, Precedence::None)?);
+        }
+    }
+    Ok(args)
+}
+
+fn parse_list(it: &mut Parser) -> Result<WithSpan<Expr>, ()> {
+    let left_bracket = it.expect(TokenKind::LeftBracket)?;
+    let items = parse_list_items(it)?;
+    let right_bracket = it.expect(TokenKind::RightBracket)?;
+
+    let span = Span::union(left_bracket, right_bracket);
+    Ok(WithSpan::new(Expr::List(items), span))
 }
 
 fn parse_grouping(it: &mut Parser) -> Result<WithSpan<Expr>, ()> {
@@ -634,5 +669,30 @@ mod tests {
             wsn(3., 4..5)
         );
         assert("a.b=3", expr);
+    }
+
+    #[test]
+    fn test_list() {
+        use help::assert;
+        use make::*;
+
+        let expr = ws(Expr::List(Vec::new()), 0..2);
+        assert("[]", expr);
+
+        let num = ws(n(1.0), 1..2);
+        let nil = ws(Expr::Nil, 4..7);
+        let expr = ws(Expr::List(vec![num, nil]), 0..8);
+        assert("[1, nil]", expr);
+
+        let left = ws(v("x", 0..1), 0..1);
+        let right = ws(n(0.0), 2..3);
+        let expr = ws(Expr::ListGet(Box::new(left), Box::new(right)), 0..4);
+        assert("x[0]", expr);
+
+        let left = ws(v("x", 0..1), 0..1);
+        let right = ws(n(0.0), 2..3);
+        let value = ws(n(1.0), 5..6);
+        let expr = ws(Expr::ListSet(Box::new(left), Box::new(right), Box::new(value)), 0..6);
+        assert("x[0]=1", expr);
     }
 }

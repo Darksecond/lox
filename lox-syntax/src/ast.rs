@@ -45,6 +45,9 @@ pub enum Expr {
     Call(Box<WithSpan<Expr>>, Vec<WithSpan<Expr>>),
     Get(Box<WithSpan<Expr>>, WithSpan<Identifier>),
     Set(Box<WithSpan<Expr>>, WithSpan<Identifier>, Box<WithSpan<Expr>>),
+    List(Vec<WithSpan<Expr>>),
+    ListGet(Box<WithSpan<Expr>>, Box<WithSpan<Expr>>),
+    ListSet(Box<WithSpan<Expr>>, Box<WithSpan<Expr>>, Box<WithSpan<Expr>>),
 }
 
 #[derive(Debug, PartialEq, Clone)]
