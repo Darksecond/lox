@@ -94,6 +94,7 @@ impl Trace for Instance {
 #[derive(Debug)]
 pub struct Class {
     pub name: String,
+    //TODO Replace Gc<Closure> with Value so we can use native code as methods.
     methods: UnsafeCell<FxHashMap<Symbol, Gc<Closure>>>,
 }
 
@@ -202,8 +203,8 @@ impl Trace for BoundMethod {
 #[derive(Debug)]
 pub struct Import {
     module: Module,
-    pub globals: UnsafeCell<FxHashMap<Symbol, Value>>,
-    pub symbols: Vec<Symbol>,
+    globals: UnsafeCell<FxHashMap<Symbol, Value>>,
+    symbols: Vec<Symbol>,
 }
 
 impl Trace for Import {

@@ -4,6 +4,59 @@ use crate::bettergc::Gc;
 use std::cell::Cell;
 
 impl Runtime {
+    pub fn interpret(&mut self) -> Result<(), VmError> {
+        use lox_bytecode::opcode;
+
+        loop {
+            let result = match self.next_u8() {
+                opcode::CONSTANT      => self.op_constant(),
+                opcode::IMPORT        => self.op_import(),
+                opcode::IMPORT_GLOBAL => self.op_import_global(),
+                opcode::CLOSURE       => self.op_closure(),
+                opcode::CLASS         => self.op_class(),
+                opcode::METHOD        => self.op_method(),
+                opcode::SET_PROPERTY  => self.op_set_property(),
+                opcode::GET_PROPERTY  => self.op_get_property(),
+                opcode::PRINT         => self.op_print(),
+                opcode::NIL           => self.op_nil(),
+                opcode::RETURN        => self.op_return(),
+                opcode::ADD           => self.op_add(),
+                opcode::SUBTRACT      => self.op_subtract(),
+                opcode::MULTIPLY      => self.op_multiply(),
+                opcode::DIVIDE        => self.op_divide(),
+                opcode::POP           => self.op_pop(),
+                opcode::DEFINE_GLOBAL => self.op_define_global(),
+                opcode::GET_GLOBAL    => self.op_get_global(),
+                opcode::SET_GLOBAL    => self.op_set_global(),
+                opcode::GET_LOCAL     => self.op_get_local(),
+                opcode::SET_LOCAL     => self.op_set_local(),
+                opcode::TRUE          => self.op_bool(true),
+                opcode::FALSE         => self.op_bool(false),
+                opcode::JUMP_IF_FALSE => self.op_jump_if_false(),
+                opcode::JUMP          => self.op_jump(),
+                opcode::LESS          => self.op_less(),
+                opcode::GREATER       => self.op_greater(),
+                opcode::EQUAL         => self.op_equal(),
+                opcode::CALL          => self.op_call(),
+                opcode::NEGATE        => self.op_negate(),
+                opcode::NOT           => self.op_not(),
+                opcode::GET_UPVALUE   => self.op_get_upvalue(),
+                opcode::SET_UPVALUE   => self.op_set_upvalue(),
+                opcode::CLOSE_UPVALUE => self.op_close_upvalue(),
+                opcode::INVOKE        => self.op_invoke(),
+                _ => unreachable!(),
+            };
+
+            match result {
+                Signal::Done => return Ok(()),
+                Signal::More => (),
+                Signal::RuntimeError => {
+                    return Err(self.fiber.error.unwrap());
+                },
+            }
+        }
+    }
+
     pub fn op_import(&mut self) -> Signal {
         let _index: usize = self.next_u32() as _;
         self.fiber.runtime_error(VmError::Unimplemented)
@@ -221,7 +274,7 @@ impl Runtime {
     //TODO consider redesigning
     pub fn op_print(&mut self) -> Signal {
         let value = self.fiber.stack.pop();
-        self.print_fn(&format!("{}", value));
+        self.print(&format!("{}", value));
         Signal::More
     }
 
