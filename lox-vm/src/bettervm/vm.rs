@@ -3,7 +3,7 @@ use lox_bytecode::opcode;
 use super::memory::*;
 use super::interner::{Symbol, Interner};
 use crate::bettergc::{Gc, Trace, Heap};
-use crate::bettervm::fiber::Thread;
+use crate::bettervm::fiber::Fiber;
 use std::collections::HashMap;
 use std::cell::RefCell;
 
@@ -30,10 +30,10 @@ pub enum VmError {
     Unimplemented,
 }
 
-pub struct Fiber {
-    pub fiber: Thread,
+pub struct Runtime {
+    pub fiber: Fiber,
     init_symbol: Symbol,
-    pub print: for<'r> fn(&'r str),
+    print: for<'r> fn(&'r str),
     interner: Interner,
     imports: HashMap<String, Gc<Import>>,
     heap: RefCell<Heap>,
@@ -41,7 +41,7 @@ pub struct Fiber {
     ip: *const u8,
 }
 
-impl Trace for Fiber {
+impl Trace for Runtime {
     #[inline]
     fn trace(&self) {
         self.fiber.trace();
@@ -49,11 +49,11 @@ impl Trace for Fiber {
     }
 }
 
-impl Fiber {
+impl Runtime {
     pub fn new(print: for<'r> fn(&'r str)) -> Self {
         let mut interner = Interner::new();
         Self {
-            fiber: Thread::new(),
+            fiber: Fiber::new(),
             init_symbol: interner.intern("init"),
             interner,
             heap: RefCell::new(Heap::new()),
@@ -62,6 +62,10 @@ impl Fiber {
 
             ip: std::ptr::null(),
         }
+    }
+
+    pub fn print_fn(&self, value: &str) {
+        (self.print)(value);
     }
 
     pub fn with_module(&mut self, module: Module) {

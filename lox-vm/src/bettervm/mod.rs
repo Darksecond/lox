@@ -7,28 +7,29 @@ mod fiber;
 
 use crate::bytecode::Module;
 pub use vm::VmError;
-use self::{vm::Fiber, memory::Value};
+use self::{vm::Runtime, memory::Value};
 
+//TODO consider removing
 pub struct Vm {
-    pub fiber: Fiber, //TODO Replace with Root<RefCell<Fiber>>
+    pub runtime: Runtime, //TODO Replace with Root<RefCell<Fiber>>
 }
 
 impl Vm {
     pub fn with_stdout(module: Module, print: for<'r> fn(&'r str)) -> Self {
-        let mut vm = Fiber::new(print);
+        let mut vm = Runtime::new(print);
         vm.with_module(module);
 
         Self {
-            fiber: vm,
+            runtime: vm,
         }
     }
 
     pub fn interpret(&mut self) -> Result<(), VmError> {
-        self.fiber.interpret()
+        self.runtime.interpret()
     }
 
     pub fn set_native_fn(&mut self, identifier: &str, code: fn(&[Value]) -> Value) {
-        self.fiber.set_native_fn(identifier, code)
+        self.runtime.set_native_fn(identifier, code)
     }
 }
 

@@ -1,9 +1,9 @@
-use crate::bettervm::vm::{Fiber, Signal, VmError};
+use crate::bettervm::vm::{Runtime, Signal, VmError};
 use crate::bettervm::memory::*;
 use crate::bettergc::Gc;
 use std::cell::Cell;
 
-impl Fiber {
+impl Runtime {
     pub fn op_import(&mut self) -> Signal {
         let _index: usize = self.next_u32() as _;
         self.fiber.runtime_error(VmError::Unimplemented)
@@ -220,7 +220,8 @@ impl Fiber {
 
     //TODO consider redesigning
     pub fn op_print(&mut self) -> Signal {
-        (self.print)(&format!("{}", self.fiber.stack.pop()));
+        let value = self.fiber.stack.pop();
+        self.print_fn(&format!("{}", value));
         Signal::More
     }
 

@@ -54,7 +54,7 @@ impl CallFrame {
     }
 }
 
-pub struct Thread {
+pub struct Fiber {
     frames: Vec<CallFrame>,
     pub stack: Stack,
     upvalues: Vec<Gc<Cell<Upvalue>>>,
@@ -64,7 +64,7 @@ pub struct Thread {
     current_frame: *mut CallFrame,
 }
 
-impl Trace for Thread {
+impl Trace for Fiber {
     #[inline]
     fn trace(&self) {
         self.frames.trace();
@@ -73,7 +73,7 @@ impl Trace for Thread {
     }
 }
 
-impl Thread {
+impl Fiber {
     pub fn new() -> Self {
         Self {
             frames: Vec::with_capacity(2048),
