@@ -5,6 +5,7 @@ use std::ptr::NonNull;
 
 pub trait Trace {
     fn trace(&self);
+    fn size_hint(&self) -> usize { 0 }
 }
 
 impl fmt::Debug for dyn Trace {
@@ -14,21 +15,18 @@ impl fmt::Debug for dyn Trace {
 }
 
 #[derive(Debug)]
-struct Header {
-    marked: Cell<bool>,
-}
-
-#[derive(Debug)]
 struct Allocation<T: 'static + Trace + ?Sized> {
-    header: Header,
+    marked: Cell<bool>,
+    next: Cell<Option<NonNull<Allocation<dyn Trace>>>>,
+    size: Cell<usize>,
     data: T,
 }
 
 #[derive(Debug)]
 pub struct Heap {
-    objects: Vec<Box<Allocation<dyn Trace>>>,
-    bytes_allocated: usize,
-    threshold: usize,
+    next: Cell<Option<NonNull<Allocation<dyn Trace>>>>,
+    bytes_allocated: Cell<usize>,
+    threshold: Cell<usize>,
 }
 
 pub struct Gc<T: 'static + Trace + ?Sized> {
@@ -37,55 +35,63 @@ pub struct Gc<T: 'static + Trace + ?Sized> {
 
 impl<T: 'static + Trace + ?Sized> Allocation<T> {
     fn unmark(&self) {
-        self.header.marked.set(false);
+        self.marked.set(false);
     }
 }
 impl<T: 'static + Trace + ?Sized> Trace for Allocation<T> {
     fn trace(&self) {
-        if !self.header.marked.replace(true) {
+        if !self.marked.replace(true) {
             self.data.trace();
         }
     }
 }
 
-impl Default for Header {
-    fn default() -> Self {
-        Header {
-            marked: Cell::new(false),
-        }
-    }
-}
-
 impl Heap {
-    const THRESHOLD_ADJ: f32 = 1.4;
+    const THRESHOLD_ADJ: f32 = 2.0;
 
     pub fn new() -> Self {
         Heap {
-            objects: Vec::with_capacity(8192),
-            bytes_allocated: 0,
-            threshold: 100,
+            next: Cell::new(None),
+            bytes_allocated: Cell::new(0),
+            threshold: Cell::new(1024 * 1024),
         }
     }
 
-    fn allocate<T: 'static + Trace>(&mut self, data: T) -> NonNull<Allocation<T>> {
-        let mut alloc = Box::new(Allocation {
-            header: Header::default(),
+    fn allocate<T: 'static + Trace>(&self, data: T) -> NonNull<Allocation<T>> {
+        let size = std::mem::size_of::<T>() + data.size_hint();
+
+        let alloc = Box::new(Allocation {
+            marked: Cell::new(false),
+            next: Cell::new(self.next.get()),
+            size: Cell::new(size),
             data,
         });
-        let ptr = unsafe { NonNull::new_unchecked(&mut *alloc) };
-        self.objects.push(alloc);
-        self.bytes_allocated += std::mem::size_of::<T>();
+
+        let ptr = unsafe { NonNull::new_unchecked(Box::into_raw(alloc)) };
+
+        self.next.set(Some(ptr));
+        self.bytes_allocated.set(self.bytes_allocated.get() + size);
+
         ptr
     }
 
-    pub fn manage<T: 'static + Trace>(&mut self, data: T) -> Gc<T> {
+    pub fn adjust_size<T: 'static + Trace>(&self, object: Gc<T>) {
+        self.bytes_allocated.set(self.bytes_allocated.get() - object.allocation().size.get());
+
+        let size = std::mem::size_of::<T>() + object.size_hint();
+        object.allocation().size.set(size);
+
+        self.bytes_allocated.set(self.bytes_allocated.get() + size);
+    }
+
+    pub fn manage<T: 'static + Trace>(&self, data: T) -> Gc<T> {
         Gc {
             ptr: self.allocate(data),
         }
     }
 
     #[inline]
-    pub fn collect(&mut self, roots: &[&dyn Trace]) {
+    pub fn collect(&self, roots: &[&dyn Trace]) {
         if self.should_collect() {
             self.force_collect(roots);
         }
@@ -96,38 +102,55 @@ impl Heap {
         self.bytes_allocated > self.threshold
     }
 
-    pub fn force_collect(&mut self, roots: &[&dyn Trace]) {
+    #[inline(never)]
+    pub fn force_collect(&self, roots: &[&dyn Trace]) {
         self.mark(roots);
-        let bytes = self.bytes_unmarked();
         self.sweep();
 
-        self.bytes_allocated -= bytes;
-        self.threshold = (self.bytes_allocated as f32 * Self::THRESHOLD_ADJ) as usize;
-        self.threshold += 100; // Offset by 100 so it never reaches 0
+        self.threshold.set(((self.bytes_allocated.get() as f32 * Self::THRESHOLD_ADJ) as usize) + 100);
     }
 
-    fn mark(&mut self, roots: &[&dyn Trace]) {
-        for object in &self.objects {
-            object.unmark();
-        }
-
+    fn mark(&self, roots: &[&dyn Trace]) {
         roots
             .iter()
             .for_each(|o| o.trace());
     }
 
-    fn sweep(&mut self) {
-        self.objects.retain(|o| o.header.marked.get());
-    }
+    fn sweep(&self) {
+        let mut previous = None;
+        let mut next = self.next.get();
 
-    fn bytes_unmarked(&self) -> usize {
-        let mut bytes = 0;
-        for object in &self.objects {
-            if !object.header.marked.get() {
-                bytes += std::mem::size_of_val(&object.data);
+        while let Some(ptr) = next {
+            let object = unsafe { ptr.as_ref() };
+            let marked = object.marked.get();
+
+            next = object.next.get();
+
+            if marked {
+                object.unmark();
+                previous = Some(ptr);
+            } else {
+                if let Some(previous_ptr) = previous {
+                    let previous_object = unsafe { previous_ptr.as_ref() };
+                    previous_object.next.set(next);
+                } else {
+                    self.next.set(next);
+                }
+
+                self.free_object(ptr);
             }
         }
-        bytes
+    }
+
+    fn free_object(&self, mut ptr: NonNull<Allocation<dyn Trace>>) {
+        {
+            let object = unsafe { ptr.as_ref() };
+            self.bytes_allocated.set(self.bytes_allocated.get() - object.size.get());
+        }
+
+        unsafe {
+            drop(Box::from_raw(ptr.as_mut()));
+        }
     }
 }
 
@@ -223,6 +246,10 @@ impl<K: Eq + Hash, T: Trace> Trace for FxHashMap<K, T> {
 impl Trace for String {
     #[inline]
     fn trace(&self) {}
+
+    fn size_hint(&self) -> usize {
+        self.len()
+    }
 }
 
 impl<T: Trace + Copy> Trace for Cell<T> {

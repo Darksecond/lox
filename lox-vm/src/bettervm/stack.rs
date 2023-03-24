@@ -5,16 +5,26 @@ use std::ptr;
 pub struct Stack {
     top: *mut Value,
     bottom: *mut Value,
-    _stack: Box<[Value]>,
+
+    stack: *mut [Value],
+}
+
+impl Drop for Stack {
+    fn drop(&mut self) {
+        unsafe {
+            drop(Box::from_raw(self.stack));
+        }
+    }
 }
 
 impl Stack {
     pub fn new(size: usize) -> Self {
-        let mut stack = vec![Value::Nil; size].into_boxed_slice();
+        let stack = vec![Value::Nil; size].into_boxed_slice();
+        let stack = Box::into_raw(stack);
         Self {
-            top: stack.as_mut_ptr(),
-            bottom: stack.as_mut_ptr(),
-            _stack: stack,
+            top: stack as *mut Value,
+            bottom: stack as *mut Value,
+            stack,
         }
     }
 

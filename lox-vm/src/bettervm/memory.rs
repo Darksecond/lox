@@ -89,6 +89,11 @@ impl Trace for Instance {
         self.class.trace();
         self.fields().trace();
     }
+
+    fn size_hint(&self) -> usize {
+        let fields = unsafe { &*self.fields.get() };
+        fields.capacity() * std::mem::size_of::<Value>()
+    }
 }
 
 #[derive(Debug)]

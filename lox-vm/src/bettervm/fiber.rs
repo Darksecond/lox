@@ -102,6 +102,7 @@ impl Fiber {
     pub fn end_frame(&mut self) -> Option<Signal> {
         if self.frames.pop().is_some() {
             unsafe {
+                //TODO fix this, the pointer becomes invalid if we end the last frame (when exiting the program)
                 self.current_frame = self.current_frame.offset(-1);
             }
             None

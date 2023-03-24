@@ -4,7 +4,6 @@ use super::interner::{Symbol, Interner};
 use crate::bettergc::{Gc, Trace, Heap};
 use crate::bettervm::fiber::Fiber;
 use std::collections::HashMap;
-use std::cell::RefCell;
 
 #[derive(PartialEq, Eq, Copy, Clone)]
 pub enum Signal {
@@ -35,7 +34,7 @@ pub struct Runtime {
     print: for<'r> fn(&'r str),
     interner: Interner,
     imports: HashMap<String, Gc<Import>>,
-    heap: RefCell<Heap>,
+    heap: Heap,
 
     ip: *const u8,
 }
@@ -55,7 +54,7 @@ impl Runtime {
             fiber: Fiber::new(),
             init_symbol: interner.intern("init"),
             interner,
-            heap: RefCell::new(Heap::new()),
+            heap: Heap::new(),
             imports: HashMap::new(),
             print,
 
@@ -74,10 +73,13 @@ impl Runtime {
         self.load_ip();
     }
 
+    pub fn adjust_size<T: 'static + Trace>(&mut self, object: Gc<T>) {
+        self.heap.adjust_size(object);
+    }
+
     pub fn manage<T: Trace>(&mut self, data: T) -> Gc<T> {
-        let mut heap = self.heap.borrow_mut();
-        heap.collect(&[self]);
-        heap.manage(data)
+        self.heap.collect(&[self]);
+        self.heap.manage(data)
     }
 
     pub fn intern(&mut self, string: &str) -> Symbol {

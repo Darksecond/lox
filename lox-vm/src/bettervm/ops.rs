@@ -368,6 +368,7 @@ impl Runtime {
         let property = current_import.symbol(index);
         if let Value::Instance(instance) = self.fiber.stack.peek_n(1) {
             instance.set_field(property, *self.fiber.stack.peek_n(0));
+            self.adjust_size(*instance);
 
             let value = self.fiber.stack.pop();
             self.fiber.stack.pop();
