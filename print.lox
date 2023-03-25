@@ -1,13 +1,6 @@
-print "Hello, World!";
-
-
-fun test() {
-  var x = 123;
-  fun test2() {
-    print x;
-  }
-
-  test2();
-}
-
-test();
+print "Before";
+import "something" for word;
+print word;
+import "something";
+print word;
+print "After";
