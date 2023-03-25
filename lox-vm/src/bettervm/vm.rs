@@ -18,6 +18,7 @@ pub enum Signal {
 //TODO RuntimeError
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum VmError {
+    Unknown,
     StackEmpty,
     FrameEmpty,
     StringConstantExpected,
@@ -185,7 +186,7 @@ impl Runtime {
         match callee {
             Value::Closure(callee) => {
                 if callee.function.arity != arity {
-                    return self.fiber_mut().runtime_error(VmError::IncorrectArity);
+                    return self.fiber().runtime_error(VmError::IncorrectArity);
                 }
                 self.fiber_mut().begin_frame(callee);
             }
@@ -201,24 +202,24 @@ impl Runtime {
 
                 if let Some(initializer) = class.method(self.init_symbol) {
                     if initializer.function.arity != arity {
-                        return self.fiber_mut().runtime_error(VmError::IncorrectArity);
+                        return self.fiber().runtime_error(VmError::IncorrectArity);
                     }
                     self.fiber_mut().begin_frame(initializer);
                 } else if arity != 0 {
                     // Arity must be 0 without initializer
-                    return self.fiber_mut().runtime_error(VmError::IncorrectArity);
+                    return self.fiber().runtime_error(VmError::IncorrectArity);
                 }
             }
             Value::BoundMethod(bind) => {
                 let callee = bind.method;
                 if callee.function.arity != arity {
-                    return self.fiber_mut().runtime_error(VmError::IncorrectArity);
+                    return self.fiber().runtime_error(VmError::IncorrectArity);
                 }
                 self.fiber_mut().stack.rset(arity, Value::Instance(bind.receiver));
                 self.fiber_mut().begin_frame(callee);
 
             },
-            _ => return self.fiber_mut().runtime_error(VmError::InvalidCallee),
+            _ => return self.fiber().runtime_error(VmError::InvalidCallee),
         }
 
         self.load_ip();
