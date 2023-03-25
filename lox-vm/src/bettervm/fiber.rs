@@ -59,7 +59,7 @@ pub struct Fiber {
     frames: Vec<CallFrame>,
     pub stack: Stack,
     upvalues: Vec<Gc<Cell<Upvalue>>>,
-    pub error: Option<VmError>,
+    pub error: Cell<Option<VmError>>,
 
     // We use a pointer for the current call frame becaeuse this is way faster than using last().
     current_frame: *mut CallFrame,
@@ -82,14 +82,14 @@ impl Fiber {
             frames: Vec::with_capacity(2048),
             stack: Stack::new(2048),
             upvalues: Vec::with_capacity(2048),
-            error: None,
+            error: Cell::new(None),
 
             current_frame: std::ptr::null_mut(),
         }
     }
 
-    pub fn runtime_error(&mut self, error: VmError) -> Signal {
-        self.error = Some(error);
+    pub fn runtime_error(&self, error: VmError) -> Signal {
+        self.error.set(Some(error));
         Signal::RuntimeError
     }
 
