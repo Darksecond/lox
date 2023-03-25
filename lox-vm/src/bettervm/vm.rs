@@ -234,6 +234,7 @@ impl Runtime {
     }
 
 
+    #[inline]
     pub fn next_u32(&mut self) -> u32 {
         unsafe {
             let slice = &*std::ptr::slice_from_raw_parts(self.ip, 4);
@@ -243,6 +244,7 @@ impl Runtime {
         }
     }
 
+    #[inline]
     pub fn next_u8(&mut self) -> u8 {
         unsafe {
             let value = std::ptr::read(self.ip);
@@ -251,15 +253,18 @@ impl Runtime {
         }
     }
 
+    #[inline]
     pub fn store_ip(&mut self) {
         let ip = self.ip;
         self.fiber_mut().current_frame_mut().store_ip(ip);
     }
 
+    #[inline]
     pub fn load_ip(&mut self) {
         self.ip = self.fiber().current_frame().load_ip();
     }
 
+    #[inline]
     pub fn set_ip(&mut self, to: usize) {
         self.fiber_mut().current_frame_mut().set_pc(to);
         self.load_ip();
