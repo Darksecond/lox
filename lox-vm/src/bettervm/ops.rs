@@ -2,6 +2,8 @@ use crate::bettervm::vm::{Runtime, Signal, VmError};
 use crate::bettervm::memory::*;
 use crate::bettergc::Gc;
 use std::cell::Cell;
+use super::fiber::Fiber;
+use std::cell::UnsafeCell;
 
 impl Runtime {
     pub fn interpret(&mut self) -> Result<(), VmError> {
@@ -67,10 +69,18 @@ impl Runtime {
         let constant = current_import.constant(index);
         match constant {
             lox_bytecode::bytecode::Constant::String(path) => {
-                let import = self.import(path);
+                if let Some(import) = self.import(path) {
+                    self.fiber_mut().stack.push(Value::Import(import));
+                    return Signal::More;
+                }
+
+                let import = match self.load_import(path) {
+                    Ok(import) => import,
+                    Err(err) => return self.fiber_mut().runtime_error(err),
+                };
+
                 self.fiber_mut().stack.push(Value::Import(import));
 
-                use super::fiber::Fiber;
                 let mut fiber = Fiber::new(Some(self.fiber));
 
                 let function = Function {
@@ -88,10 +98,9 @@ impl Runtime {
                 fiber.stack.push(Value::Closure(closure));
                 fiber.begin_frame(closure);
 
-                use std::cell::UnsafeCell;
                 let fiber = self.manage(UnsafeCell::new(fiber));
-                self.next_fiber = Some(fiber);
-                return Signal::ContextSwitch;
+
+                return self.switch_to(fiber);
             },
             lox_bytecode::bytecode::Constant::Number(_) => {
                 return self.fiber_mut().runtime_error(VmError::StringConstantExpected);
@@ -201,8 +210,7 @@ impl Runtime {
         if !self.fiber().has_current_frame() {
             // If we have a parent, switch back to it.
             if let Some(parent) = self.fiber().parent {
-                self.next_fiber = Some(parent);
-                return Signal::ContextSwitch;
+                return self.switch_to(parent);
             }
 
             // We are done interpreting, don't push a result as it'll be nil
