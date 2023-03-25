@@ -1,6 +1,6 @@
 print "Before";
 import "something" for word;
 print word;
-import "something";
+import "something" for word;
 print word;
 print "After";
