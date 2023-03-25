@@ -53,7 +53,7 @@ impl Runtime {
                 Signal::Done => return Ok(()),
                 Signal::More => (),
                 Signal::RuntimeError => {
-                    return Err(self.fiber().error.get().unwrap_or(VmError::Unknown));
+                    return Err(self.fiber().error.unwrap_or(VmError::Unknown));
                 },
                 Signal::ContextSwitch => {
                     self.context_switch();
@@ -76,7 +76,7 @@ impl Runtime {
 
                 let import = match self.load_import(path) {
                     Ok(import) => import,
-                    Err(err) => return self.fiber().runtime_error(err),
+                    Err(err) => return self.fiber_mut().runtime_error(err),
                 };
 
                 self.fiber_mut().stack.push(Value::Import(import));
@@ -103,7 +103,7 @@ impl Runtime {
                 return self.switch_to(fiber);
             },
             lox_bytecode::bytecode::Constant::Number(_) => {
-                return self.fiber().runtime_error(VmError::StringConstantExpected);
+                return self.fiber_mut().runtime_error(VmError::StringConstantExpected);
             },
         }
     }
@@ -185,10 +185,10 @@ impl Runtime {
             if let Value::Closure(closure) = self.fiber().stack.peek_n(0) {
                 class.set_method(identifier, *closure);
             } else {
-                return self.fiber().runtime_error(VmError::UnexpectedConstant);
+                return self.fiber_mut().runtime_error(VmError::UnexpectedConstant);
             }
         } else {
-            return self.fiber().runtime_error(VmError::UnexpectedConstant);
+            return self.fiber_mut().runtime_error(VmError::UnexpectedConstant);
         }
 
         self.fiber_mut().stack.pop();
@@ -250,7 +250,7 @@ impl Runtime {
     pub fn op_greater(&mut self) -> Signal {
         match (self.fiber_mut().stack.pop(), self.fiber_mut().stack.pop()) {
             (Value::Number(b), Value::Number(a)) => self.fiber_mut().stack.push((a > b).into()),
-            _ => return self.fiber().runtime_error(VmError::UnexpectedValue),
+            _ => return self.fiber_mut().runtime_error(VmError::UnexpectedValue),
         }
 
         Signal::More
@@ -259,7 +259,7 @@ impl Runtime {
     pub fn op_less(&mut self) -> Signal {
         match (self.fiber_mut().stack.pop(), self.fiber_mut().stack.pop()) {
             (Value::Number(b), Value::Number(a)) => self.fiber_mut().stack.push((a < b).into()),
-            _ => return self.fiber().runtime_error(VmError::UnexpectedValue),
+            _ => return self.fiber_mut().runtime_error(VmError::UnexpectedValue),
         }
 
         Signal::More
@@ -268,7 +268,7 @@ impl Runtime {
     pub fn op_negate(&mut self) -> Signal {
         match self.fiber_mut().stack.pop() {
             Value::Number(n) => self.fiber_mut().stack.push(Value::Number(-n)),
-            _ => return self.fiber().runtime_error(VmError::UnexpectedValue),
+            _ => return self.fiber_mut().runtime_error(VmError::UnexpectedValue),
         }
 
         Signal::More
@@ -283,7 +283,7 @@ impl Runtime {
     pub fn op_divide(&mut self) -> Signal {
         match (self.fiber_mut().stack.pop(), self.fiber_mut().stack.pop()) {
             (Value::Number(b), Value::Number(a)) => self.fiber_mut().stack.push(Value::Number(a / b)),
-            _ => return self.fiber().runtime_error(VmError::UnexpectedValue),
+            _ => return self.fiber_mut().runtime_error(VmError::UnexpectedValue),
         }
 
         Signal::More
@@ -292,7 +292,7 @@ impl Runtime {
     pub fn op_multiply(&mut self) -> Signal {
         match (self.fiber_mut().stack.pop(), self.fiber_mut().stack.pop()) {
             (Value::Number(b), Value::Number(a)) => self.fiber_mut().stack.push(Value::Number(a * b)),
-            _ => return self.fiber().runtime_error(VmError::UnexpectedValue),
+            _ => return self.fiber_mut().runtime_error(VmError::UnexpectedValue),
         }
 
         Signal::More
@@ -301,7 +301,7 @@ impl Runtime {
     pub fn op_subtract(&mut self) -> Signal {
         match (self.fiber_mut().stack.pop(), self.fiber_mut().stack.pop()) {
             (Value::Number(b), Value::Number(a)) => self.fiber_mut().stack.push(Value::Number(a - b)),
-            _ => return self.fiber().runtime_error(VmError::UnexpectedValue),
+            _ => return self.fiber_mut().runtime_error(VmError::UnexpectedValue),
         }
 
         Signal::More
@@ -311,7 +311,7 @@ impl Runtime {
         match (self.fiber_mut().stack.pop(), self.fiber_mut().stack.pop()) {
             (Value::Number(b), Value::Number(a)) => self.fiber_mut().stack.push(Value::Number(a + b)),
             (Value::String(b), Value::String(a)) => self.push_string(format!("{}{}", a, b)),
-            _ => return self.fiber().runtime_error(VmError::UnexpectedValue),
+            _ => return self.fiber_mut().runtime_error(VmError::UnexpectedValue),
         }
 
         Signal::More
@@ -413,7 +413,7 @@ impl Runtime {
         if let Some(value) = value {
             self.fiber_mut().stack.push(value);
         } else {
-            return self.fiber().runtime_error(VmError::GlobalNotDefined);
+            return self.fiber_mut().runtime_error(VmError::GlobalNotDefined);
         }
 
         Signal::More
@@ -428,7 +428,7 @@ impl Runtime {
         if current_import.has_global(identifier) {
             current_import.set_global(identifier, *value);
         } else {
-            return self.fiber().runtime_error(VmError::GlobalNotDefined);
+            return self.fiber_mut().runtime_error(VmError::GlobalNotDefined);
         }
 
         Signal::More
@@ -447,7 +447,7 @@ impl Runtime {
             self.fiber_mut().stack.pop();
             self.fiber_mut().stack.push(value);
         } else {
-            return self.fiber().runtime_error(VmError::UnexpectedValue);
+            return self.fiber_mut().runtime_error(VmError::UnexpectedValue);
         }
 
         Signal::More
@@ -468,10 +468,10 @@ impl Runtime {
                 });
                 self.fiber_mut().stack.push(Value::BoundMethod(bind));
             } else {
-                return self.fiber().runtime_error(VmError::UndefinedProperty);
+                return self.fiber_mut().runtime_error(VmError::UndefinedProperty);
             };
         } else {
-            return self.fiber().runtime_error(VmError::UnexpectedValue);
+            return self.fiber_mut().runtime_error(VmError::UnexpectedValue);
         }
 
         Signal::More
@@ -528,16 +528,16 @@ impl Runtime {
                 return self.call(arity, value);
             } else if let Some(method) = instance.class.method(property) {
                 if method.function.arity != arity {
-                    return self.fiber().runtime_error(VmError::IncorrectArity);
+                    return self.fiber_mut().runtime_error(VmError::IncorrectArity);
                 }
                 self.store_ip();
                 self.fiber_mut().begin_frame(method);
                 self.load_ip();
             } else {
-                return self.fiber().runtime_error(VmError::UndefinedProperty);
+                return self.fiber_mut().runtime_error(VmError::UndefinedProperty);
             };
         } else {
-            return self.fiber().runtime_error(VmError::UnexpectedValue);
+            return self.fiber_mut().runtime_error(VmError::UnexpectedValue);
         }
 
         Signal::More

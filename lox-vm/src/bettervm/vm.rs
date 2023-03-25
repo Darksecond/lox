@@ -61,8 +61,9 @@ impl Runtime {
     pub fn new(print: for<'r> fn(&'r str), import: for<'r> fn(&'r str) -> Option<Module>) -> Self {
         let mut interner = Interner::new();
         let heap = Heap::new();
+        let fiber = heap.manage(UnsafeCell::new(Fiber::new(None)));
         Self {
-            fiber: heap.manage(UnsafeCell::new(Fiber::new(None))),
+            fiber,
             next_fiber: None,
             init_symbol: interner.intern("init"),
             interner,
@@ -186,7 +187,7 @@ impl Runtime {
         match callee {
             Value::Closure(callee) => {
                 if callee.function.arity != arity {
-                    return self.fiber().runtime_error(VmError::IncorrectArity);
+                    return self.fiber_mut().runtime_error(VmError::IncorrectArity);
                 }
                 self.fiber_mut().begin_frame(callee);
             }
@@ -202,24 +203,24 @@ impl Runtime {
 
                 if let Some(initializer) = class.method(self.init_symbol) {
                     if initializer.function.arity != arity {
-                        return self.fiber().runtime_error(VmError::IncorrectArity);
+                        return self.fiber_mut().runtime_error(VmError::IncorrectArity);
                     }
                     self.fiber_mut().begin_frame(initializer);
                 } else if arity != 0 {
                     // Arity must be 0 without initializer
-                    return self.fiber().runtime_error(VmError::IncorrectArity);
+                    return self.fiber_mut().runtime_error(VmError::IncorrectArity);
                 }
             }
             Value::BoundMethod(bind) => {
                 let callee = bind.method;
                 if callee.function.arity != arity {
-                    return self.fiber().runtime_error(VmError::IncorrectArity);
+                    return self.fiber_mut().runtime_error(VmError::IncorrectArity);
                 }
                 self.fiber_mut().stack.rset(arity, Value::Instance(bind.receiver));
                 self.fiber_mut().begin_frame(callee);
 
             },
-            _ => return self.fiber().runtime_error(VmError::InvalidCallee),
+            _ => return self.fiber_mut().runtime_error(VmError::InvalidCallee),
         }
 
         self.load_ip();
