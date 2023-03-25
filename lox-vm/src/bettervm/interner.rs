@@ -1,7 +1,7 @@
 use fxhash::FxHashMap;
 
 #[derive(Hash, Eq, PartialEq, Debug, Copy, Clone)]
-pub struct Symbol(u32);
+pub struct Symbol(pub u32);
 
 impl Symbol {
     pub const fn invalid() -> Self {

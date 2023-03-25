@@ -181,6 +181,7 @@ impl Runtime {
     }
 
     //TODO Reduce duplicate code paths
+    #[inline(never)]
     pub fn call(&mut self, arity: usize, callee: Value) -> Signal {
         self.store_ip();
 

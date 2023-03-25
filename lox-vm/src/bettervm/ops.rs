@@ -456,7 +456,7 @@ impl Runtime {
         let current_import = self.current_import();
         let property = current_import.symbol(index);
         if let Value::Instance(instance) = self.fiber_mut().stack.pop() {
-            if let Some(value) = instance.field(&property) {
+            if let Some(value) = instance.field(property) {
                 self.fiber_mut().stack.push(value);
             } else if let Some(method) = instance.class.method(property) {
                 let bind = self.manage(BoundMethod {
@@ -520,7 +520,7 @@ impl Runtime {
         let current_import = self.current_import();
         let property = current_import.symbol(index);
         if let Value::Instance(instance) = *self.fiber_mut().stack.peek_n(arity) {
-            if let Some(value) = instance.field(&property) {
+            if let Some(value) = instance.field(property) {
                 self.fiber_mut().stack.rset(arity, value);
                 return self.call(arity, value);
             } else if let Some(method) = instance.class.method(property) {

@@ -3,8 +3,9 @@ use lox_bytecode::bytecode::{Chunk, Constant, ConstantIndex, Module, ClosureInde
 use crate::bettergc::{Gc, Trace};
 use crate::bytecode::{ChunkIndex, self};
 use std::cell::{Cell, UnsafeCell};
-use fxhash::FxHashMap;
 use super::interner::{Symbol, Interner};
+
+use super::table::Table;
 
 #[derive(Debug, Copy, Clone)]
 pub enum Upvalue {
@@ -56,7 +57,7 @@ impl Trace for Upvalue {
 #[derive(Debug)]
 pub struct Instance {
     pub class: Gc<Class>,
-    fields: UnsafeCell<FxHashMap<Symbol, Value>>,
+    fields: UnsafeCell<Table>,
 }
 
 impl Instance {
@@ -67,16 +68,16 @@ impl Instance {
         }
     }
 
-    pub fn field(&self, symbol: &Symbol) -> Option<Value> {
-        self.fields().get(symbol).cloned()
+    pub fn field(&self, symbol: Symbol) -> Option<Value> {
+        self.fields().get(symbol)
     }
 
     pub fn set_field(&self, symbol: Symbol, value: Value) {
         let fields = unsafe { &mut *self.fields.get() };
-        fields.insert(symbol, value);
+        fields.set(symbol, value);
     }
 
-    fn fields(&self) -> &FxHashMap<Symbol, Value> {
+    fn fields(&self) -> &Table {
         unsafe {
             &*self.fields.get()
         }
@@ -99,8 +100,7 @@ impl Trace for Instance {
 #[derive(Debug)]
 pub struct Class {
     pub name: String,
-    //TODO Replace Gc<Closure> with Value so we can use native code as methods.
-    methods: UnsafeCell<FxHashMap<Symbol, Gc<Closure>>>,
+    methods: UnsafeCell<Table>,
 }
 
 impl Class {
@@ -111,16 +111,20 @@ impl Class {
         }
     }
 
+    //TODO Replace Gc<Closure> with Value so we can use native code as methods.
     pub fn method(&self, symbol: Symbol) -> Option<Gc<Closure>> {
-        self.methods().get(&symbol).cloned()
+        match self.methods().get(symbol) {
+            Some(Value::Closure(closure)) => Some(closure),
+            _ => None,
+        }
     }
 
     pub fn set_method(&self, symbol: Symbol, closure: Gc<Closure>) {
         let methods = unsafe { &mut *self.methods.get() };
-        methods.insert(symbol, closure);
+        methods.set(symbol, Value::Closure(closure));
     }
 
-    fn methods(&self) -> &FxHashMap<Symbol, Gc<Closure>> {
+    fn methods(&self) -> &Table {
         unsafe {
             &*self.methods.get()
         }
@@ -208,7 +212,7 @@ impl Trace for BoundMethod {
 #[derive(Debug)]
 pub struct Import {
     module: Module,
-    globals: UnsafeCell<FxHashMap<Symbol, Value>>,
+    globals: UnsafeCell<Table>,
     symbols: Vec<Symbol>,
 }
 
@@ -227,12 +231,12 @@ impl Import {
 
         Self {
             module,
-            globals: UnsafeCell::new(FxHashMap::default()),
+            globals: Default::default(),
             symbols,
         }
     }
 
-    fn globals(&self) -> &FxHashMap<Symbol, Value> {
+    fn globals(&self) -> &Table {
         unsafe {
             &*self.globals.get()
         }
@@ -264,15 +268,15 @@ impl Import {
 
     pub fn set_global(&self, key: Symbol, value: Value) {
         let globals = unsafe { &mut *self.globals.get() };
-        globals.insert(key, value);
+        globals.set(key, value);
     }
 
     pub fn has_global(&self, key: Symbol) -> bool {
-        self.globals().contains_key(&key)
+        self.globals().has(key)
     }
 
     pub fn global(&self, key: Symbol) -> Option<Value> {
-        self.globals().get(&key).cloned()
+        self.globals().get(key)
     }
 }
 

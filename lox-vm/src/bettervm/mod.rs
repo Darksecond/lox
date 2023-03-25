@@ -4,6 +4,7 @@ mod interner;
 mod stack;
 mod ops;
 mod fiber;
+mod table;
 
 use crate::bytecode::Module;
 pub use vm::VmError;
