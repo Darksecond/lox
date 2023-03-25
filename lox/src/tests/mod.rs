@@ -24,6 +24,10 @@ thread_local! {
     static DATA: Mutex<Vec<String>> = Mutex::new(Vec::new());
 }
 
+fn import(_path: &str) -> Option<lox_bytecode::bytecode::Module> {
+    None
+}
+
 //TODO Handle errors
 fn execute(source: &str) -> (Vec<String>, TestResult) {
     let module = match lox_compiler::compile(source) {
@@ -37,7 +41,7 @@ fn execute(source: &str) -> (Vec<String>, TestResult) {
         });
     }
 
-    let mut vm = lox_vm::bettervm::Vm::with_stdout(module, print);
+    let mut vm = lox_vm::bettervm::Vm::with_stdout(module, print, import);
     lox_vm::bettervm::set_stdlib(&mut vm);
     let result = match vm.interpret() {
         Ok(_) => TestResult::Ok,

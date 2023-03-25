@@ -29,17 +29,20 @@ pub enum VmError {
     UnexpectedValue,
     UndefinedProperty,
     Unimplemented,
+    UnknownImport,
 }
 
 pub struct Runtime {
     pub fiber: Gc<UnsafeCell<Fiber>>,
-    pub next_fiber: Option<Gc<UnsafeCell<Fiber>>>,
+    next_fiber: Option<Gc<UnsafeCell<Fiber>>>,
     init_symbol: Symbol,
-    print: for<'r> fn(&'r str),
-    import: for<'r> fn(&'r str) -> Module,
     interner: Interner,
     imports: HashMap<String, Gc<Import>>,
     heap: Heap,
+
+    // Env
+    print: for<'r> fn(&'r str),
+    import: for<'r> fn(&'r str) -> Option<Module>,
 
     ip: *const u8,
 }
@@ -54,7 +57,7 @@ impl Trace for Runtime {
 }
 
 impl Runtime {
-    pub fn new(print: for<'r> fn(&'r str), import: for<'r> fn(&'r str) -> Module) -> Self {
+    pub fn new(print: for<'r> fn(&'r str), import: for<'r> fn(&'r str) -> Option<Module>) -> Self {
         let mut interner = Interner::new();
         let heap = Heap::new();
         Self {
@@ -79,6 +82,11 @@ impl Runtime {
         }
 
         self.next_fiber = None;
+    }
+
+    pub fn switch_to(&mut self, fiber: Gc<UnsafeCell<Fiber>>) -> Signal {
+        self.next_fiber = Some(fiber);
+        Signal::ContextSwitch
     }
 
     #[inline]
@@ -134,17 +142,24 @@ impl Runtime {
         })
     }
 
-
-    pub fn import(&mut self, path: &str) -> Gc<Import> {
+    pub fn import(&mut self, path: &str) -> Option<Gc<Import>> {
         if let Some(import) = self.imports.get(path) {
-            *import
+            Some(*import)
         } else {
-            let module = (self.import)(path);
+            None
+        }
+    }
+
+    pub fn load_import(&mut self, path: &str) -> Result<Gc<Import>, VmError> {
+        let module = (self.import)(path);
+        if let Some(module) = module {
             let import = Import::new(module, &mut self.interner);
             let import = self.manage(import);
             self.imports.insert(path.into(), import);
 
-            import
+            Ok(import)
+        } else {
+            Err(VmError::UnknownImport)
         }
     }
 
