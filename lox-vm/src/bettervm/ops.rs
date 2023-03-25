@@ -62,6 +62,7 @@ impl Runtime {
         }
     }
 
+    #[inline(never)]
     pub fn op_import(&mut self) -> Signal {
         let index: usize = self.next_u32() as _;
 
@@ -108,26 +109,18 @@ impl Runtime {
         }
     }
 
+    #[inline(never)]
     pub fn op_import_global(&mut self) -> Signal {
         let index: usize = self.next_u32() as _;
         let current_import = self.current_import();
         let identifier = current_import.symbol(index);
 
         let import = self.fiber().stack.peek_n(0);
-        match import {
-            Value::Import(import) => {
-                let value = import.global(identifier).unwrap_or(Value::Nil);
-                self.fiber_mut().stack.push(value);
-            },
-            Value::Number(_) => todo!(),
-            Value::String(_) => todo!(),
-            Value::Closure(_) => todo!(),
-            Value::BoundMethod(_) => todo!(),
-            Value::NativeFunction(_) => todo!(),
-            Value::Boolean(_) => todo!(),
-            Value::Class(_) => todo!(),
-            Value::Instance(_) => todo!(),
-            Value::Nil => todo!(),
+        if let Value::Import(import) = import {
+            let value = import.global(identifier).unwrap_or(Value::Nil);
+            self.fiber_mut().stack.push(value);
+        } else {
+            return self.fiber_mut().runtime_error(VmError::UnexpectedConstant)
         }
 
         Signal::More
@@ -151,6 +144,7 @@ impl Runtime {
         Signal::More
     }
 
+    #[inline(never)]
     pub fn op_class(&mut self) -> Signal {
         let index = self.next_u8() as _;
 
@@ -176,6 +170,7 @@ impl Runtime {
 
     //TODO Rewrite if's to improve error handling
     //TODO Pretty sure it leaves the stack clean, but double check
+    #[inline(never)]
     pub fn op_method(&mut self) -> Signal {
         let index = self.next_u32() as _;
 
@@ -344,6 +339,7 @@ impl Runtime {
     }
 
     //TODO consider redesigning
+    #[inline(never)]
     pub fn op_print(&mut self) -> Signal {
         let value = self.fiber_mut().stack.pop();
         self.print(&format!("{}", value));
@@ -393,6 +389,7 @@ impl Runtime {
         Signal::More
     }
 
+    #[inline(never)]
     pub fn op_define_global(&mut self) -> Signal {
         let index = self.next_u32() as _;
 
