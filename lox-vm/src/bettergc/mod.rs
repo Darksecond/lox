@@ -1,4 +1,4 @@
-use std::cell::Cell;
+use std::cell::{Cell, UnsafeCell};
 use std::fmt;
 use std::ops::Deref;
 use std::ptr::NonNull;
@@ -256,5 +256,21 @@ impl<T: Trace + Copy> Trace for Cell<T> {
     #[inline]
     fn trace(&self) {
         self.get().trace();
+    }
+}
+
+impl<T: Trace> Trace for UnsafeCell<T> {
+    fn trace(&self) {
+        let inner = unsafe { &*self.get() };
+        inner.trace();
+    }
+}
+
+impl<T: Trace> Trace for Option<T> {
+    fn trace(&self) {
+        match self {
+            Some(inner) => inner.trace(),
+            None => (),
+        }
     }
 }

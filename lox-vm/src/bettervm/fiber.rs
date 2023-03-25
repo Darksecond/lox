@@ -1,7 +1,7 @@
 use lox_bytecode::bytecode::Chunk;
 use crate::bettervm::memory::*;
 use crate::bettergc::{Trace, Gc};
-use std::cell::Cell;
+use std::cell::{Cell, UnsafeCell};
 use crate::bettervm::stack::Stack;
 use crate::bettervm::VmError;
 use crate::bettervm::vm::Signal;
@@ -55,6 +55,7 @@ impl CallFrame {
 }
 
 pub struct Fiber {
+    pub parent: Option<Gc<UnsafeCell<Fiber>>>,
     frames: Vec<CallFrame>,
     pub stack: Stack,
     upvalues: Vec<Gc<Cell<Upvalue>>>,
@@ -67,6 +68,7 @@ pub struct Fiber {
 impl Trace for Fiber {
     #[inline]
     fn trace(&self) {
+        self.parent.trace();
         self.frames.trace();
         self.stack.trace();
         self.upvalues.trace();
@@ -74,8 +76,9 @@ impl Trace for Fiber {
 }
 
 impl Fiber {
-    pub fn new() -> Self {
+    pub fn new(parent: Option<Gc<UnsafeCell<Fiber>>>) -> Self {
         Self {
+            parent,
             frames: Vec::with_capacity(2048),
             stack: Stack::new(2048),
             upvalues: Vec::with_capacity(2048),

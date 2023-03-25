@@ -4,15 +4,18 @@ use super::interner::{Symbol, Interner};
 use crate::bettergc::{Gc, Trace, Heap};
 use crate::bettervm::fiber::Fiber;
 use std::collections::HashMap;
+use std::cell::UnsafeCell;
 
 #[derive(PartialEq, Eq, Copy, Clone)]
 pub enum Signal {
     Done,
     More,
     RuntimeError,
+    ContextSwitch,
 }
 
 //TODO thiserror
+//TODO RuntimeError
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum VmError {
     StackEmpty,
@@ -29,9 +32,11 @@ pub enum VmError {
 }
 
 pub struct Runtime {
-    pub fiber: Fiber,
+    pub fiber: Gc<UnsafeCell<Fiber>>,
+    pub next_fiber: Option<Gc<UnsafeCell<Fiber>>>,
     init_symbol: Symbol,
     print: for<'r> fn(&'r str),
+    import: for<'r> fn(&'r str) -> Module,
     interner: Interner,
     imports: HashMap<String, Gc<Import>>,
     heap: Heap,
@@ -43,23 +48,47 @@ impl Trace for Runtime {
     #[inline]
     fn trace(&self) {
         self.fiber.trace();
+        self.next_fiber.trace();
         self.imports.trace();
     }
 }
 
 impl Runtime {
-    pub fn new(print: for<'r> fn(&'r str)) -> Self {
+    pub fn new(print: for<'r> fn(&'r str), import: for<'r> fn(&'r str) -> Module) -> Self {
         let mut interner = Interner::new();
+        let heap = Heap::new();
         Self {
-            fiber: Fiber::new(),
+            fiber: heap.manage(UnsafeCell::new(Fiber::new(None))),
+            next_fiber: None,
             init_symbol: interner.intern("init"),
             interner,
-            heap: Heap::new(),
+            heap,
             imports: HashMap::new(),
             print,
+            import,
 
             ip: std::ptr::null(),
         }
+    }
+
+    pub fn context_switch(&mut self) {
+        if let Some(next_fiber) = self.next_fiber {
+            self.store_ip();
+            self.fiber = next_fiber;
+            self.load_ip();
+        }
+
+        self.next_fiber = None;
+    }
+
+    #[inline]
+    pub fn fiber(&self) -> &Fiber {
+        unsafe { &*self.fiber.get() }
+    }
+
+    #[inline]
+    pub fn fiber_mut(&mut self) -> &mut Fiber {
+        unsafe { &mut *self.fiber.get() }
     }
 
     pub fn print(&self, value: &str) {
@@ -68,8 +97,8 @@ impl Runtime {
 
     pub fn with_module(&mut self, module: Module) {
         let closure = self.prepare_interpret(module);
-        self.fiber.stack.push(Value::Closure(closure));
-        self.fiber.begin_frame(closure);
+        self.fiber_mut().stack.push(Value::Closure(closure));
+        self.fiber_mut().begin_frame(closure);
         self.load_ip();
     }
 
@@ -106,8 +135,21 @@ impl Runtime {
     }
 
 
+    pub fn import(&mut self, path: &str) -> Gc<Import> {
+        if let Some(import) = self.imports.get(path) {
+            *import
+        } else {
+            let module = (self.import)(path);
+            let import = Import::new(module, &mut self.interner);
+            let import = self.manage(import);
+            self.imports.insert(path.into(), import);
+
+            import
+        }
+    }
+
     pub fn current_import(&self) -> Gc<Import> {
-        self.fiber.current_frame().closure.function.import
+        self.fiber().current_frame().closure.function.import
     }
 
     pub fn set_native_fn(&mut self, identifier: &str, code: fn(&[Value]) -> Value) {
@@ -128,40 +170,40 @@ impl Runtime {
         match callee {
             Value::Closure(callee) => {
                 if callee.function.arity != arity {
-                    return self.fiber.runtime_error(VmError::IncorrectArity);
+                    return self.fiber_mut().runtime_error(VmError::IncorrectArity);
                 }
-                self.fiber.begin_frame(callee);
+                self.fiber_mut().begin_frame(callee);
             }
             Value::NativeFunction(callee) => {
-                let args = self.fiber.stack.pop_n(arity);
-                self.fiber.stack.pop(); // discard callee
+                let args = self.fiber_mut().stack.pop_n(arity);
+                self.fiber_mut().stack.pop(); // discard callee
                 let result = (callee.code)(&args);
-                self.fiber.stack.push(result);
+                self.fiber_mut().stack.push(result);
             }
             Value::Class(class) => {
                 let instance = self.manage(Instance::new(class));
-                self.fiber.stack.rset(arity, Value::Instance(instance));
+                self.fiber_mut().stack.rset(arity, Value::Instance(instance));
 
                 if let Some(initializer) = class.method(self.init_symbol) {
                     if initializer.function.arity != arity {
-                        return self.fiber.runtime_error(VmError::IncorrectArity);
+                        return self.fiber_mut().runtime_error(VmError::IncorrectArity);
                     }
-                    self.fiber.begin_frame(initializer);
+                    self.fiber_mut().begin_frame(initializer);
                 } else if arity != 0 {
                     // Arity must be 0 without initializer
-                    return self.fiber.runtime_error(VmError::IncorrectArity);
+                    return self.fiber_mut().runtime_error(VmError::IncorrectArity);
                 }
             }
             Value::BoundMethod(bind) => {
                 let callee = bind.method;
                 if callee.function.arity != arity {
-                    return self.fiber.runtime_error(VmError::IncorrectArity);
+                    return self.fiber_mut().runtime_error(VmError::IncorrectArity);
                 }
-                self.fiber.stack.rset(arity, Value::Instance(bind.receiver));
-                self.fiber.begin_frame(callee);
+                self.fiber_mut().stack.rset(arity, Value::Instance(bind.receiver));
+                self.fiber_mut().begin_frame(callee);
 
             },
-            _ => return self.fiber.runtime_error(VmError::InvalidCallee),
+            _ => return self.fiber_mut().runtime_error(VmError::InvalidCallee),
         }
 
         self.load_ip();
@@ -171,7 +213,7 @@ impl Runtime {
 
     pub fn push_string(&mut self, string: impl Into<String>) {
         let root = self.manage(string.into());
-        self.fiber.stack.push(Value::String(root));
+        self.fiber_mut().stack.push(Value::String(root));
     }
 
 
@@ -193,15 +235,16 @@ impl Runtime {
     }
 
     pub fn store_ip(&mut self) {
-        self.fiber.current_frame_mut().store_ip(self.ip);
+        let ip = self.ip;
+        self.fiber_mut().current_frame_mut().store_ip(ip);
     }
 
     pub fn load_ip(&mut self) {
-        self.ip = self.fiber.current_frame().load_ip();
+        self.ip = self.fiber().current_frame().load_ip();
     }
 
     pub fn set_ip(&mut self, to: usize) {
-        self.fiber.current_frame_mut().set_pc(to);
+        self.fiber_mut().current_frame_mut().set_pc(to);
         self.load_ip();
     }
 }

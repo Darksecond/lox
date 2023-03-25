@@ -15,8 +15,8 @@ pub struct Vm {
 }
 
 impl Vm {
-    pub fn with_stdout(module: Module, print: for<'r> fn(&'r str)) -> Self {
-        let mut vm = Runtime::new(print);
+    pub fn with_stdout(module: Module, print: for<'r> fn(&'r str), import: for<'r> fn(&'r str) -> Module) -> Self {
+        let mut vm = Runtime::new(print, import);
         vm.with_module(module);
 
         Self {
@@ -47,8 +47,8 @@ pub fn set_stdlib(outer: &mut Vm) {
     });
 }
 
-pub fn execute(module: Module) -> Result<(), VmError> {
-    let mut vm = Vm::with_stdout(module, print_stdout);
+pub fn execute(module: Module, import: for<'r> fn(&'r str) -> Module) -> Result<(), VmError> {
+    let mut vm = Vm::with_stdout(module, print_stdout, import);
     set_stdlib(&mut vm);
 
     vm.interpret()

@@ -49,5 +49,25 @@ fn main() {
         },
     };
 
-    lox_vm::bettervm::execute(module).unwrap();
+    lox_vm::bettervm::execute(module, import).unwrap();
+}
+
+use lox_bytecode::bytecode::Module;
+fn import(path: &str) -> Module {
+    let data = std::fs::read_to_string(format!("{}.lox", path)).unwrap();
+    let offsets = LineOffsets::new(&data);
+
+    let module = match lox_compiler::compile(&data) {
+        Ok(module) => module,
+        Err(diagnostics) => {
+            for diag in diagnostics {
+                let line = offsets.line(diag.span.start);
+                let msg = diag.message;
+                eprintln!("Error: {msg} at line {line}");
+            }
+            panic!();
+        },
+    };
+
+    module
 }
