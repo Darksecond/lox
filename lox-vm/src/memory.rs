@@ -111,17 +111,13 @@ impl Class {
         }
     }
 
-    //TODO Replace Gc<Closure> with Value so we can use native code as methods.
-    pub fn method(&self, symbol: Symbol) -> Option<Gc<Closure>> {
-        match self.methods().get(symbol) {
-            Some(Value::Closure(closure)) => Some(closure),
-            _ => None,
-        }
+    pub fn method(&self, symbol: Symbol) -> Option<Value> {
+        self.methods().get(symbol)
     }
 
-    pub fn set_method(&self, symbol: Symbol, closure: Gc<Closure>) {
+    pub fn set_method(&self, symbol: Symbol, closure: Value) {
         let methods = unsafe { &mut *self.methods.get() };
-        methods.set(symbol, Value::Closure(closure));
+        methods.set(symbol, closure);
     }
 
     fn methods(&self) -> &Table {
@@ -198,7 +194,7 @@ impl Function {
 #[derive(Debug, Copy, Clone)]
 pub struct BoundMethod {
     pub receiver: Gc<Instance>,
-    pub method: Gc<Closure>,
+    pub method: Value,
 }
 
 impl Trace for BoundMethod {
@@ -372,7 +368,7 @@ impl std::fmt::Display for Value {
             Value::Closure(closure) => write!(f, "<fn {}>", closure.function.name),
             Value::Class(class) => write!(f, "{}", class.name),
             Value::Instance(instance) => write!(f, "{} instance", instance.class.name),
-            Value::BoundMethod(bind) => write!(f, "<fn {}>", bind.method.function.name),
+            Value::BoundMethod(bind) => write!(f, "<bound {}>", bind.method),
             Value::Import(_) => write!(f, "<import>"),
         }
     }

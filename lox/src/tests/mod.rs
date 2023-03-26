@@ -719,6 +719,11 @@ mod method {
     }
 
     #[test]
+    fn bound_method() {
+        harness(include_str!("method/bound_method.lox"));
+    }
+
+    #[test]
     fn refer_to_name() {
         harness(include_str!("method/refer_to_name.lox"));
     }

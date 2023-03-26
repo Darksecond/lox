@@ -9,11 +9,10 @@ mod fiber;
 mod table;
 
 use lox_bytecode::bytecode::Module;
-use self::{runtime::Runtime, memory::Value};
+use runtime::Runtime;
 use interner::Symbol;
-use memory::Import;
-use memory::NativeFunction;
-use gc::Gc;
+use memory::{Import, NativeFunction, Value};
+use gc::{Gc, Trace};
 
 pub use runtime::VmError;
 
@@ -55,6 +54,10 @@ pub struct Native<'a> {
 impl Native<'_> {
     pub fn intern(&mut self, value: &str) -> Symbol {
         self.runtime.interner.intern(value)
+    }
+
+    pub fn manage<T: 'static + Trace>(&self, value: T) -> Gc<T> {
+        self.runtime.heap.manage(value)
     }
 
     pub fn set_fn(&mut self, import: Gc<Import>, identifier: &str, code: fn(&[Value]) -> Value) {

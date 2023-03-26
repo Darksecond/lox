@@ -178,7 +178,7 @@ impl Runtime {
         let identifier = current_import.symbol(index);
         if let Value::Class(class) = self.fiber().stack.peek_n(1) {
             if let Value::Closure(closure) = self.fiber().stack.peek_n(0) {
-                class.set_method(identifier, *closure);
+                class.set_method(identifier, Value::Closure(*closure));
             } else {
                 return self.fiber_mut().runtime_error(VmError::UnexpectedConstant);
             }
@@ -455,23 +455,30 @@ impl Runtime {
 
         let current_import = self.current_import();
         let property = current_import.symbol(index);
-        if let Value::Instance(instance) = self.fiber_mut().stack.pop() {
-            if let Some(value) = instance.field(property) {
-                self.fiber_mut().stack.push(value);
-            } else if let Some(method) = instance.class.method(property) {
-                let bind = self.manage(BoundMethod {
-                    receiver: instance,
-                    method,
-                });
-                self.fiber_mut().stack.push(Value::BoundMethod(bind));
-            } else {
-                return self.fiber_mut().runtime_error(VmError::UndefinedProperty);
-            };
-        } else {
-            return self.fiber_mut().runtime_error(VmError::UnexpectedValue);
+
+        let instance = match self.fiber_mut().stack.pop() {
+            Value::Instance(instance) => instance,
+            _ => return self.fiber_mut().runtime_error(VmError::UnexpectedValue),
+        };
+
+        if let Some(value) = instance.field(property) {
+            self.fiber_mut().stack.push(value);
+            return Signal::More;
         }
 
-        Signal::More
+        let method = match instance.class.method(property) {
+            Some(method) => method,
+            None => return self.fiber_mut().runtime_error(VmError::UndefinedProperty),
+        };
+
+        let bind = self.manage(BoundMethod {
+            receiver: instance,
+            method,
+        });
+
+        self.fiber_mut().stack.push(Value::BoundMethod(bind));
+
+        return Signal::More;
     }
 
     pub fn op_closure(&mut self) -> Signal {
@@ -519,24 +526,35 @@ impl Runtime {
 
         let current_import = self.current_import();
         let property = current_import.symbol(index);
-        if let Value::Instance(instance) = *self.fiber_mut().stack.peek_n(arity) {
-            if let Some(value) = instance.field(property) {
-                self.fiber_mut().stack.rset(arity, value);
-                return self.call(arity, value);
-            } else if let Some(method) = instance.class.method(property) {
+
+        let instance = match *self.fiber_mut().stack.peek_n(arity) {
+            Value::Instance(instance) => instance,
+            _ => return self.fiber_mut().runtime_error(VmError::UnexpectedValue),
+        };
+
+        if let Some(value) = instance.field(property) {
+            self.fiber_mut().stack.rset(arity, value);
+            return self.call(arity, value);
+        }
+
+        let method = match instance.class.method(property) {
+            Some(value) => value,
+            None => return self.fiber_mut().runtime_error(VmError::UndefinedProperty),
+        };
+
+        match method {
+            Value::Closure(method) => {
                 if method.function.arity != arity {
                     return self.fiber_mut().runtime_error(VmError::IncorrectArity);
                 }
+
                 self.store_ip();
                 self.fiber_mut().begin_frame(method);
                 self.load_ip();
-            } else {
-                return self.fiber_mut().runtime_error(VmError::UndefinedProperty);
-            };
-        } else {
-            return self.fiber_mut().runtime_error(VmError::UnexpectedValue);
-        }
 
-        Signal::More
+                return Signal::More;
+            }
+            _ => return self.call(arity, method),
+        }
     }
 }

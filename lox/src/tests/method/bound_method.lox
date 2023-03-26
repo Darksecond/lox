@@ -1,0 +1,7 @@
+class Foo {
+  method() {
+    print "method";
+  }
+}
+var foo = Foo();
+foo.method(); // expect: method

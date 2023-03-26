@@ -198,7 +198,7 @@ impl Runtime {
             }
             Value::NativeFunction(callee) => {
                 let args = self.fiber_mut().stack.pop_n(arity);
-                self.fiber_mut().stack.pop(); // discard callee
+                let _this = self.fiber_mut().stack.pop(); // discard callee
                 let result = (callee.code)(&args);
                 self.fiber_mut().stack.push(result);
             }
@@ -207,22 +207,22 @@ impl Runtime {
                 self.fiber_mut().stack.rset(arity, Value::Instance(instance));
 
                 if let Some(initializer) = class.method(self.init_symbol) {
-                    if initializer.function.arity != arity {
-                        return self.fiber_mut().runtime_error(VmError::IncorrectArity);
+                    if let Value::Closure(initializer) = initializer {
+                        if initializer.function.arity != arity {
+                            return self.fiber_mut().runtime_error(VmError::IncorrectArity);
+                        }
+                        self.fiber_mut().begin_frame(initializer);
+                    } else {
+                        return self.fiber_mut().runtime_error(VmError::UnexpectedValue);
                     }
-                    self.fiber_mut().begin_frame(initializer);
                 } else if arity != 0 {
                     // Arity must be 0 without initializer
                     return self.fiber_mut().runtime_error(VmError::IncorrectArity);
                 }
             }
             Value::BoundMethod(bind) => {
-                let callee = bind.method;
-                if callee.function.arity != arity {
-                    return self.fiber_mut().runtime_error(VmError::IncorrectArity);
-                }
                 self.fiber_mut().stack.rset(arity, Value::Instance(bind.receiver));
-                self.fiber_mut().begin_frame(callee);
+                return self.call(arity, bind.method);
 
             },
             _ => return self.fiber_mut().runtime_error(VmError::InvalidCallee),
