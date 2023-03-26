@@ -1,6 +1,6 @@
 use super::memory::Value;
 use super::interner::Symbol;
-use crate::bettergc::Trace;
+use super::gc::Trace;
 
 #[derive(Copy, Clone)]
 struct Entry {
@@ -56,6 +56,14 @@ impl Table {
         self.capacity
     }
 
+    pub fn copy_to(&self, other: &mut Table) {
+        for entry in self.entries.iter() {
+            if entry.key != Symbol::invalid() {
+                other.set(entry.key, entry.value);
+            }
+        }
+    }
+
     pub fn has(&self, key: Symbol) -> bool {
         if self.count == 0 {
             return false;
@@ -107,8 +115,7 @@ impl Table {
 
         let mut new_entries = vec![Entry { key: Symbol::invalid(), value: Value::Nil }; new_capacity].into_boxed_slice();
 
-        for index in 0..self.capacity {
-            let entry = &self.entries[index];
+        for entry in self.entries.iter() {
             let new_index = find_entry(new_capacity, &new_entries, entry.key);
             let new_entry = &mut new_entries[new_index];
 

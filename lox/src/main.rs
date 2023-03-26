@@ -1,6 +1,8 @@
 use std::env;
 
 use lox_compiler::LineOffsets;
+use lox_vm::{VirtualMachine, set_stdlib};
+use lox_bytecode::bytecode::Module;
 
 #[cfg(test)]
 mod tests;
@@ -49,10 +51,13 @@ fn main() {
         },
     };
 
-    lox_vm::bettervm::execute(module, import).unwrap();
+    // Run virtual machine
+    let mut vm = VirtualMachine::new();
+    set_stdlib(&mut vm);
+    vm.set_import(import);
+    vm.interpret(module).unwrap();
 }
 
-use lox_bytecode::bytecode::Module;
 fn import(path: &str) -> Option<Module> {
     let data = std::fs::read_to_string(format!("{}.lox", path)).unwrap();
     let offsets = LineOffsets::new(&data);

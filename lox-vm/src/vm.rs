@@ -1,8 +1,8 @@
 use lox_bytecode::bytecode::Module;
 use super::memory::*;
 use super::interner::{Symbol, Interner};
-use crate::bettergc::{Gc, Trace, Heap};
-use crate::bettervm::fiber::Fiber;
+use super::gc::{Gc, Trace, Heap};
+use crate::fiber::Fiber;
 use std::collections::HashMap;
 use std::cell::UnsafeCell;
 
@@ -42,8 +42,8 @@ pub struct Runtime {
     heap: Heap,
 
     // Env
-    print: for<'r> fn(&'r str),
-    import: for<'r> fn(&'r str) -> Option<Module>,
+    pub print: for<'r> fn(&'r str),
+    pub import: for<'r> fn(&'r str) -> Option<Module>,
 
     ip: *const u8,
 }
@@ -57,20 +57,33 @@ impl Trace for Runtime {
     }
 }
 
+pub fn default_print(value: &str) {
+    println!("{}", value);
+}
+
+pub fn default_import(_value: &str) -> Option<Module> {
+    None
+}
+
 impl Runtime {
-    pub fn new(print: for<'r> fn(&'r str), import: for<'r> fn(&'r str) -> Option<Module>) -> Self {
+    pub fn new() -> Self {
         let mut interner = Interner::new();
         let heap = Heap::new();
         let fiber = heap.manage(UnsafeCell::new(Fiber::new(None)));
+        let mut imports = HashMap::new();
+
+        let globals = heap.manage(Import::new());
+        imports.insert("_globals".to_string(), globals);
+
         Self {
             fiber,
             next_fiber: None,
             init_symbol: interner.intern("init"),
             interner,
             heap,
-            imports: HashMap::new(),
-            print,
-            import,
+            imports,
+            print: default_print,
+            import: default_import,
 
             ip: std::ptr::null(),
         }
@@ -121,15 +134,12 @@ impl Runtime {
         self.heap.manage(data)
     }
 
-    pub fn intern(&mut self, string: &str) -> Symbol {
-        self.interner.intern(string)
-    }
-
     //TODO Use name given instead of _root
     fn prepare_interpret(&mut self, module: Module) -> Gc<Closure> {
-        let import = Import::new(module, &mut self.interner);
+        let import = Import::with_module(module, &mut self.interner);
         let import = self.manage(import);
         self.imports.insert("_root".into(), import);
+        self.globals_import().copy_to(&import);
 
         let function = Function {
             arity: 0,
@@ -155,9 +165,10 @@ impl Runtime {
     pub fn load_import(&mut self, path: &str) -> Result<Gc<Import>, VmError> {
         let module = (self.import)(path);
         if let Some(module) = module {
-            let import = Import::new(module, &mut self.interner);
+            let import = Import::with_module(module, &mut self.interner);
             let import = self.manage(import);
             self.imports.insert(path.into(), import);
+            self.globals_import().copy_to(&import);
 
             Ok(import)
         } else {
@@ -177,7 +188,12 @@ impl Runtime {
 
         let identifier = self.interner.intern(identifier);
         let root = self.manage(native_function);
-        self.current_import().set_global(identifier, Value::NativeFunction(root))
+
+        self.globals_import().set_global(identifier, Value::NativeFunction(root))
+    }
+
+    fn globals_import(&self) -> Gc<Import> {
+        *self.imports.get("_globals").expect("Could not find globals import")
     }
 
     //TODO Reduce duplicate code paths

@@ -1,7 +1,7 @@
 use lox_bytecode::bytecode::{Chunk, Constant, ConstantIndex, Module, ClosureIndex, ClassIndex};
 
-use crate::bettergc::{Gc, Trace};
-use crate::bytecode::{ChunkIndex, self};
+use super::gc::{Gc, Trace};
+use lox_bytecode::bytecode::{ChunkIndex, self};
 use std::cell::{Cell, UnsafeCell};
 use super::interner::{Symbol, Interner};
 
@@ -185,7 +185,7 @@ impl std::fmt::Debug for Function {
 }
 
 impl Function {
-    pub fn new(value: &crate::bytecode::Function, import: Gc<Import>) -> Self {
+    pub fn new(value: &lox_bytecode::bytecode::Function, import: Gc<Import>) -> Self {
         Self {
             name: value.name.clone(),
             chunk_index: value.chunk_index,
@@ -224,7 +224,15 @@ impl Trace for Import {
 }
 
 impl Import {
-    pub fn new(module: Module, interner: &mut Interner) -> Self {
+    pub fn new() -> Self {
+        Self {
+            module: Module::new(),
+            globals: Default::default(),
+            symbols: Default::default(),
+        }
+    }
+
+    pub fn with_module(module: Module, interner: &mut Interner) -> Self {
         let symbols = module.identifiers().iter().map(|identifier| {
             interner.intern(identifier)
         }).collect();
@@ -234,6 +242,11 @@ impl Import {
             globals: Default::default(),
             symbols,
         }
+    }
+
+    pub fn copy_to(&self, other: &Import) {
+        let dst = unsafe { &mut *other.globals.get() };
+        self.globals().copy_to(dst);
     }
 
     fn globals(&self) -> &Table {

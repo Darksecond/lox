@@ -1,10 +1,10 @@
 use lox_bytecode::bytecode::Chunk;
-use crate::bettervm::memory::*;
-use crate::bettergc::{Trace, Gc};
+use crate::memory::*;
+use super::gc::{Trace, Gc};
 use std::cell::{Cell, UnsafeCell};
-use crate::bettervm::stack::Stack;
-use crate::bettervm::VmError;
-use crate::bettervm::vm::Signal;
+use crate::stack::Stack;
+use crate::VmError;
+use crate::vm::Signal;
 
 pub struct CallFrame {
     pub base_counter: usize,

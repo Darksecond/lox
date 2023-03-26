@@ -1,6 +1,6 @@
-use crate::bettervm::vm::{Runtime, Signal, VmError};
-use crate::bettervm::memory::*;
-use crate::bettergc::Gc;
+use crate::vm::{Runtime, Signal, VmError};
+use crate::memory::*;
+use super::gc::Gc;
 use std::cell::Cell;
 use super::fiber::Fiber;
 use std::cell::UnsafeCell;
@@ -232,7 +232,7 @@ impl Runtime {
 
     pub fn op_constant(&mut self) -> Signal {
         let index = self.next_u32() as _;
-        use crate::bytecode::Constant;
+        use lox_bytecode::bytecode::Constant;
         let current_import = self.current_import();
         match current_import.constant(index) {
             Constant::Number(n) => self.fiber_mut().stack.push(Value::Number(*n)),
@@ -485,7 +485,7 @@ impl Runtime {
             .iter()
             .map(|u| {
                 match u {
-                    crate::bytecode::Upvalue::Local(index) => {
+                    lox_bytecode::bytecode::Upvalue::Local(index) => {
                         let index = base + *index;
 
                         if let Some(upvalue) = self.fiber().find_open_upvalue_with_index(index)
@@ -497,7 +497,7 @@ impl Runtime {
                             root
                         }
                     }
-                    crate::bytecode::Upvalue::Upvalue(u) => {
+                    lox_bytecode::bytecode::Upvalue::Upvalue(u) => {
                         self.fiber().find_upvalue_by_index(*u)
                     }
                 }

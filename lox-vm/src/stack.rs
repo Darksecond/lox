@@ -1,5 +1,5 @@
-use crate::bettervm::Value;
-use crate::bettergc::Trace;
+use crate::Value;
+use super::gc::Trace;
 use std::ptr;
 
 pub struct Stack {
