@@ -1,6 +1,6 @@
-mod gc;
-mod memory;
-mod vm;
+pub mod gc;
+pub mod memory;
+mod runtime;
 mod interner;
 mod stack;
 mod ops;
@@ -8,9 +8,9 @@ mod fiber;
 mod table;
 
 use lox_bytecode::bytecode::Module;
-use self::{vm::Runtime, memory::Value};
+use self::{runtime::Runtime, memory::Value};
 
-pub use vm::VmError;
+pub use runtime::VmError;
 
 pub struct VirtualMachine {
     runtime: Runtime,

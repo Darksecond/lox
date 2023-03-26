@@ -1,4 +1,4 @@
-use crate::vm::{Runtime, Signal, VmError};
+use crate::runtime::{Runtime, Signal, VmError};
 use crate::memory::*;
 use super::gc::Gc;
 use std::cell::Cell;

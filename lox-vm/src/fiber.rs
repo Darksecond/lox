@@ -4,7 +4,7 @@ use super::gc::{Trace, Gc};
 use std::cell::{Cell, UnsafeCell};
 use crate::stack::Stack;
 use crate::VmError;
-use crate::vm::Signal;
+use crate::runtime::Signal;
 
 pub struct CallFrame {
     pub base_counter: usize,
