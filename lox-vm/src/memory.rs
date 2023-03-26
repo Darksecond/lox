@@ -251,6 +251,7 @@ impl Import {
         }
     }
 
+    #[inline]
     pub(crate) fn symbol(&self, index: ConstantIndex) -> Symbol {
         unsafe {
             *self.symbols.get_unchecked(index)
@@ -261,6 +262,7 @@ impl Import {
         self.module.chunk(index)
     }
 
+    #[inline]
     pub(crate) fn constant(&self, index: ConstantIndex) -> &Constant {
         self.module.constant(index)
     }

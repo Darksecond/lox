@@ -1,4 +1,3 @@
-use lox_bytecode::bytecode::Chunk;
 use crate::memory::*;
 use super::gc::{Trace, Gc};
 use std::cell::{Cell, UnsafeCell};
@@ -10,7 +9,6 @@ pub struct CallFrame {
     pub base_counter: usize,
     pub closure: Gc<Closure>,
 
-    chunk: *const Chunk,
     ip: *const u8,
 }
 
@@ -23,34 +21,22 @@ impl Trace for CallFrame {
 
 impl CallFrame {
     pub fn new(closure: Gc<Closure>, base_counter: usize) -> Self {
-        let chunk: *const Chunk = closure.function.import.chunk(closure.function.chunk_index);
         let ip = closure.function.import.chunk(closure.function.chunk_index).as_ptr();
         Self {
             base_counter,
             closure,
-            chunk,
             ip,
         }
     }
 
-    fn chunk(&self) -> &Chunk {
-        // We use unsafe here because it's way faster
-        // This is safe, because we have `Root<Closure>` which eventually has a `Gc<Import>`.
-        unsafe { &*self.chunk }
-    }
-
+    #[inline]
     pub fn load_ip(&self) -> *const u8 {
         self.ip
     }
 
+    #[inline]
     pub fn store_ip(&mut self, ip: *const u8) {
         self.ip = ip;
-    }
-
-    pub fn set_pc(&mut self, value: usize) {
-        unsafe {
-            self.ip = self.chunk().as_slice().as_ptr().add(value);
-        }
     }
 }
 
@@ -118,12 +104,14 @@ impl Fiber {
         !self.frames.is_empty()
     }
 
+    #[inline]
     pub fn current_frame(&self) -> &CallFrame {
         unsafe {
             &*self.current_frame
         }
     }
 
+    #[inline]
     pub fn current_frame_mut(&mut self) -> &mut CallFrame {
         unsafe {
             &mut *self.current_frame

@@ -127,7 +127,7 @@ impl Runtime {
     }
 
     pub fn op_jump(&mut self) -> Signal {
-        let to = self.next_u32() as _;
+        let to = self.next_i16();
 
         self.set_ip(to);
 
@@ -135,7 +135,7 @@ impl Runtime {
     }
 
     pub fn op_jump_if_false(&mut self) -> Signal {
-        let to = self.next_u32() as _;
+        let to = self.next_i16();
 
         if self.fiber().stack.peek_n(0).is_falsey() {
             self.set_ip(to);

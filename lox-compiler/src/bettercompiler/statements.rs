@@ -209,11 +209,11 @@ fn compile_while(
     let loop_start = compiler.instruction_index();
     compile_expr(compiler, condition);
     compiler.add_u8(opcode::JUMP_IF_FALSE);
-    let end_jump = compiler.add_u32(0);
+    let end_jump = compiler.add_i16(0);
     compiler.add_u8(opcode::POP);
     compile_stmt(compiler, body);
     compiler.add_u8(opcode::JUMP);
-    let loop_jump = compiler.add_u32(0);
+    let loop_jump = compiler.add_i16(0);
     compiler.patch_instruction_to(loop_jump, loop_start);
     compiler.patch_instruction(end_jump);
     compiler.add_u8(opcode::POP);
@@ -228,13 +228,13 @@ fn compile_if<S: AsRef<WithSpan<Stmt>>>(
     compile_expr(compiler, condition);
 
     compiler.add_u8(opcode::JUMP_IF_FALSE);
-    let then_index = compiler.add_u32(0);
+    let then_index = compiler.add_i16(0);
     compiler.add_u8(opcode::POP);
     compile_stmt(compiler, then_stmt);
 
     if let Some(else_stmt) = else_stmt {
         compiler.add_u8(opcode::JUMP);
-        let else_index = compiler.add_u32(0);
+        let else_index = compiler.add_i16(0);
         compiler.patch_instruction(then_index);
         compiler.add_u8(opcode::POP);
         compile_stmt(compiler, else_stmt.as_ref());
@@ -396,9 +396,9 @@ fn compile_logical_or(
 ) {
     compile_expr(compiler, left);
     compiler.add_u8(opcode::JUMP_IF_FALSE);
-    let else_jump = compiler.add_u32(0);
+    let else_jump = compiler.add_i16(0);
     compiler.add_u8(opcode::JUMP);
-    let end_jump = compiler.add_u32(0);
+    let end_jump = compiler.add_i16(0);
     compiler.patch_instruction(else_jump);
     compiler.add_u8(opcode::POP);
     compile_expr(compiler, right);
@@ -412,7 +412,7 @@ fn compile_logical_and(
 ) {
     compile_expr(compiler, left);
     compiler.add_u8(opcode::JUMP_IF_FALSE);
-    let end_jump = compiler.add_u32(0);
+    let end_jump = compiler.add_i16(0);
     compiler.add_u8(opcode::POP);
     compile_expr(compiler, right);
     compiler.patch_instruction(end_jump);

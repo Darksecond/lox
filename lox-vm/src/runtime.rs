@@ -250,6 +250,16 @@ impl Runtime {
     }
 
     #[inline]
+    pub fn next_i16(&mut self) -> i16 {
+        unsafe {
+            let slice = &*std::ptr::slice_from_raw_parts(self.ip, 2);
+            let value = i16::from_le_bytes(slice.try_into().unwrap());
+            self.ip = self.ip.add(2);
+            value
+        }
+    }
+
+    #[inline]
     pub fn next_u8(&mut self) -> u8 {
         unsafe {
             let value = std::ptr::read(self.ip);
@@ -270,8 +280,9 @@ impl Runtime {
     }
 
     #[inline]
-    pub fn set_ip(&mut self, to: usize) {
-        self.fiber_mut().current_frame_mut().set_pc(to);
-        self.load_ip();
+    pub fn set_ip(&mut self, to: i16) {
+        unsafe {
+            self.ip = self.ip.offset(to as isize);
+        }
     }
 }

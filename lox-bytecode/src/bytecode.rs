@@ -146,7 +146,9 @@ impl Module {
 
     #[inline]
     pub fn constant(&self, index: ConstantIndex) -> &Constant {
-        &self.constants[index]
+        unsafe {
+            self.constants.get_unchecked(index)
+        }
     }
 
     #[inline]
@@ -190,6 +192,22 @@ impl Chunk {
         self.instructions.len() - 4
     }
 
+    pub fn add_i16(&mut self, value: i16) -> InstructionIndex {
+        let bytes = value.to_le_bytes();
+        for i in 0..2 {
+            self.instructions.push(bytes[i]);
+        }
+
+        self.instructions.len() - 2
+    }
+
+    pub fn set_i16(&mut self, index: InstructionIndex, value: i16) {
+        let bytes = value.to_le_bytes();
+        for i in 0..2 {
+            self.instructions[index+i] = bytes[i];
+        }
+    }
+
     pub fn set_u32(&mut self, index: InstructionIndex, value: u32) {
         let bytes = value.to_le_bytes();
         for i in 0..4 {
@@ -209,7 +227,8 @@ impl Chunk {
 
     //TODO rework this
     pub fn patch_instruction_to(&mut self, index: InstructionIndex, to: InstructionIndex) {
-        self.set_u32(index, to as _);
+        let offset = (to as isize) - (index as isize) - 2;
+        self.set_i16(index, offset as _);
     }
 
     pub fn as_slice(&self) -> &[u8] {
@@ -220,12 +239,10 @@ impl Chunk {
         self.instructions.as_ptr()
     }
 
-    #[inline(always)]
     pub fn get_u8(&self, pc: usize) -> u8 {
         unsafe { *self.instructions.get_unchecked(pc) }
     }
 
-    #[inline(always)]
     pub fn get_u32(&self, pc: usize) -> u32 {
         let bytes = unsafe { self.instructions.get_unchecked(pc..pc+4) };
         u32::from_le_bytes(bytes.try_into().unwrap())

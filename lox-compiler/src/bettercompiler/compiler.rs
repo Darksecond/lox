@@ -209,6 +209,10 @@ impl Compiler {
         self.current_chunk_mut().add_u32(instruction)
     }
 
+    pub fn add_i16(&mut self, instruction: i16) -> InstructionIndex {
+        self.current_chunk_mut().add_i16(instruction)
+    }
+
     pub fn patch_instruction(&mut self, index: InstructionIndex) {
         self.current_chunk_mut().patch_instruction(index)
     }
