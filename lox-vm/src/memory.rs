@@ -185,7 +185,7 @@ impl std::fmt::Debug for Function {
 }
 
 impl Function {
-    pub fn new(value: &lox_bytecode::bytecode::Function, import: Gc<Import>) -> Self {
+    pub(crate) fn new(value: &lox_bytecode::bytecode::Function, import: Gc<Import>) -> Self {
         Self {
             name: value.name.clone(),
             chunk_index: value.chunk_index,
@@ -232,7 +232,7 @@ impl Import {
         }
     }
 
-    pub fn with_module(module: Module, interner: &mut Interner) -> Self {
+    pub(crate) fn with_module(module: Module, interner: &mut Interner) -> Self {
         let symbols = module.identifiers().iter().map(|identifier| {
             interner.intern(identifier)
         }).collect();
@@ -255,27 +255,27 @@ impl Import {
         }
     }
 
-    pub fn symbol(&self, index: ConstantIndex) -> Symbol {
+    pub(crate) fn symbol(&self, index: ConstantIndex) -> Symbol {
         unsafe {
             *self.symbols.get_unchecked(index)
         }
     }
 
-    pub fn chunk(&self, index: usize) -> &Chunk {
+    pub(crate) fn chunk(&self, index: usize) -> &Chunk {
         self.module.chunk(index)
     }
 
-    pub fn constant(&self, index: ConstantIndex) -> &Constant {
+    pub(crate) fn constant(&self, index: ConstantIndex) -> &Constant {
         self.module.constant(index)
     }
 
     //TODO rename to make it clear this is not an alive closure.
-    pub fn class(&self, index: ClassIndex) -> &bytecode::Class {
+    pub(crate) fn class(&self, index: ClassIndex) -> &bytecode::Class {
         self.module.class(index)
     }
 
     //TODO rename to make it clear this is not an alive closure.
-    pub fn closure(&self, index: ClosureIndex) -> &bytecode::Closure {
+    pub(crate) fn closure(&self, index: ClosureIndex) -> &bytecode::Closure {
         self.module.closure(index)
     }
 

@@ -203,7 +203,6 @@ impl<T: 'static + Trace + ?Sized> Trace for Gc<T> {
 
 use std::cell::RefCell;
 use std::collections::HashMap;
-use fxhash::FxHashMap;
 use std::hash::Hash;
 impl<T: Trace> Trace for RefCell<T> {
     #[inline]
@@ -211,6 +210,7 @@ impl<T: Trace> Trace for RefCell<T> {
         self.borrow().trace();
     }
 }
+
 impl<T: Trace> Trace for Vec<T> {
     #[inline]
     fn trace(&self) {
@@ -219,6 +219,7 @@ impl<T: Trace> Trace for Vec<T> {
         }
     }
 }
+
 impl<T: Trace> Trace for &Vec<T> {
     #[inline]
     fn trace(&self) {
@@ -227,6 +228,7 @@ impl<T: Trace> Trace for &Vec<T> {
         }
     }
 }
+
 impl<K: Eq + Hash, T: Trace> Trace for HashMap<K, T> {
     #[inline]
     fn trace(&self) {
@@ -235,14 +237,7 @@ impl<K: Eq + Hash, T: Trace> Trace for HashMap<K, T> {
         }
     }
 }
-impl<K: Eq + Hash, T: Trace> Trace for FxHashMap<K, T> {
-    #[inline]
-    fn trace(&self) {
-        for val in self.values() {
-            val.trace();
-        }
-    }
-}
+
 impl Trace for String {
     #[inline]
     fn trace(&self) {}

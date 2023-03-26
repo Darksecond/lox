@@ -8,6 +8,7 @@ default-run = "lox"
 [dependencies]
 lox-bytecode = { path = "../lox-bytecode" }
 lox-vm = { path = "../lox-vm" }
+lox-std = { path = "../lox-std" }
 lox-compiler = { path = "../lox-compiler" }
 serde_json = "1.0"
 

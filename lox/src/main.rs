@@ -1,7 +1,8 @@
 use std::env;
 
 use lox_compiler::LineOffsets;
-use lox_vm::{VirtualMachine, set_stdlib};
+use lox_vm::VirtualMachine;
+use lox_std::set_stdlib;
 use lox_bytecode::bytecode::Module;
 
 #[cfg(test)]

@@ -37,9 +37,9 @@ pub struct Runtime {
     pub fiber: Gc<UnsafeCell<Fiber>>,
     next_fiber: Option<Gc<UnsafeCell<Fiber>>>,
     init_symbol: Symbol,
-    interner: Interner,
+    pub interner: Interner,
     imports: HashMap<String, Gc<Import>>,
-    heap: Heap,
+    pub heap: Heap,
 
     // Env
     pub print: for<'r> fn(&'r str),
@@ -180,19 +180,7 @@ impl Runtime {
         self.fiber().current_frame().closure.function.import
     }
 
-    pub fn set_native_fn(&mut self, identifier: &str, code: fn(&[Value]) -> Value) {
-        let native_function = NativeFunction {
-            name: identifier.to_string(),
-            code,
-        };
-
-        let identifier = self.interner.intern(identifier);
-        let root = self.manage(native_function);
-
-        self.globals_import().set_global(identifier, Value::NativeFunction(root))
-    }
-
-    fn globals_import(&self) -> Gc<Import> {
+    pub fn globals_import(&self) -> Gc<Import> {
         *self.imports.get("_globals").expect("Could not find globals import")
     }
 

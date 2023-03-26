@@ -6,4 +6,3 @@ edition = "2021"
 
 [dependencies]
 lox-bytecode = { path = "../lox-bytecode" }
-fxhash = "0.2.1"

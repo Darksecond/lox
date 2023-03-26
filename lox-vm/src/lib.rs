@@ -1,7 +1,8 @@
 pub mod gc;
 pub mod memory;
+pub mod interner;
+
 mod runtime;
-mod interner;
 mod stack;
 mod ops;
 mod fiber;
@@ -9,6 +10,10 @@ mod table;
 
 use lox_bytecode::bytecode::Module;
 use self::{runtime::Runtime, memory::Value};
+use interner::Symbol;
+use memory::Import;
+use memory::NativeFunction;
+use gc::Gc;
 
 pub use runtime::VmError;
 
@@ -36,21 +41,39 @@ impl VirtualMachine {
         self.runtime.interpret()
     }
 
-    pub fn set_native_fn(&mut self, identifier: &str, code: fn(&[Value]) -> Value) {
-        self.runtime.set_native_fn(identifier, code)
+    pub fn native(&mut self) -> Native {
+        Native {
+            runtime: &mut self.runtime,
+        }
     }
 }
 
-/// Add the lox standard library to a Vm instance.
-/// Right now the stdlib consists of 'clock'.
-pub fn set_stdlib(outer: &mut VirtualMachine) {
-    outer.set_native_fn("clock", |_args| {
-        use std::time::{SystemTime, UNIX_EPOCH};
+pub struct Native<'a> {
+    runtime: &'a mut Runtime,
+}
 
-        let time = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_secs_f64();
-        memory::Value::Number(time)
-    });
+impl Native<'_> {
+    pub fn intern(&mut self, value: &str) -> Symbol {
+        self.runtime.interner.intern(value)
+    }
+
+    pub fn set_fn(&mut self, import: Gc<Import>, identifier: &str, code: fn(&[Value]) -> Value) {
+        let native_function = NativeFunction {
+            name: identifier.to_string(),
+            code,
+        };
+
+        let identifier = self.runtime.interner.intern(identifier);
+        let root = self.runtime.manage(native_function);
+
+        import.set_global(identifier, Value::NativeFunction(root))
+    }
+
+    pub fn set_global_fn(&mut self, identifier: &str, code: fn(&[Value]) -> Value) {
+        self.set_fn(self.global_import(), identifier, code)
+    }
+
+    pub fn global_import(&self) -> Gc<Import> {
+        self.runtime.globals_import()
+    }
 }

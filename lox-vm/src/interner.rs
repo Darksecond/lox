@@ -1,4 +1,4 @@
-use fxhash::FxHashMap;
+use std::collections::HashMap;
 
 #[derive(Hash, Eq, PartialEq, Debug, Copy, Clone)]
 pub struct Symbol(pub u32);
@@ -11,14 +11,14 @@ impl Symbol {
 
 pub struct Interner {
     next: u32,
-    map: FxHashMap<String, Symbol>,
+    map: HashMap<String, Symbol>,
 }
 
 impl Interner {
     pub fn new() -> Self {
         Self {
             next: 1,
-            map: FxHashMap::default(),
+            map: HashMap::default(),
         }
     }
 

@@ -39,7 +39,7 @@ fn execute(source: &str) -> (Vec<String>, TestResult) {
 
     let mut vm = lox_vm::VirtualMachine::new();
     vm.set_stdout(print);
-    lox_vm::set_stdlib(&mut vm);
+    lox_std::set_stdlib(&mut vm);
     let result = match vm.interpret(module) {
         Ok(_) => TestResult::Ok,
         Err(err) => {
