@@ -1,4 +1,4 @@
-use super::memory::Value;
+use super::value::Value;
 use super::interner::Symbol;
 use super::gc::Trace;
 
@@ -41,7 +41,7 @@ impl Table {
 
     #[allow(dead_code)]
     pub fn new() -> Self {
-        let entries = vec![Entry { key: Symbol::invalid(), value: Value::Nil }; Self::INITIAL_CAPACITY].into_boxed_slice();
+        let entries = vec![Entry { key: Symbol::invalid(), value: Value::NIL }; Self::INITIAL_CAPACITY].into_boxed_slice();
 
         Self {
             count: 0,
@@ -118,7 +118,7 @@ impl Table {
         let new_capacity = if self.capacity < 8 { 8 } else { self.capacity * 2 };
 
         //TODO Use realloc (see https://doc.rust-lang.org/nomicon/vec/vec-alloc.html)
-        let mut new_entries = vec![Entry { key: Symbol::invalid(), value: Value::Nil }; new_capacity].into_boxed_slice();
+        let mut new_entries = vec![Entry { key: Symbol::invalid(), value: Value::NIL }; new_capacity].into_boxed_slice();
 
         for entry in self.entries.iter() {
             let new_index = find_entry(new_capacity, &new_entries, entry.key);

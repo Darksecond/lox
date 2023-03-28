@@ -1,4 +1,4 @@
-use crate::Value;
+use crate::value::Value;
 use super::gc::Trace;
 use std::ptr;
 
@@ -8,7 +8,7 @@ pub struct StackBlock {
 
 impl StackBlock {
     pub fn new(size: usize) -> Self {
-        let stack = vec![Value::Nil; size].into_boxed_slice();
+        let stack = vec![Value::NIL; size].into_boxed_slice();
         let stack = Box::into_raw(stack);
 
         Self {

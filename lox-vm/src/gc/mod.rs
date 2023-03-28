@@ -173,6 +173,19 @@ impl<T: 'static + Trace + ?Sized> Gc<T> {
         a.ptr == b.ptr
     }
 }
+
+impl<T: 'static + Trace> Gc<T> {
+    pub fn to_bits(self) -> u64 {
+        self.ptr.as_ptr() as u64
+    }
+
+    pub unsafe fn from_bits(value: u64) -> Self {
+        Self {
+            ptr: NonNull::new_unchecked(value as *mut Allocation<T>),
+        }
+    }
+}
+
 impl<T: 'static + Trace + ?Sized> Copy for Gc<T> {}
 impl<T: 'static + Trace + ?Sized> Clone for Gc<T> {
     #[inline]

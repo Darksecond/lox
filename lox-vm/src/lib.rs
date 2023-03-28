@@ -1,6 +1,7 @@
 pub mod gc;
 pub mod memory;
 pub mod interner;
+pub mod value;
 
 mod runtime;
 mod stack;
@@ -11,7 +12,8 @@ mod table;
 use lox_bytecode::bytecode::Module;
 use runtime::Runtime;
 use interner::Symbol;
-use memory::{Import, NativeFunction, Value};
+use memory::{Import, NativeFunction, Object};
+use value::Value;
 use gc::{Gc, Trace};
 
 pub use runtime::VmError;
@@ -60,23 +62,23 @@ impl Native<'_> {
         self.runtime.heap.manage(value)
     }
 
-    pub fn set_fn(&mut self, import: Gc<Import>, identifier: &str, code: fn(&[Value]) -> Value) {
+    pub fn set_fn(&mut self, import: Gc<Object<Import>>, identifier: &str, code: fn(&[Value]) -> Value) {
         let native_function = NativeFunction {
             name: identifier.to_string(),
             code,
         };
 
         let identifier = self.runtime.interner.intern(identifier);
-        let root = self.runtime.manage(native_function);
+        let root = self.runtime.manage(Object::from_native_function(native_function));
 
-        import.set_global(identifier, Value::NativeFunction(root))
+        import.data.set_global(identifier, Value::from_object(root))
     }
 
     pub fn set_global_fn(&mut self, identifier: &str, code: fn(&[Value]) -> Value) {
         self.set_fn(self.global_import(), identifier, code)
     }
 
-    pub fn global_import(&self) -> Gc<Import> {
+    pub fn global_import(&self) -> Gc<Object<Import>> {
         self.runtime.globals_import()
     }
 }

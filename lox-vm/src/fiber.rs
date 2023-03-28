@@ -1,4 +1,5 @@
 use crate::memory::*;
+use crate::value::Value;
 use super::gc::{Trace, Gc};
 use std::cell::{Cell, UnsafeCell};
 use crate::stack::{Stack, StackBlock};
@@ -7,7 +8,7 @@ use crate::runtime::Signal;
 
 pub struct CallFrame {
     pub base_counter: usize,
-    pub closure: Gc<Closure>,
+    pub closure: Gc<Object<Closure>>,
 
     ip: *const u8,
 }
@@ -20,11 +21,11 @@ impl Trace for CallFrame {
 }
 
 impl CallFrame {
-    pub fn new(closure: Gc<Closure>, base_counter: usize) -> Self {
-        let ip = closure.function.import.chunk(closure.function.chunk_index).as_ptr();
+    pub fn new(object: Gc<Object<Closure>>, base_counter: usize) -> Self {
+        let ip = object.data.function.import.data.chunk(object.data.function.chunk_index).as_ptr();
         Self {
             base_counter,
-            closure,
+            closure: object,
             ip,
         }
     }
@@ -82,8 +83,8 @@ impl Fiber {
         Signal::RuntimeError
     }
 
-    pub fn begin_frame(&mut self, closure: Gc<Closure>) {
-        self.frames.push(CallFrame::new(closure, self.stack.len() - closure.function.arity - 1));
+    pub fn begin_frame(&mut self, closure: Gc<Object<Closure>>) {
+        self.frames.push(CallFrame::new(closure, self.stack.len() - closure.data.function.arity - 1));
 
         // We don't just offset(1) here because Vec might reallocate contents.
         unsafe {
@@ -146,7 +147,7 @@ impl Fiber {
 
     pub fn find_upvalue_by_index(&self, index: usize) -> Gc<Cell<Upvalue>> {
         let frame = self.current_frame();
-        frame.closure.upvalues[index]
+        frame.closure.data.upvalues[index]
     }
 
     pub fn find_open_upvalue_with_index(&self, index: usize) -> Option<Gc<Cell<Upvalue>>> {

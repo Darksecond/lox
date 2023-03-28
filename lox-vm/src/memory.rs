@@ -1,4 +1,5 @@
 use lox_bytecode::bytecode::{Chunk, Constant, ConstantIndex, Module, ClosureIndex, ClassIndex};
+use crate::value::Value;
 
 use super::gc::{Gc, Trace};
 use lox_bytecode::bytecode::{ChunkIndex, self};
@@ -56,12 +57,12 @@ impl Trace for Upvalue {
 
 #[derive(Debug)]
 pub struct Instance {
-    pub class: Gc<Class>,
+    pub class: Gc<Object<Class>>,
     fields: UnsafeCell<Table>,
 }
 
 impl Instance {
-    pub fn new(klass: Gc<Class>) -> Self {
+    pub fn new(klass: Gc<Object<Class>>) -> Self {
         Self {
             class: klass,
             fields: Default::default(),
@@ -168,7 +169,7 @@ impl Trace for NativeFunction {
 pub struct Function {
     pub name: String,
     pub chunk_index: ChunkIndex,
-    pub import: Gc<Import>,
+    pub import: Gc<Object<Import>>,
     pub arity: usize,
 }
 
@@ -181,7 +182,7 @@ impl std::fmt::Debug for Function {
 }
 
 impl Function {
-    pub(crate) fn new(value: &lox_bytecode::bytecode::Function, import: Gc<Import>) -> Self {
+    pub(crate) fn new(value: &lox_bytecode::bytecode::Function, import: Gc<Object<Import>>) -> Self {
         Self {
             name: value.name.clone(),
             chunk_index: value.chunk_index,
@@ -193,7 +194,7 @@ impl Function {
 
 #[derive(Debug, Copy, Clone)]
 pub struct BoundMethod {
-    pub receiver: Gc<Instance>,
+    pub receiver: Gc<Object<Instance>>,
     pub method: Value,
 }
 
@@ -292,87 +293,168 @@ impl Import {
     }
 }
 
-#[derive(Debug, Copy, Clone)]
-pub enum Value {
-    Nil,
-    Number(f64),
-    String(Gc<String>),
-    Closure(Gc<Closure>),
-    BoundMethod(Gc<BoundMethod>),
-    NativeFunction(Gc<NativeFunction>),
-    Boolean(bool),
-    Class(Gc<Class>),
-    Instance(Gc<Instance>),
-    Import(Gc<Import>),
+#[derive(Debug, PartialEq, Copy, Clone)]
+pub enum ObjectTag {
+    String,
+    Closure,
+    BoundMethod,
+    NativeFunction,
+    Class,
+    Instance,
+    Import,
 }
 
-impl Trace for Value {
-    #[inline]
+#[derive(Debug)]
+#[repr(C)]
+pub struct Object<T> {
+    pub tag: ObjectTag,
+    pub data: T,
+}
+
+impl<T: Trace> Trace for Object<T> {
     fn trace(&self) {
-        match self {
-            Value::String(string) => string.trace(),
-            Value::NativeFunction(function) => function.trace(),
-            Value::Closure(closure) => closure.trace(),
-            Value::BoundMethod(bound_method) => bound_method.trace(),
-            Value::Class(class) => class.trace(),
-            Value::Instance(instance) => instance.trace(),
-            Value::Number(_) => (),
-            Value::Nil => (),
-            Value::Boolean(_) => (),
-            Value::Import(import) => import.trace(),
+        self.data.trace();
+    }
+}
+
+impl Trace for Object<()> {
+    fn trace(&self) {
+        todo!()
+    }
+}
+
+impl Object<NativeFunction> {
+    pub fn from_native_function(data: NativeFunction) -> Object<NativeFunction> {
+        Self {
+            tag: ObjectTag::NativeFunction,
+            data,
         }
     }
 }
 
-impl Value {
-    pub const fn is_falsey(&self) -> bool {
-        match self {
-            Value::Boolean(true) => false,
-            Value::Boolean(false) => true,
-            Value::Nil => true,
-            _ => false,
+impl From<Closure> for Object<Closure> {
+    fn from(value: Closure) -> Self {
+        Self {
+            tag: ObjectTag::Closure,
+            data: value,
+        }
+    }
+}
+
+impl From<Instance> for Object<Instance> {
+    fn from(value: Instance) -> Self {
+        Self {
+            tag: ObjectTag::Instance,
+            data: value,
+        }
+    }
+}
+
+impl From<Class> for Object<Class> {
+    fn from(value: Class) -> Self {
+        Self {
+            tag: ObjectTag::Class,
+            data: value,
+        }
+    }
+}
+
+impl From<String> for Object<String> {
+    fn from(value: String) -> Self {
+        Self {
+            tag: ObjectTag::String,
+            data: value,
+        }
+    }
+}
+
+impl From<Import> for Object<Import> {
+    fn from(value: Import) -> Self {
+        Self {
+            tag: ObjectTag::Import,
+            data: value,
+        }
+    }
+}
+
+impl From<BoundMethod> for Object<BoundMethod> {
+    fn from(value: BoundMethod) -> Self {
+        Self {
+            tag: ObjectTag::BoundMethod,
+            data: value,
+        }
+    }
+}
+
+impl<T> From<Gc<Object<T>>> for Gc<Object<()>> where T: Trace {
+    fn from(value: Gc<Object<T>>) -> Self {
+        unsafe {
+            Gc::from_bits(value.to_bits())
+        }
+    }
+}
+
+impl Gc<Object<()>> {
+    pub fn as_string(self) -> Gc<Object<String>> {
+        assert_eq!(self.tag, ObjectTag::String);
+        unsafe {
+            Gc::from_bits(self.to_bits())
         }
     }
 
-    pub const fn is_same_type(a: &Value, b: &Value) -> bool {
-        matches!((b,a), 
-                 (Value::Number(_), Value::Number(_))
-                 | (Value::Boolean(_), Value::Boolean(_))
-                 | (Value::String(_), Value::String(_))
-                 | (Value::NativeFunction(_), Value::NativeFunction(_))
-                 | (Value::Closure(_), Value::Closure(_))
-                 | (Value::BoundMethod(_), Value::BoundMethod(_))
-                 | (Value::Nil, Value::Nil)
-                 | (Value::Class(_), Value::Class(_))
-                 | (Value::Instance(_), Value::Instance(_))
-                 | (Value::Import(_), Value::Import(_))
+    pub fn as_closure(self) -> Gc<Object<Closure>> {
+        assert_eq!(self.tag, ObjectTag::Closure);
+        unsafe {
+            Gc::from_bits(self.to_bits())
+        }
+    }
+
+    pub fn as_bound_method(self) -> Gc<Object<BoundMethod>> {
+        assert_eq!(self.tag, ObjectTag::BoundMethod);
+        unsafe {
+            Gc::from_bits(self.to_bits())
+        }
+    }
+
+    pub fn as_native_function(self) -> Gc<Object<NativeFunction>> {
+        assert_eq!(self.tag, ObjectTag::NativeFunction);
+        unsafe {
+            Gc::from_bits(self.to_bits())
+        }
+    }
+
+    pub fn as_class(self) -> Gc<Object<Class>> {
+        assert_eq!(self.tag, ObjectTag::Class);
+        unsafe {
+            Gc::from_bits(self.to_bits())
+        }
+    }
+
+    pub fn as_instance(self) -> Gc<Object<Instance>> {
+        assert_eq!(self.tag, ObjectTag::Instance);
+        unsafe {
+            Gc::from_bits(self.to_bits())
+        }
+    }
+
+    pub fn as_import(self) -> Gc<Object<Import>> {
+        assert_eq!(self.tag, ObjectTag::Import);
+        unsafe {
+            Gc::from_bits(self.to_bits())
+        }
+    }
+}
+
+impl<T> Object<T> {
+    pub const fn is_same_type(a: &Self, b: &Self) -> bool {
+        matches!((b.tag,a.tag), 
+                 | (ObjectTag::String, ObjectTag::String)
+                 | (ObjectTag::NativeFunction, ObjectTag::NativeFunction)
+                 | (ObjectTag::Closure, ObjectTag::Closure)
+                 | (ObjectTag::BoundMethod, ObjectTag::BoundMethod)
+                 | (ObjectTag::Class, ObjectTag::Class)
+                 | (ObjectTag::Instance, ObjectTag::Instance)
+                 | (ObjectTag::Import, ObjectTag::Import)
                 )
-    }
-}
-
-impl From<bool> for Value {
-    fn from(value: bool) -> Self {
-        if value {
-            Value::Boolean(true)
-        } else {
-            Value::Boolean(false)
-        }
-    }
-}
-
-impl std::fmt::Display for Value {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Value::Number(n) => write!(f, "{}", n),
-            Value::Nil => write!(f, "nil"),
-            Value::Boolean(boolean) => write!(f, "{}", boolean),
-            Value::String(string) => write!(f, "{}", string),
-            Value::NativeFunction(_function) => write!(f, "<native fn>"),
-            Value::Closure(closure) => write!(f, "<fn {}>", closure.function.name),
-            Value::Class(class) => write!(f, "{}", class.name),
-            Value::Instance(instance) => write!(f, "{} instance", instance.class.name),
-            Value::BoundMethod(bind) => write!(f, "<bound {}>", bind.method),
-            Value::Import(_) => write!(f, "<import>"),
-        }
     }
 }
