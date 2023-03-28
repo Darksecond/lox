@@ -1,5 +1,5 @@
 use crate::gc::{Gc, Trace};
-use crate::memory::Object;
+use crate::memory::ErasedObject;
 use std::fmt::Display;
 
 const QNAN: u64 = 0x7ffc000000000000;
@@ -17,17 +17,21 @@ impl Value {
     pub const FALSE: Self = Self(QNAN | TAG_FALSE);
     pub const TRUE: Self = Self(QNAN | TAG_TRUE);
 
-    pub fn from_object(value: impl Into<Gc<Object<()>>>) -> Self {
-        Self(SIGN_BIT | QNAN | value.into().to_bits())
+    pub fn from_object(value: impl Into<Gc<ErasedObject>>) -> Self {
+        let bits = value.into().to_bits();
+            println!("F {:08x}", bits);
+        Self(SIGN_BIT | QNAN | bits)
     }
 
     pub fn is_object(self) -> bool {
-        self.0 & (SIGN_BIT | QNAN) == SIGN_BIT | QNAN
+        self.0 & (SIGN_BIT | QNAN) == (SIGN_BIT | QNAN)
     }
 
-    pub fn as_object(self) -> Gc<Object<()>> {
+    pub fn as_object(self) -> Gc<ErasedObject> {
         unsafe {
-            Gc::from_bits(self.0 & !(SIGN_BIT | QNAN))
+            let bits = self.0 & (!(SIGN_BIT | QNAN));
+            println!("T {:08x}", bits);
+            Gc::from_bits(bits)
         }
     }
 
@@ -57,7 +61,7 @@ impl Value {
         if a.is_number() && b.is_number() {
             true
         } else if a.is_object() && b.is_object() {
-            Object::is_same_type(&a.as_object(), &b.as_object())
+            ErasedObject::is_same_type(&a.as_object(), &b.as_object())
         } else {
             false
         }
@@ -102,6 +106,7 @@ impl PartialEq for Value {
 
 impl Display for Value {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        use crate::memory::ObjectTag;
         if self.0 == Self::NIL.0 {
             write!(f, "nil")
         } else if self.0 == Self::TRUE.0 {
@@ -109,7 +114,12 @@ impl Display for Value {
         } else if self.0 == Self::FALSE.0 {
             write!(f, "false")
         } else if self.is_object() {
-            write!(f, "object") //TODO proper display
+            let obj = self.as_object();
+            if obj.tag == ObjectTag::String {
+                write!(f, "{}", obj.as_string().as_str())
+            } else {
+                write!(f, "object {:?}", obj.tag) //TODO proper display
+            }
         } else {
             write!(f, "{}", self.as_number())
         }

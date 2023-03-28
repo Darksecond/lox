@@ -4,6 +4,7 @@ use crate::value::Value;
 use super::gc::{Gc, Trace};
 use lox_bytecode::bytecode::{ChunkIndex, self};
 use std::cell::{Cell, UnsafeCell};
+use std::ops::Deref;
 use super::interner::{Symbol, Interner};
 
 use super::table::Table;
@@ -306,20 +307,34 @@ pub enum ObjectTag {
 
 #[derive(Debug)]
 #[repr(C)]
+pub struct ErasedObject {
+    pub tag: ObjectTag,
+}
+
+impl Trace for ErasedObject {
+    fn trace(&self) {
+        todo!()
+    }
+}
+
+#[derive(Debug)]
+#[repr(C)]
 pub struct Object<T> {
     pub tag: ObjectTag,
-    pub data: T,
+    data: T,
+}
+
+impl<T> Deref for Object<T> {
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        &self.data
+    }
 }
 
 impl<T: Trace> Trace for Object<T> {
     fn trace(&self) {
         self.data.trace();
-    }
-}
-
-impl Trace for Object<()> {
-    fn trace(&self) {
-        todo!()
     }
 }
 
@@ -386,7 +401,7 @@ impl From<BoundMethod> for Object<BoundMethod> {
     }
 }
 
-impl<T> From<Gc<Object<T>>> for Gc<Object<()>> where T: Trace {
+impl<T> From<Gc<Object<T>>> for Gc<ErasedObject> where T: Trace {
     fn from(value: Gc<Object<T>>) -> Self {
         unsafe {
             Gc::from_bits(value.to_bits())
@@ -394,7 +409,7 @@ impl<T> From<Gc<Object<T>>> for Gc<Object<()>> where T: Trace {
     }
 }
 
-impl Gc<Object<()>> {
+impl Gc<ErasedObject> {
     pub fn as_string(self) -> Gc<Object<String>> {
         assert_eq!(self.tag, ObjectTag::String);
         unsafe {
@@ -446,15 +461,13 @@ impl Gc<Object<()>> {
 }
 
 impl<T> Object<T> {
-    pub const fn is_same_type(a: &Self, b: &Self) -> bool {
-        matches!((b.tag,a.tag), 
-                 | (ObjectTag::String, ObjectTag::String)
-                 | (ObjectTag::NativeFunction, ObjectTag::NativeFunction)
-                 | (ObjectTag::Closure, ObjectTag::Closure)
-                 | (ObjectTag::BoundMethod, ObjectTag::BoundMethod)
-                 | (ObjectTag::Class, ObjectTag::Class)
-                 | (ObjectTag::Instance, ObjectTag::Instance)
-                 | (ObjectTag::Import, ObjectTag::Import)
-                )
+    pub fn is_same_type(a: &Self, b: &Self) -> bool {
+        a.tag == b.tag
+    }
+}
+
+impl ErasedObject {
+    pub fn is_same_type(a: &Self, b: &Self) -> bool {
+        a.tag == b.tag
     }
 }

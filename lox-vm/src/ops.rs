@@ -11,7 +11,9 @@ impl Runtime {
         use lox_bytecode::opcode;
 
         loop {
-            let result = match self.next_u8() {
+            let opcode = self.next_u8();
+            println!("opcode: {}", opcode);
+            let result = match opcode {
                 opcode::CONSTANT      => self.op_constant(),
                 opcode::IMPORT        => self.op_import(),
                 opcode::IMPORT_GLOBAL => self.op_import_global(),
@@ -68,7 +70,7 @@ impl Runtime {
         let index: usize = self.next_u32() as _;
 
         let current_import = self.current_import();
-        let constant = current_import.data.constant(index);
+        let constant = current_import.constant(index);
         match constant {
             lox_bytecode::bytecode::Constant::String(path) => {
                 if let Some(import) = self.import(&path) {
@@ -76,7 +78,7 @@ impl Runtime {
                     return Signal::More;
                 }
 
-                let import = match self.load_import(path) {
+                let import = match self.load_import(&path) {
                     Ok(import) => import,
                     Err(err) => return self.fiber.as_mut().runtime_error(err),
                 };
@@ -114,12 +116,12 @@ impl Runtime {
     pub fn op_import_global(&mut self) -> Signal {
         let index: usize = self.next_u32() as _;
         let current_import = self.current_import();
-        let identifier = current_import.data.symbol(index);
+        let identifier = current_import.symbol(index);
 
         let import = self.fiber.as_ref().stack.peek_n(0);
         if import.is_import() {
             let import = import.as_object().as_import();
-            let value = import.data.global(identifier).unwrap_or(Value::NIL);
+            let value = import.global(identifier).unwrap_or(Value::NIL);
             self.fiber.as_mut().stack.push(value);
         } else {
             return self.fiber.as_mut().runtime_error(VmError::UnexpectedConstant)
@@ -151,7 +153,7 @@ impl Runtime {
         let index = self.next_u8() as _;
 
         let current_import = self.current_import();
-        let class = current_import.data.class(index);
+        let class = current_import.class(index);
         let class: Gc<Object<Class>> = self.manage(Class::new(class.name.clone()).into());
         self.fiber.as_mut().stack.push(Value::from_object(class));
 
@@ -177,10 +179,11 @@ impl Runtime {
         let index = self.next_u32() as _;
 
         let current_import = self.current_import();
-        let identifier = current_import.data.symbol(index);
+        let identifier = current_import.symbol(index);
 
         let class = self.fiber.as_ref().stack.peek_n(1);
         if class.is_object() && class.as_object().tag != ObjectTag::Class {
+            println!("TAG: {:?}", class.as_object().tag);
             return self.fiber.as_mut().runtime_error(VmError::UnexpectedConstant)
         }
         let class = class.as_object().as_class();
@@ -191,7 +194,7 @@ impl Runtime {
         }
         let closure = closure.as_object().as_closure();
 
-        class.data.set_method(identifier, Value::from_object(closure));
+        class.set_method(identifier, Value::from_object(closure));
 
         self.fiber.as_mut().stack.pop();
 
@@ -241,7 +244,7 @@ impl Runtime {
         let index = self.next_u32() as _;
         use lox_bytecode::bytecode::Constant;
         let current_import = self.current_import();
-        match current_import.data.constant(index) {
+        match current_import.constant(index) {
             Constant::Number(n) => self.fiber.as_mut().stack.push((*n).into()),
             Constant::String(string) => self.push_string(string),
         }
@@ -350,7 +353,7 @@ impl Runtime {
             if a.tag == ObjectTag::String && b.tag == ObjectTag::String {
                 let a = a.as_string();
                 let b = b.as_string();
-                self.push_string(format!("{}{}", a.data, b.data))
+                self.push_string(format!("{}{}", a.as_str(), b.as_str()))
             } else {
                 return self.fiber.as_mut().runtime_error(VmError::UnexpectedValue);
             }
@@ -362,7 +365,7 @@ impl Runtime {
     pub fn op_get_upvalue(&mut self) -> Signal {
         let index = self.next_u32() as usize;
 
-        let upvalue = self.fiber.as_ref().current_frame().closure.data.upvalues[index];
+        let upvalue = self.fiber.as_ref().current_frame().closure.upvalues[index];
         let value = self.fiber.as_ref().resolve_upvalue_into_value(upvalue);
         self.fiber.as_mut().stack.push(value);
 
@@ -373,7 +376,7 @@ impl Runtime {
         let index = self.next_u32() as usize;
 
         let value = self.fiber.as_ref().stack.peek_n(0);
-        let upvalue = self.fiber.as_ref().current_frame().closure.data.upvalues[index];
+        let upvalue = self.fiber.as_ref().current_frame().closure.upvalues[index];
         self.fiber.as_mut().set_upvalue(upvalue, value);
         Signal::More
     }
@@ -430,9 +433,9 @@ impl Runtime {
         let index = self.next_u32() as _;
 
         let current_import = self.current_import();
-        let identifier = current_import.data.symbol(index);
+        let identifier = current_import.symbol(index);
         let value = self.fiber.as_mut().stack.pop();
-        current_import.data.set_global(identifier, value);
+        current_import.set_global(identifier, value);
 
         Signal::More
     }
@@ -441,8 +444,8 @@ impl Runtime {
         let index = self.next_u32() as _;
 
         let current_import = self.current_import();
-        let identifier = current_import.data.symbol(index);
-        let value = current_import.data.global(identifier);
+        let identifier = current_import.symbol(index);
+        let value = current_import.global(identifier);
         if let Some(value) = value {
             self.fiber.as_mut().stack.push(value);
         } else {
@@ -456,10 +459,10 @@ impl Runtime {
         let index = self.next_u32() as _;
 
         let current_import = self.current_import();
-        let identifier = current_import.data.symbol(index);
+        let identifier = current_import.symbol(index);
         let value = self.fiber.as_mut().stack.peek_n(0);
-        if current_import.data.has_global(identifier) {
-            current_import.data.set_global(identifier, value);
+        if current_import.has_global(identifier) {
+            current_import.set_global(identifier, value);
         } else {
             return self.fiber.as_mut().runtime_error(VmError::GlobalNotDefined);
         }
@@ -471,7 +474,7 @@ impl Runtime {
         let index = self.next_u32() as _;
 
         let current_import = self.current_import();
-        let property = current_import.data.symbol(index);
+        let property = current_import.symbol(index);
 
         let instance = self.fiber.as_ref().stack.peek_n(1);
 
@@ -481,7 +484,7 @@ impl Runtime {
 
         let instance = instance.as_object().as_instance();
 
-        instance.data.set_field(property, self.fiber.as_ref().stack.peek_n(0));
+        instance.set_field(property, self.fiber.as_ref().stack.peek_n(0));
         self.adjust_size(instance);
 
         let value = self.fiber.as_mut().stack.pop();
@@ -495,7 +498,7 @@ impl Runtime {
         let index = self.next_u32() as _;
 
         let current_import = self.current_import();
-        let property = current_import.data.symbol(index);
+        let property = current_import.symbol(index);
 
         let instance = self.fiber.as_mut().stack.pop();
 
@@ -505,12 +508,12 @@ impl Runtime {
 
         let instance = instance.as_object().as_instance();
 
-        if let Some(value) = instance.data.field(property) {
+        if let Some(value) = instance.field(property) {
             self.fiber.as_mut().stack.push(value);
             return Signal::More;
         }
 
-        let method = match instance.data.class.data.method(property) {
+        let method = match instance.class.method(property) {
             Some(method) => method,
             None => return self.fiber.as_mut().runtime_error(VmError::UndefinedProperty),
         };
@@ -529,7 +532,7 @@ impl Runtime {
         let index = self.next_u32() as _;
 
         let current_import = self.current_import();
-        let closure = current_import.data.closure(index);
+        let closure = current_import.closure(index);
         let base = self.fiber.as_ref().current_frame().base_counter;
         let upvalues = closure
             .upvalues
@@ -569,7 +572,7 @@ impl Runtime {
         let index = self.next_u32() as _;
 
         let current_import = self.current_import();
-        let property = current_import.data.symbol(index);
+        let property = current_import.symbol(index);
 
         let instance = self.fiber.as_mut().stack.peek_n(arity);
         if !instance.is_instance() {
@@ -578,19 +581,19 @@ impl Runtime {
 
         let instance = instance.as_object().as_instance();
 
-        if let Some(value) = instance.data.field(property) {
+        if let Some(value) = instance.field(property) {
             self.fiber.as_mut().stack.rset(arity, value);
             return self.call(arity, value);
         }
 
-        let method = match instance.data.class.data.method(property) {
+        let method = match instance.class.method(property) {
             Some(value) => value,
             None => return self.fiber.as_mut().runtime_error(VmError::UndefinedProperty),
         };
 
         if method.is_object() && method.as_object().tag == ObjectTag::Closure {
             let method = method.as_object().as_closure();
-            if method.data.function.arity != arity {
+            if method.function.arity != arity {
                 return self.fiber.as_mut().runtime_error(VmError::IncorrectArity);
             }
 
