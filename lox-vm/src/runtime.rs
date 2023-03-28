@@ -133,7 +133,7 @@ impl Runtime {
         let import = Import::with_module(module, &mut self.interner);
         let import = self.manage(import.into());
         self.imports.insert("_root".into(), import);
-        self.globals_import().data.copy_to(&import.data);
+        self.globals_import().copy_to(&import);
 
         let function = Function {
             arity: 0,
@@ -162,7 +162,7 @@ impl Runtime {
             let import = Import::with_module(module, &mut self.interner);
             let import = self.manage(import.into());
             self.imports.insert(path.into(), import);
-            self.globals_import().data.copy_to(&import.data);
+            self.globals_import().copy_to(&import);
 
             Ok(import)
         } else {
@@ -171,7 +171,7 @@ impl Runtime {
     }
 
     pub fn current_import(&self) -> Gc<Object<Import>> {
-        self.fiber.as_ref().current_frame().closure.data.function.import
+        self.fiber.as_ref().current_frame().closure.function.import
     }
 
     pub fn globals_import(&self) -> Gc<Object<Import>> {
@@ -192,7 +192,7 @@ impl Runtime {
         match callee.tag {
             ObjectTag::Closure => {
                 let callee = callee.as_closure();
-                if callee.data.function.arity != arity {
+                if callee.function.arity != arity {
                     return self.fiber.as_mut().runtime_error(VmError::IncorrectArity);
                 }
                 self.fiber.as_mut().begin_frame(callee);
@@ -201,7 +201,7 @@ impl Runtime {
                 let callee = callee.as_native_function();
                 let args = self.fiber.as_mut().stack.pop_n(arity);
                 let _this = self.fiber.as_mut().stack.pop(); // discard callee
-                let result = (callee.data.code)(&args);
+                let result = (callee.code)(&args);
                 self.fiber.as_mut().stack.push(result);
             }
             ObjectTag::Class => {
@@ -209,7 +209,7 @@ impl Runtime {
                 let instance: Gc<Object<Instance>> = self.manage(Instance::new(class).into());
                 self.fiber.as_mut().stack.rset(arity, Value::from_object(instance));
 
-                if let Some(initializer) = class.data.method(self.init_symbol) {
+                if let Some(initializer) = class.method(self.init_symbol) {
                     if !initializer.is_object() {
                         return self.fiber.as_mut().runtime_error(VmError::UnexpectedValue);
                     }
@@ -218,7 +218,7 @@ impl Runtime {
 
                     if initializer.tag == ObjectTag::Closure {
                         let initializer = initializer.as_closure();
-                        if initializer.data.function.arity != arity {
+                        if initializer.function.arity != arity {
                             return self.fiber.as_mut().runtime_error(VmError::IncorrectArity);
                         }
                         self.fiber.as_mut().begin_frame(initializer);
@@ -232,8 +232,8 @@ impl Runtime {
             }
             ObjectTag::BoundMethod => {
                 let bind = callee.as_bound_method();
-                self.fiber.as_mut().stack.rset(arity, Value::from_object(bind.data.receiver));
-                return self.call(arity, bind.data.method);
+                self.fiber.as_mut().stack.rset(arity, Value::from_object(bind.receiver));
+                return self.call(arity, bind.method);
 
             },
             _ => return self.fiber.as_mut().runtime_error(VmError::InvalidCallee),
@@ -245,7 +245,10 @@ impl Runtime {
     }
 
     pub fn push_string(&mut self, string: impl Into<String>) {
-        let root: Gc<Object<String>> = self.manage(string.into().into());
+        let string = string.into();
+        let root: Gc<Object<String>> = self.manage(string.into());
+        let erased: Gc<ErasedObject> = root.into();
+        dbg!(erased);
         self.fiber.as_mut().stack.push(Value::from_object(root));
     }
 

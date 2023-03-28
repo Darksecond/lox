@@ -71,7 +71,7 @@ impl Native<'_> {
         let identifier = self.runtime.interner.intern(identifier);
         let root = self.runtime.manage(Object::from_native_function(native_function));
 
-        import.data.set_global(identifier, Value::from_object(root))
+        import.set_global(identifier, Value::from_object(root))
     }
 
     pub fn set_global_fn(&mut self, identifier: &str, code: fn(&[Value]) -> Value) {

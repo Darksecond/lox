@@ -22,7 +22,7 @@ impl Trace for CallFrame {
 
 impl CallFrame {
     pub fn new(object: Gc<Object<Closure>>, base_counter: usize) -> Self {
-        let ip = object.data.function.import.data.chunk(object.data.function.chunk_index).as_ptr();
+        let ip = object.function.import.chunk(object.function.chunk_index).as_ptr();
         Self {
             base_counter,
             closure: object,
@@ -79,12 +79,13 @@ impl Fiber {
     }
 
     pub fn runtime_error(&mut self, error: VmError) -> Signal {
+        panic!();
         self.error = Some(error);
         Signal::RuntimeError
     }
 
     pub fn begin_frame(&mut self, closure: Gc<Object<Closure>>) {
-        self.frames.push(CallFrame::new(closure, self.stack.len() - closure.data.function.arity - 1));
+        self.frames.push(CallFrame::new(closure, self.stack.len() - closure.function.arity - 1));
 
         // We don't just offset(1) here because Vec might reallocate contents.
         unsafe {
@@ -147,7 +148,7 @@ impl Fiber {
 
     pub fn find_upvalue_by_index(&self, index: usize) -> Gc<Cell<Upvalue>> {
         let frame = self.current_frame();
-        frame.closure.data.upvalues[index]
+        frame.closure.upvalues[index]
     }
 
     pub fn find_open_upvalue_with_index(&self, index: usize) -> Option<Gc<Cell<Upvalue>>> {
