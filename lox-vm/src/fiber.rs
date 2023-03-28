@@ -1,7 +1,7 @@
 use crate::memory::*;
 use super::gc::{Trace, Gc};
 use std::cell::{Cell, UnsafeCell};
-use crate::stack::Stack;
+use crate::stack::{Stack, StackBlock};
 use crate::VmError;
 use crate::runtime::Signal;
 
@@ -44,6 +44,7 @@ pub struct Fiber {
     pub parent: Option<Gc<UnsafeCell<Fiber>>>,
     frames: Vec<CallFrame>,
     pub stack: Stack,
+    _stack_block: StackBlock,
     upvalues: Vec<Gc<Cell<Upvalue>>>,
     pub error: Option<VmError>,
 
@@ -63,10 +64,12 @@ impl Trace for Fiber {
 
 impl Fiber {
     pub fn new(parent: Option<Gc<UnsafeCell<Fiber>>>) -> Self {
+        let block = StackBlock::new(2028);
         Self {
             parent,
             frames: Vec::with_capacity(2048),
-            stack: Stack::new(2048),
+            stack: Stack::with_block(&block),
+            _stack_block: block,
             upvalues: Vec::with_capacity(2048),
             error: None,
 
@@ -90,9 +93,12 @@ impl Fiber {
 
     pub fn end_frame(&mut self) -> Option<Signal> {
         if self.frames.pop().is_some() {
-            unsafe {
-                //TODO fix this, the pointer becomes invalid if we end the last frame (when exiting the program)
-                self.current_frame = self.current_frame.offset(-1);
+            if self.frames.is_empty() {
+                self.current_frame = std::ptr::null_mut();
+            } else {
+                unsafe {
+                    self.current_frame = self.current_frame.offset(-1);
+                }
             }
             None
         } else {
@@ -100,8 +106,9 @@ impl Fiber {
         }
     }
 
+    #[inline]
     pub fn has_current_frame(&self) -> bool {
-        !self.frames.is_empty()
+        self.current_frame != std::ptr::null_mut()
     }
 
     #[inline]
@@ -111,7 +118,6 @@ impl Fiber {
         }
     }
 
-    #[inline]
     pub fn current_frame_mut(&mut self) -> &mut CallFrame {
         unsafe {
             &mut *self.current_frame
@@ -125,7 +131,7 @@ impl Fiber {
     pub fn close_upvalues(&mut self, index: usize) {
         for upvalue in self.upvalues.iter() {
             if let Some(index) = upvalue.get().is_open_with_range(index) {
-                let value = *self.stack.get(index);
+                let value = self.stack.get(index);
                 upvalue.set(Upvalue::Closed(value));
             }
         }
@@ -156,7 +162,7 @@ impl Fiber {
     pub fn resolve_upvalue_into_value(&self, upvalue: Gc<Cell<Upvalue>>) -> Value {
         match upvalue.get() {
             Upvalue::Closed(value) => value,
-            Upvalue::Open(index) => *self.stack.get(index),
+            Upvalue::Open(index) => self.stack.get(index),
         }
     }
 
@@ -164,6 +170,24 @@ impl Fiber {
         match upvalue.get() {
             Upvalue::Closed(_) => upvalue.set(Upvalue::Closed(new_value)),
             Upvalue::Open(index) => self.stack.set(index, new_value),
+        }
+    }
+}
+
+impl AsRef<Fiber> for Gc<UnsafeCell<Fiber>> {
+    #[inline]
+    fn as_ref(&self) -> &Fiber {
+        unsafe {
+            &*self.get()
+        }
+    }
+}
+
+impl AsMut<Fiber> for Gc<UnsafeCell<Fiber>> {
+    #[inline]
+    fn as_mut(&mut self) -> &mut Fiber {
+        unsafe {
+            &mut *self.get()
         }
     }
 }

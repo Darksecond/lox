@@ -154,6 +154,14 @@ impl Heap {
     }
 }
 
+// Prevent memory leaks when dropping heap
+impl Drop for Heap {
+    fn drop(&mut self) {
+        self.mark(&[]);
+        self.sweep();
+    }
+}
+
 impl<T: 'static + Trace + ?Sized> Gc<T> {
     #[inline]
     fn allocation(&self) -> &Allocation<T> {

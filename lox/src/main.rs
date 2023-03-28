@@ -51,6 +51,13 @@ fn main() {
             return;
         },
     };
+    
+    if false {
+        for chunk in module.chunks() {
+            println!("===");
+            lox_bytecode::disasm::disassemble_chunk(chunk.as_slice());
+        }
+    }
 
     // Run virtual machine
     let mut vm = VirtualMachine::new();

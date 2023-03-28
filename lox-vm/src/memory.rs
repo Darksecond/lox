@@ -286,6 +286,7 @@ impl Import {
         self.globals().has(key)
     }
 
+    #[inline]
     pub fn global(&self, key: Symbol) -> Option<Value> {
         self.globals().get(key)
     }
@@ -293,6 +294,7 @@ impl Import {
 
 #[derive(Debug, Copy, Clone)]
 pub enum Value {
+    Nil,
     Number(f64),
     String(Gc<String>),
     Closure(Gc<Closure>),
@@ -302,7 +304,6 @@ pub enum Value {
     Class(Gc<Class>),
     Instance(Gc<Instance>),
     Import(Gc<Import>),
-    Nil,
 }
 
 impl Trace for Value {
