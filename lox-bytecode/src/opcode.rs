@@ -41,3 +41,139 @@ pub const METHOD       : u8 = 32;
 
 pub const IMPORT       : u8 = 33;
 pub const IMPORT_GLOBAL: u8 = 34;
+
+#[derive(Copy, Clone, Debug)]
+pub enum Opcode {
+    Constant(u32),
+    True,
+    False,
+    Nil,
+
+    Negate,
+    Add,
+    Subtract,
+    Multiply,
+    Divide,
+
+    Not,
+    Equal,
+    Greater,
+    Less,
+
+    Pop,
+
+    Return,
+    Print,
+
+    DefineGlobal(u32),
+    GetGlobal(u32),
+    SetGlobal(u32),
+    GetLocal(u32),
+    SetLocal(u32),
+    GetUpvalue(u32),
+    SetUpvalue(u32),
+    GetProperty(u32),
+    SetProperty(u32),
+
+    Jump(i16),
+    JumpIfFalse(i16),
+    Call(u8),
+    Invoke(u8, u32),
+    CloseUpvalue,
+
+    Class(u8),
+    Closure(u32),
+    Method(u32),
+
+    Import(u32),
+    ImportGlobal(u32),
+}
+
+pub struct OpcodeIterator<T: Iterator<Item = u8>> {
+    offset: usize,
+    inner: T,
+}
+
+impl<T> OpcodeIterator<T> where T: Iterator<Item = u8> {
+    pub fn new(inner: T) -> Self {
+        Self {
+            offset: 0,
+            inner,
+        }
+    }
+
+    fn next_u8(&mut self) -> u8 {
+        self.offset += 1;
+        self.inner.next().unwrap()
+    }
+
+    fn next_u32(&mut self) -> u32 {
+        let bytes = [self.next_u8(), self.next_u8(), self.next_u8(), self.next_u8()];
+        u32::from_le_bytes(bytes)
+    }
+
+    fn next_i16(&mut self) -> i16 {
+        let bytes = [self.next_u8(), self.next_u8()];
+        i16::from_le_bytes(bytes)
+    }
+}
+
+impl<T> Iterator for OpcodeIterator<T> where T: Iterator<Item = u8> {
+    type Item = (usize, Opcode);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let offset = self.offset;
+        self.offset += 1;
+        let opcode = self.inner.next()?;
+
+        let opcode = match opcode {
+            CONSTANT => Opcode::Constant(self.next_u32()),
+            TRUE => Opcode::True,
+            FALSE => Opcode::False,
+            NIL => Opcode::Nil,
+
+            NEGATE => Opcode::Negate,
+            ADD => Opcode::Add,
+            SUBTRACT => Opcode::Subtract,
+            MULTIPLY => Opcode::Multiply,
+            DIVIDE => Opcode::Divide,
+
+            NOT => Opcode::Not,
+            EQUAL => Opcode::Equal,
+            GREATER => Opcode::Greater,
+            LESS => Opcode::Less,
+
+            POP => Opcode::Pop,
+
+            RETURN => Opcode::Return,
+            PRINT => Opcode::Print,
+
+            DEFINE_GLOBAL => Opcode::DefineGlobal(self.next_u32()),
+            GET_GLOBAL => Opcode::GetGlobal(self.next_u32()),
+            SET_GLOBAL => Opcode::SetGlobal(self.next_u32()),
+            GET_LOCAL => Opcode::GetLocal(self.next_u32()),
+            SET_LOCAL => Opcode::SetLocal(self.next_u32()),
+            GET_UPVALUE => Opcode::GetUpvalue(self.next_u32()),
+            SET_UPVALUE => Opcode::SetUpvalue(self.next_u32()),
+            GET_PROPERTY => Opcode::GetProperty(self.next_u32()),
+            SET_PROPERTY => Opcode::SetProperty(self.next_u32()),
+
+            JUMP => Opcode::Jump(self.next_i16()),
+            JUMP_IF_FALSE => Opcode::JumpIfFalse(self.next_i16()),
+            CALL => Opcode::Call(self.next_u8()),
+            INVOKE => Opcode::Invoke(self.next_u8(), self.next_u32()),
+            CLOSE_UPVALUE => Opcode::CloseUpvalue,
+
+            CLASS => Opcode::Class(self.next_u8()),
+            CLOSURE => Opcode::Closure(self.next_u32()),
+            METHOD => Opcode::Method(self.next_u32()),
+
+            IMPORT => Opcode::Import(self.next_u32()),
+            IMPORT_GLOBAL => Opcode::ImportGlobal(self.next_u32()),
+
+            _ => unreachable!(),
+        };
+
+        Some((offset, opcode))
+    }
+}
