@@ -7,7 +7,7 @@ pub fn disassemble_module(module: &Module) {
 
     for (index, chunk) in module.chunks().iter().enumerate() {
         println!("=== Chunk {} ===", index);
-        disassemble_chunk(chunk.as_slice());
+        disassemble_chunk(chunk.as_slice(), module);
         println!();
     }
 
@@ -39,14 +39,30 @@ pub fn disassemble_module(module: &Module) {
     println!();
 }
 
-pub fn disassemble_chunk(chunk: &[u8]) {
+pub fn disassemble_chunk(chunk: &[u8], module: &Module) {
     let chunk = crate::opcode::OpcodeIterator::new(chunk.iter().cloned());
     for (offset, opcode) in chunk {
+        let instruction = format!("{:?}", opcode);
         match opcode {
-            Opcode::Jump(relative) => println!("{:04X} {:?} ({:04X})", offset, opcode, absolute(offset, relative)),
-            Opcode::JumpIfFalse(relative) => println!("{:04X} {:?} ({:04X})", offset, opcode, absolute(offset, relative)),
-            _ => println!("{:04X} {:?}", offset, opcode),
+            Opcode::Jump(relative)        => println!("{:04X} {:<18} {:04X}", offset, instruction, absolute(offset, relative)),
+            Opcode::JumpIfFalse(relative) => println!("{:04X} {:<18} {:04X}", offset, instruction, absolute(offset, relative)),
+            Opcode::DefineGlobal(index)   => println!("{:04X} {:<18} {}"    , offset, instruction, module.identifier(index as _)),
+            Opcode::GetGlobal(index)      => println!("{:04X} {:<18} {}"    , offset, instruction, module.identifier(index as _)),
+            Opcode::SetGlobal(index)      => println!("{:04X} {:<18} {}"    , offset, instruction, module.identifier(index as _)),
+            Opcode::Constant(index)       => println!("{:04X} {:<18} {}"  , offset, instruction, constant(index, module)),
+            Opcode::Invoke(_arity, index) => println!("{:04X} {:<18} {}"    , offset, instruction, module.identifier(index as _)),
+            Opcode::GetProperty(index)    => println!("{:04X} {:<18} {}"    , offset, instruction, module.identifier(index as _)),
+            Opcode::SetProperty(index)    => println!("{:04X} {:<18} {}"    , offset, instruction, module.identifier(index as _)),
+            _                             => println!("{:04X} {:<18}"       , offset, instruction),
         }
+    }
+}
+
+fn constant(index: u32, module: &Module) -> String {
+    let constant = module.constant(index as _);
+    match constant {
+        crate::bytecode::Constant::Number(num) => format!("{}", num),
+        crate::bytecode::Constant::String(str) => format!("{}", str),
     }
 }
 
