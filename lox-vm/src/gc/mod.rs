@@ -15,9 +15,10 @@ impl fmt::Debug for dyn Trace {
 }
 
 #[derive(Debug)]
+#[repr(C)]
 struct Allocation<T: 'static + Trace + ?Sized> {
-    marked: Cell<bool>,
     next: Cell<Option<NonNull<Allocation<dyn Trace>>>>,
+    marked: Cell<bool>,
     size: Cell<usize>,
     data: T,
 }
@@ -29,7 +30,7 @@ pub struct Heap {
     threshold: Cell<usize>,
 }
 
-pub struct Gc<T: 'static + Trace + ?Sized> {
+pub struct Gc<T: 'static + Trace> {
     ptr: NonNull<Allocation<T>>,
 }
 
@@ -162,23 +163,25 @@ impl Drop for Heap {
     }
 }
 
-impl<T: 'static + Trace + ?Sized> Gc<T> {
+impl<T: 'static + Trace> Gc<T> {
     #[inline]
     fn allocation(&self) -> &Allocation<T> {
         unsafe { self.ptr.as_ref() }
     }
 
     #[inline]
-    pub fn ptr_eq(a: &Gc<T>, b: &Gc<T>) -> bool{
+    pub fn ptr_eq(a: &Gc<T>, b: &Gc<T>) -> bool {
         a.ptr == b.ptr
     }
 }
 
 impl<T: 'static + Trace> Gc<T> {
+    #[inline]
     pub fn to_bits(self) -> u64 {
         self.ptr.as_ptr() as u64
     }
 
+    #[inline]
     pub unsafe fn from_bits(value: u64) -> Self {
         Self {
             ptr: NonNull::new_unchecked(value as *mut Allocation<T>),
@@ -186,15 +189,15 @@ impl<T: 'static + Trace> Gc<T> {
     }
 }
 
-impl<T: 'static + Trace + ?Sized> Copy for Gc<T> {}
-impl<T: 'static + Trace + ?Sized> Clone for Gc<T> {
+impl<T: 'static + Trace> Copy for Gc<T> {}
+impl<T: 'static + Trace> Clone for Gc<T> {
     #[inline]
     fn clone(&self) -> Gc<T> {
         *self
     }
 }
 
-impl<T: 'static + Trace + ?Sized> Deref for Gc<T> {
+impl<T: 'static + Trace> Deref for Gc<T> {
     type Target = T;
 
     #[inline]
@@ -203,19 +206,19 @@ impl<T: 'static + Trace + ?Sized> Deref for Gc<T> {
     }
 }
 
-impl<T: fmt::Debug + 'static + Trace + ?Sized> fmt::Debug for Gc<T> {
+impl<T: fmt::Debug + 'static + Trace> fmt::Debug for Gc<T> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let inner: &T = &**self;
         write!(f, "Gc({:?})", inner)
     }
 }
-impl<T: fmt::Display + 'static + Trace + ?Sized> fmt::Display for Gc<T> {
+impl<T: fmt::Display + 'static + Trace> fmt::Display for Gc<T> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let inner: &T = &**self;
         inner.fmt(f)
     }
 }
-impl<T: 'static + Trace + ?Sized> Trace for Gc<T> {
+impl<T: 'static + Trace> Trace for Gc<T> {
     #[inline]
     fn trace(&self) {
         self.allocation().trace();

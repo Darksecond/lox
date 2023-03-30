@@ -66,9 +66,10 @@ impl Trace for Fiber {
 impl Fiber {
     pub fn new(parent: Option<Gc<UnsafeCell<Fiber>>>) -> Self {
         let block = StackBlock::new(2028);
+        let frames = Vec::with_capacity(2048);
         Self {
             parent,
-            frames: Vec::with_capacity(2048),
+            frames,
             stack: Stack::with_block(&block),
             _stack_block: block,
             upvalues: Vec::with_capacity(2048),
@@ -79,7 +80,7 @@ impl Fiber {
     }
 
     pub fn runtime_error(&mut self, error: VmError) -> Signal {
-        panic!();
+        //panic!("runtime error: {:?}", error);
         self.error = Some(error);
         Signal::RuntimeError
     }
@@ -120,6 +121,7 @@ impl Fiber {
         }
     }
 
+    #[inline]
     pub fn current_frame_mut(&mut self) -> &mut CallFrame {
         unsafe {
             &mut *self.current_frame

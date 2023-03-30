@@ -4,6 +4,7 @@ use crate::value::Value;
 use super::gc::{Gc, Trace};
 use lox_bytecode::bytecode::{ChunkIndex, self};
 use std::cell::{Cell, UnsafeCell};
+use std::fmt::Display;
 use std::ops::Deref;
 use super::interner::{Symbol, Interner};
 
@@ -70,6 +71,7 @@ impl Instance {
         }
     }
 
+    #[inline]
     pub fn field(&self, symbol: Symbol) -> Option<Value> {
         self.fields().get(symbol)
     }
@@ -113,6 +115,7 @@ impl Class {
         }
     }
 
+    #[inline]
     pub fn method(&self, symbol: Symbol) -> Option<Value> {
         self.methods().get(symbol)
     }
@@ -311,9 +314,27 @@ pub struct ErasedObject {
     pub tag: ObjectTag,
 }
 
+impl ErasedObject {
+    fn as_object<T: Trace>(&self) -> &T {
+        let ptr = self as *const ErasedObject;
+        let ptr = ptr as *const Object<T>;
+        unsafe {
+            &*ptr
+        }
+    }
+}
+
 impl Trace for ErasedObject {
     fn trace(&self) {
-        todo!()
+        match self.tag {
+            ObjectTag::String => self.as_object::<String>().trace(),
+            ObjectTag::Closure => self.as_object::<Closure>().trace(),
+            ObjectTag::BoundMethod => self.as_object::<BoundMethod>().trace(),
+            ObjectTag::NativeFunction => self.as_object::<NativeFunction>().trace(),
+            ObjectTag::Class => self.as_object::<Class>().trace(),
+            ObjectTag::Instance => self.as_object::<Instance>().trace(),
+            ObjectTag::Import => self.as_object::<Import>().trace(),
+        }
     }
 }
 
@@ -411,49 +432,49 @@ impl<T> From<Gc<Object<T>>> for Gc<ErasedObject> where T: Trace {
 
 impl Gc<ErasedObject> {
     pub fn as_string(self) -> Gc<Object<String>> {
-        assert_eq!(self.tag, ObjectTag::String);
+        debug_assert_eq!(self.tag, ObjectTag::String);
         unsafe {
             Gc::from_bits(self.to_bits())
         }
     }
 
     pub fn as_closure(self) -> Gc<Object<Closure>> {
-        assert_eq!(self.tag, ObjectTag::Closure);
+        debug_assert_eq!(self.tag, ObjectTag::Closure);
         unsafe {
             Gc::from_bits(self.to_bits())
         }
     }
 
     pub fn as_bound_method(self) -> Gc<Object<BoundMethod>> {
-        assert_eq!(self.tag, ObjectTag::BoundMethod);
+        debug_assert_eq!(self.tag, ObjectTag::BoundMethod);
         unsafe {
             Gc::from_bits(self.to_bits())
         }
     }
 
     pub fn as_native_function(self) -> Gc<Object<NativeFunction>> {
-        assert_eq!(self.tag, ObjectTag::NativeFunction);
+        debug_assert_eq!(self.tag, ObjectTag::NativeFunction);
         unsafe {
             Gc::from_bits(self.to_bits())
         }
     }
 
     pub fn as_class(self) -> Gc<Object<Class>> {
-        assert_eq!(self.tag, ObjectTag::Class);
+        debug_assert_eq!(self.tag, ObjectTag::Class);
         unsafe {
             Gc::from_bits(self.to_bits())
         }
     }
 
     pub fn as_instance(self) -> Gc<Object<Instance>> {
-        assert_eq!(self.tag, ObjectTag::Instance);
+        debug_assert_eq!(self.tag, ObjectTag::Instance);
         unsafe {
             Gc::from_bits(self.to_bits())
         }
     }
 
     pub fn as_import(self) -> Gc<Object<Import>> {
-        assert_eq!(self.tag, ObjectTag::Import);
+        debug_assert_eq!(self.tag, ObjectTag::Import);
         unsafe {
             Gc::from_bits(self.to_bits())
         }
@@ -469,5 +490,29 @@ impl<T> Object<T> {
 impl ErasedObject {
     pub fn is_same_type(a: &Self, b: &Self) -> bool {
         a.tag == b.tag
+    }
+}
+
+impl PartialEq for Gc<ErasedObject> {
+    fn eq(&self, other: &Self) -> bool {
+        if self.tag == ObjectTag::String && other.tag == ObjectTag::String {
+            self.as_string().as_str() == other.as_string().as_str()
+        } else {
+            Gc::ptr_eq(self, other)
+        }
+    }
+}
+
+impl Display for Gc<ErasedObject> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self.tag {
+            ObjectTag::String => write!(f, "{}", self.as_string().as_str()),
+            ObjectTag::Closure => write!(f, "<fn {}>", self.as_closure().function.name),
+            ObjectTag::BoundMethod => write!(f, "<bound {}>", self.as_bound_method().method),
+            ObjectTag::NativeFunction => write!(f, "<native fn>"),
+            ObjectTag::Class => write!(f, "{}", self.as_class().name),
+            ObjectTag::Instance => write!(f, "{} instance", self.as_instance().class.name),
+            ObjectTag::Import => write!(f, "<import>"),
+        }
     }
 }

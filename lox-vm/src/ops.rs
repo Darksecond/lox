@@ -12,7 +12,7 @@ impl Runtime {
 
         loop {
             let opcode = self.next_u8();
-            println!("opcode: {}", opcode);
+            //println!("opcode: {}", opcode);
             let result = match opcode {
                 opcode::CONSTANT      => self.op_constant(),
                 opcode::IMPORT        => self.op_import(),
@@ -73,12 +73,12 @@ impl Runtime {
         let constant = current_import.constant(index);
         match constant {
             lox_bytecode::bytecode::Constant::String(path) => {
-                if let Some(import) = self.import(&path) {
+                if let Some(import) = self.import(path) {
                     self.fiber.as_mut().stack.push(Value::from_object(import));
                     return Signal::More;
                 }
 
-                let import = match self.load_import(&path) {
+                let import = match self.load_import(path) {
                     Ok(import) => import,
                     Err(err) => return self.fiber.as_mut().runtime_error(err),
                 };
@@ -183,7 +183,6 @@ impl Runtime {
 
         let class = self.fiber.as_ref().stack.peek_n(1);
         if class.is_object() && class.as_object().tag != ObjectTag::Class {
-            println!("TAG: {:?}", class.as_object().tag);
             return self.fiber.as_mut().runtime_error(VmError::UnexpectedConstant)
         }
         let class = class.as_object().as_class();
@@ -343,23 +342,15 @@ impl Runtime {
     pub fn op_add(&mut self) -> Signal {
         let b = self.fiber.as_mut().stack.pop();
         let a = self.fiber.as_mut().stack.pop();
+
         if a.is_number() && b.is_number() {
             let a = a.as_number();
             let b = b.as_number();
             self.fiber.as_mut().stack.push((a + b).into());
-        } else {
-            let a = a.as_object();
-            let b = b.as_object();
-            if a.tag == ObjectTag::String && b.tag == ObjectTag::String {
-                let a = a.as_string();
-                let b = b.as_string();
-                self.push_string(format!("{}{}", a.as_str(), b.as_str()))
-            } else {
-                return self.fiber.as_mut().runtime_error(VmError::UnexpectedValue);
-            }
+            return Signal::More;
         }
 
-        Signal::More
+        self.concat(a, b)
     }
 
     pub fn op_get_upvalue(&mut self) -> Signal {
@@ -402,6 +393,7 @@ impl Runtime {
         let index = self.fiber.as_ref().current_frame().base_counter + index;
         let value = self.fiber.as_ref().stack.get(index);
         self.fiber.as_mut().stack.push(value);
+
         Signal::More
     }
 
