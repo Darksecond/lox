@@ -17,36 +17,51 @@ impl Value {
     pub const FALSE: Self = Self(QNAN | TAG_FALSE);
     pub const TRUE: Self = Self(QNAN | TAG_TRUE);
 
+    #[inline]
     pub fn from_object(value: impl Into<Gc<ErasedObject>>) -> Self {
         let bits = value.into().to_bits();
-            println!("F {:08x}", bits);
         Self(SIGN_BIT | QNAN | bits)
     }
 
+    #[inline]
     pub fn is_object(self) -> bool {
         self.0 & (SIGN_BIT | QNAN) == (SIGN_BIT | QNAN)
     }
 
+    #[inline]
     pub fn as_object(self) -> Gc<ErasedObject> {
         unsafe {
             let bits = self.0 & (!(SIGN_BIT | QNAN));
-            println!("T {:08x}", bits);
             Gc::from_bits(bits)
         }
     }
 
+    #[inline]
     pub fn is_number(self) -> bool {
         self.0 & QNAN != QNAN
     }
 
+    #[inline]
+    pub fn is_bool(self) -> bool {
+        self.0 == Self::TRUE.0 || self.0 == Self::FALSE.0
+    }
+
+    #[inline]
+    pub fn is_nil(self) -> bool {
+        self.0 == Self::NIL.0
+    }
+
+    #[inline]
     pub fn as_number(self) -> f64 {
         f64::from_bits(self.0)
     }
 
+    #[inline]
     pub fn to_bits(self) -> u64 {
         self.0
     }
 
+    #[inline]
     pub const fn is_falsey(self) -> bool {
         if self.0 == Self::FALSE.0 {
             true
@@ -57,8 +72,13 @@ impl Value {
         }
     }
 
+    #[inline]
     pub fn is_same_type(a: &Self, b: &Self) -> bool {
         if a.is_number() && b.is_number() {
+            true
+        } else if a.is_nil() && b.is_nil() {
+            true
+        } else if a.is_bool() && b.is_bool() {
             true
         } else if a.is_object() && b.is_object() {
             ErasedObject::is_same_type(&a.as_object(), &b.as_object())
@@ -67,24 +87,28 @@ impl Value {
         }
     }
 
-    pub fn is_import(&self) -> bool {
+    #[inline]
+    pub fn is_import(self) -> bool {
         use crate::memory::ObjectTag;
         self.is_object() && self.as_object().tag == ObjectTag::Import
     }
 
-    pub fn is_instance(&self) -> bool {
+    #[inline]
+    pub fn is_instance(self) -> bool {
         use crate::memory::ObjectTag;
         self.is_object() && self.as_object().tag == ObjectTag::Instance
     }
 }
 
 impl From<f64> for Value {
+    #[inline]
     fn from(value: f64) -> Self {
         Self(value.to_bits())
     }
 }
 
 impl From<bool> for Value {
+    #[inline]
     fn from(value: bool) -> Self {
         if value {
             Self::TRUE
@@ -95,9 +119,12 @@ impl From<bool> for Value {
 }
 
 impl PartialEq for Value {
+    #[inline]
     fn eq(&self, other: &Self) -> bool {
         if self.is_number() && other.is_number() {
             self.as_number() == other.as_number()
+        } else if self.is_object() && other.is_object() {
+            self.as_object() == other.as_object()
         } else {
             self.0 == other.0
         }
@@ -106,7 +133,6 @@ impl PartialEq for Value {
 
 impl Display for Value {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        use crate::memory::ObjectTag;
         if self.0 == Self::NIL.0 {
             write!(f, "nil")
         } else if self.0 == Self::TRUE.0 {
@@ -114,12 +140,7 @@ impl Display for Value {
         } else if self.0 == Self::FALSE.0 {
             write!(f, "false")
         } else if self.is_object() {
-            let obj = self.as_object();
-            if obj.tag == ObjectTag::String {
-                write!(f, "{}", obj.as_string().as_str())
-            } else {
-                write!(f, "object {:?}", obj.tag) //TODO proper display
-            }
+            write!(f, "{}", self.as_object())
         } else {
             write!(f, "{}", self.as_number())
         }

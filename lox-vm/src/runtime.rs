@@ -108,6 +108,17 @@ impl Runtime {
         Signal::ContextSwitch
     }
 
+    pub fn concat(&mut self, a: Value, b: Value) -> Signal {
+        if a.is_object() && b.is_object() && a.as_object().tag == ObjectTag::String && b.as_object().tag == ObjectTag::String {
+            let a = a.as_object().as_string();
+            let b = b.as_object().as_string();
+            self.push_string(format!("{}{}", a.as_str(), b.as_str()));
+            return Signal::More;
+        }
+
+        self.fiber.as_mut().runtime_error(VmError::UnexpectedValue)
+    }
+
     pub fn print(&self, value: &str) {
         (self.print)(value);
     }
@@ -123,7 +134,7 @@ impl Runtime {
         self.heap.adjust_size(object);
     }
 
-    pub fn manage<T: Trace>(&mut self, data: T) -> Gc<T> {
+    pub fn manage<T: Trace>(&self, data: T) -> Gc<T> {
         self.heap.collect(&[self]);
         self.heap.manage(data)
     }
@@ -170,6 +181,7 @@ impl Runtime {
         }
     }
 
+    #[inline]
     pub fn current_import(&self) -> Gc<Object<Import>> {
         self.fiber.as_ref().current_frame().closure.function.import
     }
@@ -247,8 +259,6 @@ impl Runtime {
     pub fn push_string(&mut self, string: impl Into<String>) {
         let string = string.into();
         let root: Gc<Object<String>> = self.manage(string.into());
-        let erased: Gc<ErasedObject> = root.into();
-        dbg!(erased);
         self.fiber.as_mut().stack.push(Value::from_object(root));
     }
 
