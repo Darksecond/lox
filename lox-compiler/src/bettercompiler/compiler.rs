@@ -26,7 +26,9 @@ pub struct Compiler {
     module: Module,
     contexts: Vec<CompilerContext>,
     errors: Vec<Diagnostic>,
-    identifiers: HashMap<String, IdentifierIndex>
+    identifiers: HashMap<String, IdentifierIndex>,
+    numbers: HashMap<u64, ConstantIndex>,
+    strings: HashMap<String, ConstantIndex>,
 }
 
 impl CompilerContext {
@@ -113,6 +115,8 @@ impl Compiler {
             contexts: vec![],
             errors: vec![],
             identifiers: HashMap::new(),
+            numbers: HashMap::new(),
+            strings: HashMap::new(),
         }
     }
 
@@ -213,6 +217,10 @@ impl Compiler {
         self.current_chunk_mut().add_i16(instruction)
     }
 
+    pub fn add_u16(&mut self, instruction: u16) -> InstructionIndex {
+        self.current_chunk_mut().add_u16(instruction)
+    }
+
     pub fn patch_instruction(&mut self, index: InstructionIndex) {
         self.current_chunk_mut().patch_instruction(index)
     }
@@ -252,8 +260,24 @@ impl Compiler {
         }
     }
 
-    pub fn add_constant<C: Into<Constant>>(&mut self, constant: C) -> ConstantIndex {
-        self.module.add_constant(constant.into())
+    pub fn add_number(&mut self, value: f64) -> ConstantIndex {
+        if let Some(index) = self.numbers.get(&value.to_bits()) {
+            *index
+        } else {
+            let index = self.module.add_number(value);
+            self.numbers.insert(value.to_bits(), index);
+            index
+        }
+    }
+
+    pub fn add_string(&mut self, value: &str) -> ConstantIndex {
+        if let Some(index) = self.strings.get(value) {
+            *index
+        } else {
+            let index = self.module.add_string(value);
+            self.strings.insert(value.to_string(), index);
+            index
+        }
     }
 
     pub fn add_closure(&mut self, closure: Closure) -> ClosureIndex {

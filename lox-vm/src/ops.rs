@@ -14,7 +14,6 @@ impl Runtime {
             let opcode = self.next_u8();
             //println!("opcode: {}", opcode);
             let result = match opcode {
-                opcode::CONSTANT      => self.op_constant(),
                 opcode::IMPORT        => self.op_import(),
                 opcode::IMPORT_GLOBAL => self.op_import_global(),
                 opcode::CLOSURE       => self.op_closure(),
@@ -52,6 +51,8 @@ impl Runtime {
                 opcode::LIST          => self.op_list(),
                 opcode::GET_INDEX     => self.op_get_index(),
                 opcode::SET_INDEX     => self.op_set_index(),
+                opcode::NUMBER        => self.op_number(),
+                opcode::STRING        => self.op_string(),
                 _ => unreachable!(),
             };
 
@@ -147,46 +148,40 @@ impl Runtime {
         let index: usize = self.next_u32() as _;
 
         let current_import = self.current_import();
-        let constant = current_import.constant(index);
-        match constant {
-            lox_bytecode::bytecode::Constant::String(path) => {
-                if let Some(import) = self.import(path) {
-                    self.fiber.as_mut().stack.push(Value::from_object(import));
-                    return Signal::More;
-                }
+        let path = current_import.string(index);
 
-                let import = match self.load_import(path) {
-                    Ok(import) => import,
-                    Err(err) => return self.fiber.as_mut().runtime_error(err),
-                };
-
-                self.fiber.as_mut().stack.push(Value::from_object(import));
-
-                let mut fiber = Fiber::new(Some(self.fiber));
-
-                let function = Function {
-                    arity: 0,
-                    chunk_index: 0,
-                    name: "top".into(),
-                    import,
-                };
-
-                let closure = self.manage(Closure {
-                    upvalues: vec![],
-                    function,
-                }.into());
-
-                fiber.stack.push(Value::from_object(closure));
-                fiber.begin_frame(closure);
-
-                let fiber = self.manage(UnsafeCell::new(fiber));
-
-                return self.switch_to(fiber);
-            },
-            lox_bytecode::bytecode::Constant::Number(_) => {
-                return self.fiber.as_mut().runtime_error(VmError::StringConstantExpected);
-            },
+        if let Some(import) = self.import(path.as_str()) {
+            self.fiber.as_mut().stack.push(Value::from_object(import));
+            return Signal::More;
         }
+
+        let import = match self.load_import(path.as_str()) {
+            Ok(import) => import,
+            Err(err) => return self.fiber.as_mut().runtime_error(err),
+        };
+
+        self.fiber.as_mut().stack.push(Value::from_object(import));
+
+        let mut fiber = Fiber::new(Some(self.fiber));
+
+        let function = Function {
+            arity: 0,
+            chunk_index: 0,
+            name: "top".into(),
+            import,
+        };
+
+        let closure = self.manage(Closure {
+            upvalues: vec![],
+            function,
+        }.into());
+
+        fiber.stack.push(Value::from_object(closure));
+        fiber.begin_frame(closure);
+
+        let fiber = self.manage(UnsafeCell::new(fiber));
+
+        return self.switch_to(fiber);
     }
 
     #[inline(never)]
@@ -316,14 +311,22 @@ impl Runtime {
         self.call(arity, callee)
     }
 
-    pub fn op_constant(&mut self) -> Signal {
-        let index = self.next_u32() as _;
-        use lox_bytecode::bytecode::Constant;
+    pub fn op_number(&mut self) -> Signal {
+        let index = self.next_u16();
         let current_import = self.current_import();
-        match current_import.constant(index) {
-            Constant::Number(n) => self.fiber.as_mut().stack.push((*n).into()),
-            Constant::String(string) => self.push_string(string),
-        }
+        let value = current_import.number(index as _);
+
+        self.fiber.as_mut().stack.push(value.into());
+
+        Signal::More
+    }
+
+    pub fn op_string(&mut self) -> Signal {
+        let index = self.next_u16();
+        let current_import = self.current_import();
+        let value = current_import.string(index as _);
+
+        self.fiber.as_mut().stack.push(Value::from_object(value));
 
         Signal::More
     }

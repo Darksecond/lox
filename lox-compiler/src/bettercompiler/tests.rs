@@ -8,13 +8,14 @@ fn parse_stmt(data: &str) -> Result<Vec<WithSpan<Stmt>>, Vec<Diagnostic>> {
     lox_syntax::parse(data)
 }
 
-fn assert_first_chunk(data: &str, constants: Vec<Constant>, identifiers: Vec<&str>, instructions: Vec<u8>) {
+fn assert_first_chunk(data: &str, numbers: Vec<f64>, strings: Vec<String>, identifiers: Vec<&str>, instructions: Vec<u8>) {
     use super::compile;
     let ast = parse_stmt(data).unwrap();
     let module = compile(&ast).unwrap();
     let chunk = module.chunk(0);
     assert_eq!(instructions, chunk.as_slice());
-    assert_eq!(constants, module.constants());
+    assert_eq!(numbers, module.numbers);
+    assert_eq!(strings, module.strings);
     assert_eq!(identifiers, module.identifiers());
 }
 
@@ -24,12 +25,20 @@ fn compile_code(data: &str) -> Module {
     compile(&ast).unwrap()
 }
 
+fn assert_chunk0(module: &Module, instructions: Vec<u8>) {
+    assert_instructions(module.chunk(0), instructions);
+}
+
 fn assert_instructions(chunk: &Chunk, instructions: Vec<u8>) {
     assert_eq!(instructions, chunk.as_slice());
 }
 
-fn assert_constants(module: &Module, constants: Vec<Constant>) {
-    assert_eq!(constants, module.constants());
+fn assert_strings(module: &Module, constants: Vec<String>) {
+    assert_eq!(constants, module.strings);
+}
+
+fn assert_numbers(module: &Module, constants: Vec<f64>) {
+    assert_eq!(constants, module.numbers);
 }
 
 fn assert_closures(module: &Module, closures: Vec<Closure>) {
@@ -46,27 +55,32 @@ fn assert_identifiers(module: &Module, identifiers: Vec<&str>) {
 
 #[test]
 fn test_stmt_print_numbers() {
-    assert_first_chunk(
-        "print 3;",
-        vec![3.0.into()],
-        vec![],
-        vec![
-            opcode::CONSTANT,
-            0, 0, 0, 0,
-            opcode::PRINT,
-            opcode::NIL,
-            opcode::RETURN,
-        ],
-    );
+    {
+        let module = compile_code("print 3;");
+        assert_chunk0(&module, vec![
+                      opcode::NUMBER,
+                      0, 0,
+                      opcode::PRINT,
+                      opcode::NIL,
+                      opcode::RETURN,
+        ]);
+
+        assert_numbers(&module, vec![3.0]);
+        assert_strings(&module, vec![]);
+        assert_identifiers(&module, vec![]);
+    }
+
+
     assert_first_chunk(
         "print 1+2;",
         vec![1.0.into(), 2.0.into()],
         vec![],
+        vec![],
         vec![
-            opcode::CONSTANT,
-            0, 0, 0, 0,
-            opcode::CONSTANT,
-            1, 0, 0, 0,
+            opcode::NUMBER,
+            0, 0,
+            opcode::NUMBER,
+            1, 0,
             opcode::ADD,
             opcode::PRINT,
             opcode::NIL,
@@ -77,11 +91,12 @@ fn test_stmt_print_numbers() {
         "print 1-2;",
         vec![1.0.into(), 2.0.into()],
         vec![],
+        vec![],
         vec![
-            opcode::CONSTANT,
-            0, 0, 0, 0,
-            opcode::CONSTANT,
-            1, 0, 0, 0,
+            opcode::NUMBER,
+            0, 0,
+            opcode::NUMBER,
+            1, 0,
             opcode::SUBTRACT,
             opcode::PRINT,
             opcode::NIL,
@@ -90,6 +105,7 @@ fn test_stmt_print_numbers() {
     );
     assert_first_chunk(
         "print nil;",
+        vec![],
         vec![],
         vec![],
         vec![
@@ -105,11 +121,12 @@ fn test_stmt_print_numbers() {
 fn test_stmt_print_strings() {
     assert_first_chunk(
         "print \"Hello, World!\";",
+        vec![],
         vec!["Hello, World!".into()],
         vec![],
         vec![
-            opcode::CONSTANT,
-            0, 0, 0, 0,
+            opcode::STRING,
+            0, 0,
             opcode::PRINT,
             opcode::NIL,
             opcode::RETURN,
@@ -117,13 +134,14 @@ fn test_stmt_print_strings() {
     );
     assert_first_chunk(
         "print \"Hello, \" + \"World!\";",
+        vec![],
         vec!["Hello, ".into(), "World!".into()],
         vec![],
         vec![
-            opcode::CONSTANT,
-            0, 0, 0, 0,
-            opcode::CONSTANT,
-            1, 0, 0, 0,
+            opcode::STRING,
+            0, 0,
+            opcode::STRING,
+            1, 0,
             opcode::ADD,
             opcode::PRINT,
             opcode::NIL,
@@ -137,10 +155,11 @@ fn test_global_variables() {
     assert_first_chunk(
         "var x=3;",
         vec![3.0.into()],
+        vec![],
         vec!["x"],
         vec![
-            opcode::CONSTANT,
-            0, 0, 0, 0,
+            opcode::NUMBER,
+            0, 0,
             opcode::DEFINE_GLOBAL,
             0, 0, 0, 0,
             opcode::NIL,
@@ -149,6 +168,7 @@ fn test_global_variables() {
     );
     assert_first_chunk(
         "var x;",
+        vec![],
         vec![],
         vec!["x"],
         vec![
@@ -162,10 +182,11 @@ fn test_global_variables() {
     assert_first_chunk(
         "var x=3; print x;",
         vec![3.0.into()],
+        vec![],
         vec!["x"],
         vec![
-            opcode::CONSTANT,
-            0, 0, 0, 0,
+            opcode::NUMBER,
+            0, 0,
             opcode::DEFINE_GLOBAL,
             0, 0, 0, 0,
             opcode::GET_GLOBAL,
@@ -178,14 +199,15 @@ fn test_global_variables() {
     assert_first_chunk(
         "var x=3;x=2;",
         vec![3.0.into(), 2.0.into()],
+        vec![],
         vec!["x"],
         vec![
-            opcode::CONSTANT,
-            0, 0, 0, 0,
+            opcode::NUMBER,
+            0, 0,
             opcode::DEFINE_GLOBAL,
             0, 0, 0, 0,
-            opcode::CONSTANT,
-            1, 0, 0, 0,
+            opcode::NUMBER,
+            1, 0,
             opcode::SET_GLOBAL,
             0, 0, 0, 0,
             opcode::POP,
@@ -201,9 +223,10 @@ fn test_local_variables() {
         "{var x=3;}",
         vec![3.0.into()],
         vec![],
+        vec![],
         vec![
-            opcode::CONSTANT,
-            0, 0, 0, 0,
+            opcode::NUMBER,
+            0, 0,
             opcode::POP,
             opcode::NIL,
             opcode::RETURN,
@@ -213,9 +236,10 @@ fn test_local_variables() {
         "{var x=3; print x;}",
         vec![3.0.into()],
         vec![],
+        vec![],
         vec![
-            opcode::CONSTANT,
-            0, 0, 0, 0,
+            opcode::NUMBER,
+            0, 0,
             opcode::GET_LOCAL,
             1, 0, 0, 0,
             opcode::PRINT,
@@ -227,16 +251,17 @@ fn test_local_variables() {
     assert_first_chunk(
         "var x=2; {var x=3; { var x=4; print x; } print x;} print x;",
         vec![2.0.into(), 3.0.into(), 4.0.into()],
+        vec![],
         vec!["x"],
         vec![
-            opcode::CONSTANT,
-            0, 0, 0, 0,
+            opcode::NUMBER,
+            0, 0,
             opcode::DEFINE_GLOBAL,
             0, 0, 0, 0,
-            opcode::CONSTANT,
-            1, 0, 0, 0,
-            opcode::CONSTANT,
-            2, 0, 0, 0,
+            opcode::NUMBER,
+            1, 0,
+            opcode::NUMBER,
+            2, 0,
             opcode::GET_LOCAL,
             2, 0, 0, 0,
             opcode::PRINT,
@@ -256,6 +281,7 @@ fn test_local_variables() {
         "{var x;}",
         vec![],
         vec![],
+        vec![],
         vec![
             opcode::NIL,
             opcode::POP,
@@ -267,10 +293,11 @@ fn test_local_variables() {
         "{var x;x=2;}",
         vec![2.0.into()],
         vec![],
+        vec![],
         vec![
             opcode::NIL,
-            opcode::CONSTANT,
-            0, 0, 0, 0,
+            opcode::NUMBER,
+            0, 0,
             opcode::SET_LOCAL,
             1, 0, 0, 0,
             opcode::POP,
@@ -283,19 +310,19 @@ fn test_local_variables() {
 
 #[test]
 fn test_expression() {
-    assert_first_chunk("3;", vec![3.0.into()], vec![], vec![
-                       opcode::CONSTANT,
-                       0, 0, 0, 0, 
+    assert_first_chunk("3;", vec![3.0.into()], vec![], vec![], vec![
+                       opcode::NUMBER,
+                       0, 0, 
                        opcode::POP,
                        opcode::NIL,
                        opcode::RETURN,
     ]);
 
-    assert_first_chunk("true;", vec![],  vec![],vec![opcode::TRUE, opcode::POP, opcode::NIL, opcode::RETURN]);
+    assert_first_chunk("true;", vec![], vec![], vec![],vec![opcode::TRUE, opcode::POP, opcode::NIL, opcode::RETURN]);
 
-    assert_first_chunk("false;", vec![],  vec![],vec![opcode::FALSE, opcode::POP, opcode::NIL, opcode::RETURN]);
+    assert_first_chunk("false;", vec![], vec![], vec![],vec![opcode::FALSE, opcode::POP, opcode::NIL, opcode::RETURN]);
 
-    assert_first_chunk("nil;", vec![],  vec![],vec![opcode::NIL, opcode::POP, opcode::NIL, opcode::RETURN]);
+    assert_first_chunk("nil;", vec![], vec![], vec![],vec![opcode::NIL, opcode::POP, opcode::NIL, opcode::RETURN]);
 }
 
 #[test]
@@ -304,16 +331,17 @@ fn test_if() {
         "if(false) 3;4;",
         vec![3.0.into(), 4.0.into()],
         vec![],
+        vec![],
         vec![
             opcode::FALSE,
             opcode::JUMP_IF_FALSE,
-            7, 0,
+            5, 0,
             opcode::POP,
-            opcode::CONSTANT,
-            0, 0, 0, 0,
+            opcode::NUMBER,
+            0, 0,
             opcode::POP,
-            opcode::CONSTANT,
-            1, 0, 0, 0,
+            opcode::NUMBER,
+            1, 0,
             opcode::POP,
             opcode::NIL,
             opcode::RETURN,
@@ -324,22 +352,23 @@ fn test_if() {
         "if(false) 3; else 4;5;",
         vec![3.0.into(), 4.0.into(), 5.0.into()],
         vec![],
+        vec![],
         vec![
             opcode::FALSE,
             opcode::JUMP_IF_FALSE,
-            10, 0,
+            8, 0,
             opcode::POP,
-            opcode::CONSTANT,
-            0, 0, 0, 0,
+            opcode::NUMBER,
+            0, 0,
             opcode::POP,
             opcode::JUMP,
-            7, 0,
+            5, 0,
             opcode::POP,
-            opcode::CONSTANT,
-            1, 0, 0, 0,
+            opcode::NUMBER,
+            1, 0,
             opcode::POP,
-            opcode::CONSTANT,
-            2, 0, 0, 0,
+            opcode::NUMBER,
+            2, 0,
             opcode::POP,
             opcode::NIL,
             opcode::RETURN,
@@ -353,14 +382,15 @@ fn test_logical_operators() {
         "3 and 4;",
         vec![3.0.into(), 4.0.into()],
         vec![],
+        vec![],
         vec![
-            opcode::CONSTANT,
-            0, 0, 0, 0,
+            opcode::NUMBER,
+            0, 0,
             opcode::JUMP_IF_FALSE,
-            6, 0,
+            4, 0,
             opcode::POP,
-            opcode::CONSTANT,
-            1, 0, 0, 0,
+            opcode::NUMBER,
+            1, 0,
             opcode::POP,
             opcode::NIL,
             opcode::RETURN,
@@ -371,16 +401,17 @@ fn test_logical_operators() {
         "3 or 4;",
         vec![3.0.into(), 4.0.into()],
         vec![],
+        vec![],
         vec![
-            opcode::CONSTANT,
-            0, 0, 0, 0,
+            opcode::NUMBER,
+            0, 0,
             opcode::JUMP_IF_FALSE,
             3, 0,
             opcode::JUMP,
-            6, 0,
+            4, 0,
             opcode::POP,
-            opcode::CONSTANT,
-            1, 0, 0, 0,
+            opcode::NUMBER,
+            1, 0,
             opcode::POP,
             opcode::NIL,
             opcode::RETURN,
@@ -394,11 +425,12 @@ fn test_equality() {
         "3 < 4;",
         vec![3.0.into(), 4.0.into()],
         vec![],
+        vec![],
         vec![
-            opcode::CONSTANT, 
-            0, 0, 0, 0,
-            opcode::CONSTANT, 
-            1, 0, 0, 0,
+            opcode::NUMBER, 
+            0, 0,
+            opcode::NUMBER, 
+            1, 0,
             opcode::LESS,
             opcode::POP,
             opcode::NIL,
@@ -412,16 +444,17 @@ fn test_while() {
         "while(true) print 3;",
         vec![3.0.into()],
         vec![],
+        vec![],
         vec![
             opcode::TRUE,
             opcode::JUMP_IF_FALSE,
-            10, 0,
+            8, 0,
             opcode::POP,
-            opcode::CONSTANT,
-            0, 0, 0, 0,
+            opcode::NUMBER,
+            0, 0,
             opcode::PRINT,
             opcode::JUMP,
-            242, 255,
+            244, 255,
             opcode::POP,
             opcode::NIL,
             opcode::RETURN,
@@ -435,30 +468,31 @@ fn test_for() {
         "for(var i = 0; i < 10; i = i + 1) print i;",
         vec![0.0.into(), 10.0.into(), 1.0.into()],
         vec![],
+        vec![],
         vec![
-            opcode::CONSTANT,
-            0, 0, 0, 0,
+            opcode::NUMBER,
+            0, 0,
             opcode::GET_LOCAL,
             1, 0, 0, 0,
-            opcode::CONSTANT,
-            1, 0, 0, 0,
+            opcode::NUMBER,
+            1, 0,
             opcode::LESS,
             opcode::JUMP_IF_FALSE,
-            27, 0,
+            25, 0,
             opcode::POP,
             opcode::GET_LOCAL,
             1, 0, 0, 0,
             opcode::PRINT,
             opcode::GET_LOCAL,
             1, 0, 0, 0,
-            opcode::CONSTANT,
-            2, 0, 0, 0,
+            opcode::NUMBER,
+            2, 0,
             opcode::ADD,
             opcode::SET_LOCAL,
             1, 0, 0, 0,
             opcode::POP,
             opcode::JUMP,
-            215, 255,
+            219, 255,
             opcode::POP,
             opcode::POP,
             opcode::NIL,
@@ -487,14 +521,10 @@ fn test_simple_function() {
             opcode::RETURN,
         ],
     );
-    assert_instructions(module.chunk(1), vec![opcode::CONSTANT, 0, 0, 0, 0, opcode::PRINT, opcode::NIL, opcode::RETURN]);
+    assert_instructions(module.chunk(1), vec![opcode::NUMBER, 0, 0, opcode::PRINT, opcode::NIL, opcode::RETURN]);
 
-    assert_constants(
-        &module,
-        vec![
-            3.0.into(),
-        ],
-    );
+    assert_numbers(&module, vec![3.0]);
+    assert_strings(&module, vec![]);
 
     assert_closures(&module, vec![
         make_fun("first", 1, 0),
@@ -518,8 +548,8 @@ fn test_function_with_one_argument() {
             0, 0, 0, 0,
             opcode::GET_GLOBAL,
             0, 0, 0, 0,
-            opcode::CONSTANT,
-            0, 0, 0, 0,
+            opcode::NUMBER,
+            0, 0,
             opcode::CALL,
             1,
             opcode::POP,
@@ -535,12 +565,8 @@ fn test_function_with_one_argument() {
                         opcode::RETURN,
     ]);
 
-    assert_constants(
-        &module,
-        vec![
-            3.0.into(),
-        ],
-    );
+    assert_numbers(&module, vec![3.0]);
+    assert_strings(&module, vec![]);
 
     assert_closures(&module, vec![
         make_fun("first", 1, 1),
@@ -564,8 +590,8 @@ fn test_recursive_function_with_one_argument() {
             0, 0, 0, 0,
             opcode::GET_GLOBAL,
             0, 0, 0, 0,
-            opcode::CONSTANT,
-            1, 0, 0, 0,
+            opcode::NUMBER,
+            1, 0,
             opcode::CALL,
             1,
             opcode::POP,
@@ -580,8 +606,8 @@ fn test_recursive_function_with_one_argument() {
             0, 0, 0, 0,
             opcode::GET_LOCAL,
             1, 0, 0, 0,
-            opcode::CONSTANT,
-            0, 0, 0, 0,
+            opcode::NUMBER,
+            0, 0,
             opcode::ADD,
             opcode::CALL,
             1,
@@ -591,13 +617,8 @@ fn test_recursive_function_with_one_argument() {
         ],
     );
 
-    assert_constants(
-        &module,
-        vec![
-            1.0.into(),
-            3.0.into(),
-        ],
-    );
+    assert_numbers(&module, vec![1.0, 3.0]);
+    assert_strings(&module, vec![]);
 
     assert_closures(&module, vec![
         make_fun("first", 1, 1),
@@ -643,19 +664,15 @@ fn test_functions_calling_functions() {
         opcode::RETURN,
     ]);
     assert_instructions(module.chunk(2), vec![
-                        opcode::CONSTANT,
-                        0, 0, 0, 0,
+                        opcode::NUMBER,
+                        0, 0,
                         opcode::PRINT,
                         opcode::NIL,
                         opcode::RETURN,
     ]);
 
-    assert_constants(
-        &module,
-        vec![
-            3.0.into(),
-        ],
-    );
+    assert_numbers(&module, vec![3.0]);
+    assert_strings(&module, vec![]);
 
     assert_closures(&module, vec![
         make_fun("first", 1, 0),
@@ -688,14 +705,15 @@ fn test_simple_scoped_function() {
         ],
     );
     assert_instructions(module.chunk(1), vec![
-                        opcode::CONSTANT,
-                        0, 0, 0, 0,
+                        opcode::NUMBER,
+                        0, 0,
                         opcode::PRINT,
                         opcode::NIL,
                         opcode::RETURN,
     ]);
 
-    assert_constants(&module, vec![3.0.into()]);
+    assert_numbers(&module, vec![3.0]);
+    assert_strings(&module, vec![]);
 
     assert_closures(&module, vec![
         make_fun("first", 1, 0),
@@ -754,17 +772,15 @@ fn test_function_with_return() {
         ],
     );
     assert_instructions(module.chunk(1), vec![
-                        opcode::CONSTANT,
-                        0, 0, 0, 0,
+                        opcode::NUMBER,
+                        0, 0,
                         opcode::RETURN,
                         opcode::NIL,
                         opcode::RETURN
     ]);
 
-    assert_constants(
-        &module,
-        vec![3.0.into()],
-    );
+    assert_numbers(&module, vec![3.0]);
+    assert_strings(&module, vec![]);
 
     assert_closures(&module, vec![
         make_fun("first", 1, 0),
@@ -782,8 +798,8 @@ fn test_upvalue() {
     assert_instructions(
         module.chunk(0),
         vec![
-        opcode::CONSTANT,
-        0, 0, 0, 0,
+        opcode::NUMBER,
+        0, 0,
         opcode::CLOSURE,
         0, 0, 0, 0,
         opcode::POP,
@@ -799,10 +815,8 @@ fn test_upvalue() {
                         opcode::RETURN,
     ]);
 
-    assert_constants(
-        &module,
-        vec![3.0.into()],
-    );
+    assert_numbers(&module, vec![3.0]);
+    assert_strings(&module, vec![]);
 
     assert_closures(&module, vec![
         make_closure("f", 1, 0, vec![Upvalue::Local(1)])
@@ -816,8 +830,8 @@ fn test_double_upvalue() {
     assert_instructions(
         module.chunk(0),
         vec![
-        opcode::CONSTANT,
-        0, 0, 0, 0,
+        opcode::NUMBER,
+        0, 0,
         opcode::CLOSURE,
         1, 0, 0, 0,
         opcode::POP,
@@ -839,12 +853,8 @@ fn test_double_upvalue() {
                         opcode::RETURN
     ]);
 
-    assert_constants(
-        &module,
-        vec![
-            3.0.into(),
-        ],
-    );
+    assert_numbers(&module, vec![3.0]);
+    assert_strings(&module, vec![]);
 
     assert_closures(&module, vec![
         make_closure("g", 2, 0, vec![Upvalue::Upvalue(0)]),
@@ -859,10 +869,10 @@ fn test_multiple_upvalue() {
     assert_instructions(
         module.chunk(0),
         vec![
-            opcode::CONSTANT,
-            0, 0, 0, 0,
-            opcode::CONSTANT,
-            1, 0, 0, 0,
+            opcode::NUMBER,
+            0, 0,
+            opcode::NUMBER,
+            1, 0,
             opcode::CLOSURE,
             0, 0, 0, 0,
             opcode::POP,
@@ -885,13 +895,8 @@ fn test_multiple_upvalue() {
             opcode::RETURN
         ]);
 
-    assert_constants(
-        &module,
-        vec![
-            3.0.into(),
-            4.0.into(),
-        ],
-    );
+    assert_numbers(&module, vec![3.0, 4.0]);
+    assert_strings(&module, vec![]);
 
     assert_closures(&module, vec![
         make_closure("f", 1, 0, vec![Upvalue::Local(2), Upvalue::Local(1)]),
@@ -905,10 +910,10 @@ fn test_multiple_double_upvalue() {
     assert_instructions(
         module.chunk(0),
         vec![
-            opcode::CONSTANT,
-            0, 0, 0, 0,
-            opcode::CONSTANT,
-            1, 0, 0, 0,
+            opcode::NUMBER,
+            0, 0,
+            opcode::NUMBER,
+            1, 0,
             opcode::CLOSURE,
             1, 0, 0, 0,
             opcode::POP,
@@ -937,13 +942,8 @@ fn test_multiple_double_upvalue() {
             opcode::RETURN
         ]);
 
-    assert_constants(
-        &module,
-        vec![
-            3.0.into(),
-            4.0.into(),
-        ],
-    );
+    assert_numbers(&module, vec![3.0, 4.0]);
+    assert_strings(&module, vec![]);
 
     assert_closures(&module, vec![
         make_closure("g", 2, 0, vec![Upvalue::Upvalue(0), Upvalue::Upvalue(1)]),
@@ -979,8 +979,8 @@ fn test_scoped_upvalue() {
     assert_instructions(
         module.chunk(1),
         vec![
-            opcode::CONSTANT,
-            0, 0, 0, 0,
+            opcode::NUMBER,
+            0, 0,
             opcode::CLOSURE,
             0, 0, 0, 0,
             opcode::GET_LOCAL,
@@ -1002,12 +1002,8 @@ fn test_scoped_upvalue() {
                         opcode::RETURN
     ]);
 
-    assert_constants(
-        &module,
-        vec![
-            3.0.into(),
-        ],
-    );
+    assert_numbers(&module, vec![3.0]);
+    assert_strings(&module, vec![]);
 
     assert_closures(&module, vec![
         make_closure("one", 2, 0, vec![Upvalue::Local(1)]),
@@ -1034,7 +1030,8 @@ fn test_simple_import() {
             opcode::RETURN
         ]);
 
-    assert_constants(&module, vec!["foo".into()]);
+    assert_numbers(&module, vec![]);
+    assert_strings(&module, vec!["foo".into()]);
 }
 
 #[test]
@@ -1055,7 +1052,8 @@ fn test_complex_import() {
             opcode::RETURN
         ]);
 
-    assert_constants(&module, vec!["foo".into()]);
+    assert_numbers(&module, vec![]);
+    assert_strings(&module, vec!["foo".into()]);
 
     assert_identifiers(&module, vec![
         "x"
@@ -1082,7 +1080,8 @@ fn test_complex_local_import() {
             opcode::RETURN
     ]);
 
-    assert_constants(&module, vec!["foo".into()]);
+    assert_numbers(&module, vec![]);
+    assert_strings(&module, vec!["foo".into()]);
 
     assert_identifiers(&module, vec![
         "x"
@@ -1107,7 +1106,8 @@ fn test_empty_class_global() {
             opcode::RETURN
         ]);
 
-    assert_constants(&module, vec![]);
+    assert_numbers(&module, vec![]);
+    assert_strings(&module, vec![]);
 
     assert_classes(&module, vec![
         make_class("Foo")
@@ -1149,8 +1149,8 @@ fn test_set_property() {
         vec![
             GET_GLOBAL,
             0, 0, 0, 0,
-            CONSTANT,
-            0, 0, 0, 0,
+            NUMBER,
+            0, 0,
             SET_PROPERTY,
             1, 0, 0, 0,
             POP,
@@ -1158,7 +1158,8 @@ fn test_set_property() {
             RETURN
         ]);
 
-    assert_constants(&module, vec![3.0.into()]);
+    assert_numbers(&module, vec![3.0]);
+    assert_strings(&module, vec![]);
 
     assert_identifiers(&module, vec![
         "x",
@@ -1182,7 +1183,8 @@ fn test_get_property() {
         ],
     );
 
-    assert_constants(&module, vec![]);
+    assert_numbers(&module, vec![]);
+    assert_strings(&module, vec![]);
 
     assert_identifiers(&module, vec![
         "x",

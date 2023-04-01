@@ -35,23 +35,6 @@ pub struct Function {
     pub arity: usize,
 }
 
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
-pub enum Constant {
-    Number(f64),
-    String(String),
-}
-
-impl From<f64> for Constant {
-    fn from(item: f64) -> Self {
-        Constant::Number(item)
-    }
-}
-impl From<&str> for Constant {
-    fn from(item: &str) -> Self {
-        Constant::String(String::from(item))
-    }
-}
-
 impl From<Function> for Closure {
     fn from(item: Function) -> Self {
         Closure {
@@ -68,11 +51,12 @@ pub struct Chunk {
 
 #[derive(Serialize, Deserialize)]
 pub struct Module {
-    chunks: Vec<Chunk>,
-    constants: Vec<Constant>,
-    closures: Vec<Closure>,
-    classes: Vec<Class>,
-    identifiers: Vec<String>,
+    pub chunks: Vec<Chunk>,
+    pub closures: Vec<Closure>,
+    pub classes: Vec<Class>,
+    pub identifiers: Vec<String>,
+    pub numbers: Vec<f64>,
+    pub strings: Vec<String>,
 }
 
 impl std::fmt::Debug for Module {
@@ -85,10 +69,11 @@ impl Module {
     pub fn new() -> Module {
         Module {
             chunks: vec![],
-            constants: vec![],
             closures: vec![],
             classes: vec![],
             identifiers: vec![],
+            numbers: Vec::new(),
+            strings: Vec::new(),
         }
     }
 
@@ -108,11 +93,6 @@ impl Module {
         self.chunks.len() - 1
     }
 
-    pub fn add_constant(&mut self, constant: Constant) -> ConstantIndex {
-        self.constants.push(constant);
-        self.constants.len() - 1
-    }
-
     pub fn add_closure(&mut self, closure: Closure) -> ClosureIndex {
         self.closures.push(closure);
         self.closures.len() - 1
@@ -128,8 +108,14 @@ impl Module {
         self.identifiers.len() - 1
     }
 
-    pub fn constants(&self) -> &[Constant] {
-        &self.constants
+    pub fn add_number(&mut self, value: f64) -> ConstantIndex {
+        self.numbers.push(value);
+        self.numbers.len() - 1
+    }
+
+    pub fn add_string(&mut self, value: &str) -> ConstantIndex {
+        self.strings.push(value.to_owned());
+        self.strings.len() - 1
     }
 
     pub fn closures(&self) -> &[Closure] {
@@ -145,9 +131,16 @@ impl Module {
     }
 
     #[inline]
-    pub fn constant(&self, index: ConstantIndex) -> &Constant {
+    pub fn number(&self, index: ConstantIndex) -> f64 {
         unsafe {
-            self.constants.get_unchecked(index)
+            *self.numbers.get_unchecked(index)
+        }
+    }
+
+    #[inline]
+    pub fn string(&self, index: ConstantIndex) -> &str {
+        unsafe {
+            self.strings.get_unchecked(index)
         }
     }
 
@@ -193,6 +186,15 @@ impl Chunk {
     }
 
     pub fn add_i16(&mut self, value: i16) -> InstructionIndex {
+        let bytes = value.to_le_bytes();
+        for i in 0..2 {
+            self.instructions.push(bytes[i]);
+        }
+
+        self.instructions.len() - 2
+    }
+
+    pub fn add_u16(&mut self, value: u16) -> InstructionIndex {
         let bytes = value.to_le_bytes();
         for i in 0..2 {
             self.instructions.push(bytes[i]);

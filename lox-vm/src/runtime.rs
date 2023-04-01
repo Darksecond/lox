@@ -142,7 +142,7 @@ impl Runtime {
 
     //TODO Use name given instead of _root
     fn prepare_interpret(&mut self, module: Module) -> Gc<Object<Closure>> {
-        let import = Import::with_module(module, &mut self.interner);
+        let import = Import::with_module(module, &mut self.interner, &self.heap);
         let import = self.manage(import.into());
         self.imports.insert("_root".into(), import);
         self.globals_import().copy_to(&import);
@@ -171,7 +171,7 @@ impl Runtime {
     pub fn load_import(&mut self, path: &str) -> Result<Gc<Object<Import>>, VmError> {
         let module = (self.import)(path);
         if let Some(module) = module {
-            let import = Import::with_module(module, &mut self.interner);
+            let import = Import::with_module(module, &mut self.interner, &self.heap);
             let import = self.manage(import.into());
             self.imports.insert(path.into(), import);
             self.globals_import().copy_to(&import);
@@ -279,6 +279,16 @@ impl Runtime {
         unsafe {
             let slice = &*std::ptr::slice_from_raw_parts(self.ip, 2);
             let value = i16::from_le_bytes(slice.try_into().unwrap());
+            self.ip = self.ip.add(2);
+            value
+        }
+    }
+
+    #[inline]
+    pub fn next_u16(&mut self) -> u16 {
+        unsafe {
+            let slice = &*std::ptr::slice_from_raw_parts(self.ip, 2);
+            let value = u16::from_le_bytes(slice.try_into().unwrap());
             self.ip = self.ip.add(2);
             value
         }

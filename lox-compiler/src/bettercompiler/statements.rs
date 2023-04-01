@@ -66,7 +66,7 @@ fn define_variable(compiler: &mut Compiler, identifier: &str) {
 }
 
 fn compile_import(compiler: &mut Compiler, path: &WithSpan<String>, identifiers: Option<&Vec<WithSpan<String>>>) {
-    let constant = compiler.add_constant(path.value.as_str());
+    let constant = compiler.add_string(path.value.as_str());
     compiler.add_u8(opcode::IMPORT);
     compiler.add_u32(constant as _);
 
@@ -498,15 +498,15 @@ fn compile_nil(compiler: &mut Compiler) {
 }
 
 fn compile_number(compiler: &mut Compiler, num: f64) {
-    let constant = compiler.add_constant(num);
-    compiler.add_u8(opcode::CONSTANT);
-    compiler.add_u32(constant as _);
+    let constant = compiler.add_number(num);
+    compiler.add_u8(opcode::NUMBER);
+    compiler.add_u16(constant as _);
 }
 
 fn compile_string(compiler: &mut Compiler, string: &str) {
-    let constant = compiler.add_constant(string);
-    compiler.add_u8(opcode::CONSTANT);
-    compiler.add_u32(constant as _);
+    let constant = compiler.add_string(string);
+    compiler.add_u8(opcode::STRING);
+    compiler.add_u16(constant as _);
 }
 
 fn compile_binary(

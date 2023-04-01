@@ -29,8 +29,14 @@ pub fn disassemble_module(module: &Module) {
     }
     println!();
 
-    println!("=== Constants ===");
-    for (index, constant) in module.constants().iter().enumerate() {
+    println!("=== Numbers ===");
+    for (index, constant) in module.numbers.iter().enumerate() {
+        println!("{} {:?}", index, constant);
+    }
+    println!();
+
+    println!("=== Strings ===");
+    for (index, constant) in module.strings.iter().enumerate() {
         println!("{} {:?}", index, constant);
     }
     println!();
@@ -49,20 +55,13 @@ pub fn disassemble_chunk(chunk: &[u8], module: &Module) {
             Opcode::DefineGlobal(index)   => println!("{:04X} {:<18} {}"    , offset, instruction, module.identifier(index as _)),
             Opcode::GetGlobal(index)      => println!("{:04X} {:<18} {}"    , offset, instruction, module.identifier(index as _)),
             Opcode::SetGlobal(index)      => println!("{:04X} {:<18} {}"    , offset, instruction, module.identifier(index as _)),
-            Opcode::Constant(index)       => println!("{:04X} {:<18} {}"  , offset, instruction, constant(index, module)),
+            Opcode::Number(index)         => println!("{:04X} {:<18} {}"    , offset, instruction, module.number(index as _)),
+            Opcode::String(index)         => println!("{:04X} {:<18} {}"    , offset, instruction, module.string(index as _)),
             Opcode::Invoke(_arity, index) => println!("{:04X} {:<18} {}"    , offset, instruction, module.identifier(index as _)),
             Opcode::GetProperty(index)    => println!("{:04X} {:<18} {}"    , offset, instruction, module.identifier(index as _)),
             Opcode::SetProperty(index)    => println!("{:04X} {:<18} {}"    , offset, instruction, module.identifier(index as _)),
             _                             => println!("{:04X} {:<18}"       , offset, instruction),
         }
-    }
-}
-
-fn constant(index: u32, module: &Module) -> String {
-    let constant = module.constant(index as _);
-    match constant {
-        crate::bytecode::Constant::Number(num) => format!("{}", num),
-        crate::bytecode::Constant::String(str) => format!("{}", str),
     }
 }
 

@@ -1,22 +1,25 @@
-use lox_bytecode::bytecode::{Chunk, Constant, ConstantIndex, Module, ClosureIndex, ClassIndex};
-use crate::gc::Trace;
+use lox_bytecode::bytecode::{Chunk, ConstantIndex, Module, ClosureIndex, ClassIndex};
+use crate::gc::{Trace, Heap, Gc};
 use std::cell::UnsafeCell;
 use crate::interner::{Symbol, Interner};
 use lox_bytecode::bytecode;
 use crate::table::Table;
 use crate::value::Value;
+use crate::memory::Object;
 
 #[derive(Debug)]
 pub struct Import {
     module: Module,
     globals: UnsafeCell<Table>,
     symbols: Vec<Symbol>,
+    strings: Vec<Gc<Object<String>>>,
 }
 
 impl Trace for Import {
     #[inline]
     fn trace(&self) {
         self.globals().trace();
+        self.strings.trace();
     }
 }
 
@@ -26,18 +29,24 @@ impl Import {
             module: Module::new(),
             globals: Default::default(),
             symbols: Default::default(),
+            strings: Default::default(),
         }
     }
 
-    pub(crate) fn with_module(module: Module, interner: &mut Interner) -> Self {
+    pub(crate) fn with_module(module: Module, interner: &mut Interner, heap: &Heap) -> Self {
         let symbols = module.identifiers().iter().map(|identifier| {
             interner.intern(identifier)
+        }).collect();
+
+        let strings = module.strings.iter().map(|value| {
+            heap.manage(value.clone().into())
         }).collect();
 
         Self {
             module,
             globals: Default::default(),
             symbols,
+            strings,
         }
     }
 
@@ -64,8 +73,15 @@ impl Import {
     }
 
     #[inline]
-    pub(crate) fn constant(&self, index: ConstantIndex) -> &Constant {
-        self.module.constant(index)
+    pub(crate) fn number(&self, index: ConstantIndex) -> f64 {
+        self.module.number(index)
+    }
+
+    #[inline]
+    pub(crate) fn string(&self, index: ConstantIndex) -> Gc<Object<String>> {
+        unsafe {
+            *self.strings.get_unchecked(index)
+        }
     }
 
     //TODO rename to make it clear this is not an alive closure.

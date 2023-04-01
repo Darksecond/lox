@@ -1,4 +1,5 @@
-pub const CONSTANT     : u8 = 0;
+
+//pub const CONSTANT     : u8 = 0;
 pub const TRUE         : u8 = 1;
 pub const FALSE        : u8 = 2;
 pub const NIL          : u8 = 3;
@@ -46,9 +47,11 @@ pub const LIST         : u8 = 35;
 pub const GET_INDEX    : u8 = 36;
 pub const SET_INDEX    : u8 = 37;
 
+pub const NUMBER       : u8 = 38;
+pub const STRING       : u8 = 39;
+
 #[derive(Copy, Clone, Debug)]
 pub enum Opcode {
-    Constant(u32),
     True,
     False,
     Nil,
@@ -95,6 +98,9 @@ pub enum Opcode {
     List(u8),
     GetIndex,
     SetIndex,
+
+    Number(u16),
+    String(u16),
 }
 
 pub struct OpcodeIterator<T: Iterator<Item = u8>> {
@@ -124,6 +130,11 @@ impl<T> OpcodeIterator<T> where T: Iterator<Item = u8> {
         let bytes = [self.next_u8(), self.next_u8()];
         i16::from_le_bytes(bytes)
     }
+
+    fn next_u16(&mut self) -> u16 {
+        let bytes = [self.next_u8(), self.next_u8()];
+        u16::from_le_bytes(bytes)
+    }
 }
 
 impl<T> Iterator for OpcodeIterator<T> where T: Iterator<Item = u8> {
@@ -135,7 +146,6 @@ impl<T> Iterator for OpcodeIterator<T> where T: Iterator<Item = u8> {
         let opcode = self.inner.next()?;
 
         let opcode = match opcode {
-            CONSTANT => Opcode::Constant(self.next_u32()),
             TRUE => Opcode::True,
             FALSE => Opcode::False,
             NIL => Opcode::Nil,
@@ -182,6 +192,9 @@ impl<T> Iterator for OpcodeIterator<T> where T: Iterator<Item = u8> {
             LIST => Opcode::List(self.next_u8()),
             GET_INDEX => Opcode::GetIndex,
             SET_INDEX => Opcode::SetIndex,
+
+            NUMBER => Opcode::Number(self.next_u16()),
+            STRING => Opcode::String(self.next_u16()),
 
             _ => unreachable!(),
         };
