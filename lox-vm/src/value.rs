@@ -87,12 +87,14 @@ impl Value {
         }
     }
 
+    //TODO Remove me
     #[inline]
     pub fn is_import(self) -> bool {
         use crate::memory::ObjectTag;
         self.is_object() && self.as_object().tag == ObjectTag::Import
     }
 
+    //TODO Remove me
     #[inline]
     pub fn is_instance(self) -> bool {
         use crate::memory::ObjectTag;

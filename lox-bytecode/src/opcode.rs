@@ -42,6 +42,10 @@ pub const METHOD       : u8 = 32;
 pub const IMPORT       : u8 = 33;
 pub const IMPORT_GLOBAL: u8 = 34;
 
+pub const LIST         : u8 = 35;
+pub const GET_INDEX    : u8 = 36;
+pub const SET_INDEX    : u8 = 37;
+
 #[derive(Copy, Clone, Debug)]
 pub enum Opcode {
     Constant(u32),
@@ -87,6 +91,10 @@ pub enum Opcode {
 
     Import(u32),
     ImportGlobal(u32),
+
+    List(u8),
+    GetIndex,
+    SetIndex,
 }
 
 pub struct OpcodeIterator<T: Iterator<Item = u8>> {
@@ -170,6 +178,10 @@ impl<T> Iterator for OpcodeIterator<T> where T: Iterator<Item = u8> {
 
             IMPORT => Opcode::Import(self.next_u32()),
             IMPORT_GLOBAL => Opcode::ImportGlobal(self.next_u32()),
+
+            LIST => Opcode::List(self.next_u8()),
+            GET_INDEX => Opcode::GetIndex,
+            SET_INDEX => Opcode::SetIndex,
 
             _ => unreachable!(),
         };

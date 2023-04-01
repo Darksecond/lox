@@ -32,6 +32,7 @@ pub enum VmError {
     UndefinedProperty,
     Unimplemented,
     UnknownImport,
+    IndexOutOfRange,
 }
 
 pub struct Runtime {

@@ -1,0 +1,6 @@
+
+var x = [1,false,"Hi"];
+print x;
+print x[0];
+print x[0] = 123;
+print x[0];

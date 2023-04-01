@@ -299,8 +299,33 @@ fn compile_expr(compiler: &mut Compiler, expr: &WithSpan<Expr>) {
         }
         Expr::Get(ref expr, ref identifier) => compile_get(compiler, expr, identifier.as_ref()),
         Expr::This => compile_this(compiler, expr),
+        Expr::List(ref expr) => compile_list(compiler, expr),
+        Expr::ListGet(ref list, ref expr) => compile_list_get(compiler, list, expr),
+        Expr::ListSet(ref list, ref index, ref value) => compile_list_set(compiler, list, index, value),
         ref expr => unimplemented!("{:?}", expr),
     }
+}
+
+fn compile_list_set(compiler: &mut Compiler, list: &WithSpan<Expr>, index: &WithSpan<Expr>, value: &WithSpan<Expr>) {
+        compile_expr(compiler, list);
+        compile_expr(compiler, index);
+        compile_expr(compiler, value);
+        compiler.add_u8(opcode::SET_INDEX);
+}
+
+fn compile_list_get(compiler: &mut Compiler, list: &WithSpan<Expr>, expr: &WithSpan<Expr>) {
+        compile_expr(compiler, list);
+        compile_expr(compiler, expr);
+        compiler.add_u8(opcode::GET_INDEX);
+}
+
+fn compile_list(compiler: &mut Compiler, expr: &Vec<WithSpan<Expr>>) {
+    for expr in expr {
+        compile_expr(compiler, expr);
+    }
+
+    compiler.add_u8(opcode::LIST);
+    compiler.add_u8(expr.len() as _);
 }
 
 fn compile_this(compiler: &mut Compiler, expr: &WithSpan<Expr>) {

@@ -49,6 +49,9 @@ impl Runtime {
                 opcode::SET_UPVALUE   => self.op_set_upvalue(),
                 opcode::CLOSE_UPVALUE => self.op_close_upvalue(),
                 opcode::INVOKE        => self.op_invoke(),
+                opcode::LIST          => self.op_list(),
+                opcode::GET_INDEX     => self.op_get_index(),
+                opcode::SET_INDEX     => self.op_set_index(),
                 _ => unreachable!(),
             };
 
@@ -63,6 +66,80 @@ impl Runtime {
                 },
             }
         }
+    }
+
+    pub fn op_set_index(&mut self) -> Signal {
+        let value = self.fiber.as_mut().stack.pop();
+        let index = self.fiber.as_mut().stack.pop();
+        let list = self.fiber.as_mut().stack.pop();
+
+        let list = if list.is_object() && list.as_object().tag == ObjectTag::List {
+            list.as_object().as_list()
+        } else {
+            return self.fiber.as_mut().runtime_error(VmError::UnexpectedValue);
+        };
+
+        let index = if index.is_number() {
+            index.as_number() as usize
+        } else {
+            return self.fiber.as_mut().runtime_error(VmError::UnexpectedValue);
+        };
+
+        if !list.is_valid(index) {
+            return self.fiber.as_mut().runtime_error(VmError::IndexOutOfRange);
+        }
+
+        list.set(index, value);
+
+        self.fiber.as_mut().stack.push(value);
+
+        Signal::More
+    }
+
+    pub fn op_get_index(&mut self) -> Signal {
+        let index = self.fiber.as_mut().stack.pop();
+        let list = self.fiber.as_mut().stack.pop();
+
+        let list = if list.is_object() && list.as_object().tag == ObjectTag::List {
+            list.as_object().as_list()
+        } else {
+            return self.fiber.as_mut().runtime_error(VmError::UnexpectedValue);
+        };
+
+        let index = if index.is_number() {
+            index.as_number() as usize
+        } else {
+            return self.fiber.as_mut().runtime_error(VmError::UnexpectedValue);
+        };
+
+        if !list.is_valid(index) {
+            return self.fiber.as_mut().runtime_error(VmError::IndexOutOfRange);
+        }
+
+        let value = list.get(index);
+
+        self.fiber.as_mut().stack.push(value);
+
+        Signal::More
+    }
+
+    //TODO Rework this
+    #[inline(never)]
+    pub fn op_list(&mut self) -> Signal {
+        let arity = self.next_u8();
+
+        let list = List::new(arity as _);
+
+        for index in (0..arity as usize).rev() {
+            let value = self.fiber.as_mut().stack.pop();
+            list.set(index, value);
+        }
+
+        let list: Gc<Object<List>> = self.manage(list.into());
+
+        self.fiber.as_mut().stack.push(Value::from_object(list));
+
+        Signal::More
     }
 
     #[inline(never)]
