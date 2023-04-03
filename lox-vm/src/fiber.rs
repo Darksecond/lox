@@ -10,7 +10,7 @@ pub struct CallFrame {
     pub base_counter: usize,
     pub closure: Gc<Object<Closure>>,
 
-    ip: *const u8,
+    ip: Cell<*const u8>,
 }
 
 impl Trace for CallFrame {
@@ -26,31 +26,31 @@ impl CallFrame {
         Self {
             base_counter,
             closure: object,
-            ip,
+            ip: Cell::new(ip),
         }
     }
 
     #[inline]
     pub fn load_ip(&self) -> *const u8 {
-        self.ip
+        self.ip.get()
     }
 
     #[inline]
-    pub fn store_ip(&mut self, ip: *const u8) {
-        self.ip = ip;
+    pub fn store_ip(&self, ip: *const u8) {
+        self.ip.set(ip);
     }
 }
 
 pub struct Fiber {
-    pub parent: Option<Gc<UnsafeCell<Fiber>>>,
-    frames: Vec<CallFrame>,
-    pub stack: Stack,
+    pub parent: Option<Gc<Fiber>>,
+    frames: UnsafeCell<Vec<CallFrame>>,
+    stack: UnsafeCell<Stack>,
     _stack_block: StackBlock,
-    upvalues: Vec<Gc<Cell<Upvalue>>>,
-    pub error: Option<VmError>,
+    upvalues: UnsafeCell<Vec<Gc<Cell<Upvalue>>>>,
+    error: Cell<Option<VmError>>,
 
     // We use a pointer for the current call frame becaeuse this is way faster than using last().
-    current_frame: *mut CallFrame,
+    current_frame: Cell<*mut CallFrame>,
 }
 
 impl Trace for Fiber {
@@ -64,43 +64,64 @@ impl Trace for Fiber {
 }
 
 impl Fiber {
-    pub fn new(parent: Option<Gc<UnsafeCell<Fiber>>>) -> Self {
+    pub fn new(parent: Option<Gc<Fiber>>) -> Self {
         let block = StackBlock::new(2028);
         let frames = Vec::with_capacity(2048);
         Self {
             parent,
-            frames,
-            stack: Stack::with_block(&block),
+            frames: UnsafeCell::new(frames),
+            stack: UnsafeCell::new(Stack::with_block(&block)),
             _stack_block: block,
-            upvalues: Vec::with_capacity(2048),
-            error: None,
+            upvalues: UnsafeCell::new(Vec::with_capacity(2048)),
+            error: Cell::new(None),
 
-            current_frame: std::ptr::null_mut(),
+            current_frame: Cell::new(std::ptr::null_mut()),
         }
     }
 
-    pub fn runtime_error(&mut self, error: VmError) -> Signal {
+    #[inline]
+    pub fn with_stack<T>(&self, mut func: impl FnMut(&mut Stack) -> T) -> T {
+        let stack = unsafe {
+            &mut *self.stack.get()
+        };
+
+        func(stack)
+    }
+
+    pub fn error(&self) -> Option<VmError> {
+        self.error.get()
+    }
+
+    pub fn runtime_error(&self, error: VmError) -> Signal {
         //panic!("runtime error: {:?}", error);
-        self.error = Some(error);
+        self.error.set(Some(error));
         Signal::RuntimeError
     }
 
-    pub fn begin_frame(&mut self, closure: Gc<Object<Closure>>) {
-        self.frames.push(CallFrame::new(closure, self.stack.len() - closure.function.arity - 1));
+    pub fn begin_frame(&self, closure: Gc<Object<Closure>>) {
+        let base_counter = self.with_stack(|stack| {
+            stack.len() - closure.function.arity - 1
+        });
+
+        let frames = unsafe { &mut *self.frames.get() };
+
+        frames.push(CallFrame::new(closure, base_counter));
 
         // We don't just offset(1) here because Vec might reallocate contents.
         unsafe {
-            self.current_frame = self.frames.as_mut_ptr().add(self.frames.len() - 1);
+            self.current_frame.set(frames.as_mut_ptr().add(frames.len() - 1));
         }
     }
 
-    pub fn end_frame(&mut self) -> Option<Signal> {
-        if self.frames.pop().is_some() {
-            if self.frames.is_empty() {
-                self.current_frame = std::ptr::null_mut();
+    pub fn end_frame(&self) -> Option<Signal> {
+        let frames = unsafe { &mut *self.frames.get() };
+
+        if frames.pop().is_some() {
+            if frames.is_empty() {
+                self.current_frame.set(std::ptr::null_mut());
             } else {
                 unsafe {
-                    self.current_frame = self.current_frame.offset(-1);
+                    self.current_frame.set(self.current_frame.get().offset(-1));
                 }
             }
             None
@@ -111,39 +132,36 @@ impl Fiber {
 
     #[inline]
     pub fn has_current_frame(&self) -> bool {
-        self.current_frame != std::ptr::null_mut()
+        self.current_frame.get() != std::ptr::null_mut()
     }
 
     #[inline]
     pub fn current_frame(&self) -> &CallFrame {
         unsafe {
-            &*self.current_frame
+            &*self.current_frame.get()
         }
     }
 
-    #[inline]
-    pub fn current_frame_mut(&mut self) -> &mut CallFrame {
-        unsafe {
-            &mut *self.current_frame
-        }
+    pub fn push_upvalue(&self, upvalue: Gc<Cell<Upvalue>>) {
+        let upvalues = unsafe { &mut *self.upvalues.get() };
+        upvalues.push(upvalue);
     }
 
-    pub fn push_upvalue(&mut self, upvalue: Gc<Cell<Upvalue>>) {
-        self.upvalues.push(upvalue);
-    }
-
-    pub fn close_upvalues(&mut self, index: usize) {
-        for upvalue in self.upvalues.iter() {
+    pub fn close_upvalues(&self, index: usize) {
+        let upvalues = unsafe { &mut *self.upvalues.get() };
+        for upvalue in upvalues.iter() {
             if let Some(index) = upvalue.get().is_open_with_range(index) {
-                let value = self.stack.get(index);
-                upvalue.set(Upvalue::Closed(value));
+                self.with_stack(|stack| {
+                    let value = stack.get(index);
+                    upvalue.set(Upvalue::Closed(value));
+                });
             }
         }
 
-        for index in (0..self.upvalues.len()).rev() {
-            let upvalue = unsafe { self.upvalues.get_unchecked(index) };
+        for index in (0..upvalues.len()).rev() {
+            let upvalue = unsafe { upvalues.get_unchecked(index) };
             if !upvalue.get().is_open() {
-                self.upvalues.swap_remove(index);
+                upvalues.swap_remove(index);
             }
         }
     }
@@ -154,7 +172,8 @@ impl Fiber {
     }
 
     pub fn find_open_upvalue_with_index(&self, index: usize) -> Option<Gc<Cell<Upvalue>>> {
-        for upvalue in self.upvalues.iter().rev() {
+        let upvalues = unsafe { &*self.upvalues.get() };
+        for upvalue in upvalues.iter().rev() {
             if upvalue.get().is_open_with_index(index) {
                 return Some(*upvalue);
             }
@@ -166,32 +185,14 @@ impl Fiber {
     pub fn resolve_upvalue_into_value(&self, upvalue: Gc<Cell<Upvalue>>) -> Value {
         match upvalue.get() {
             Upvalue::Closed(value) => value,
-            Upvalue::Open(index) => self.stack.get(index),
+            Upvalue::Open(index) => self.with_stack(|stack| stack.get(index)),
         }
     }
 
-    pub fn set_upvalue(&mut self, upvalue: Gc<Cell<Upvalue>>, new_value: Value) {
+    pub fn set_upvalue(&self, upvalue: Gc<Cell<Upvalue>>, new_value: Value) {
         match upvalue.get() {
             Upvalue::Closed(_) => upvalue.set(Upvalue::Closed(new_value)),
-            Upvalue::Open(index) => self.stack.set(index, new_value),
-        }
-    }
-}
-
-impl AsRef<Fiber> for Gc<UnsafeCell<Fiber>> {
-    #[inline]
-    fn as_ref(&self) -> &Fiber {
-        unsafe {
-            &*self.get()
-        }
-    }
-}
-
-impl AsMut<Fiber> for Gc<UnsafeCell<Fiber>> {
-    #[inline]
-    fn as_mut(&mut self) -> &mut Fiber {
-        unsafe {
-            &mut *self.get()
+            Upvalue::Open(index) => self.with_stack(|stack| stack.set(index, new_value)),
         }
     }
 }
