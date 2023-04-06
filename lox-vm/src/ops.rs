@@ -74,8 +74,8 @@ impl Runtime {
             let index = stack.pop();
             let list = stack.pop();
 
-            let list = if list.is_object() && list.as_object().tag == ObjectTag::List {
-                list.as_object().as_list()
+            let list = if list.is_object_of_type::<List>() {
+                list.as_object().cast::<List>()
             } else {
                 return self.fiber.runtime_error(VmError::UnexpectedValue);
             };
@@ -103,8 +103,8 @@ impl Runtime {
             let index = stack.pop();
             let list = stack.pop();
 
-            let list = if list.is_object() && list.as_object().tag == ObjectTag::List {
-                list.as_object().as_list()
+            let list = if list.is_object_of_type::<List>() {
+                list.as_object().cast::<List>()
             } else {
                 return self.fiber.runtime_error(VmError::UnexpectedValue);
             };
@@ -203,7 +203,7 @@ impl Runtime {
         self.fiber.with_stack(|stack| {
             let import = stack.peek_n(0);
             if import.is_import() {
-                let import = import.as_object().as_import();
+                let import = import.as_object().cast::<Import>();
                 let value = import.global(identifier).unwrap_or(Value::NIL);
                 stack.push(value);
             } else {
@@ -275,25 +275,33 @@ impl Runtime {
         let current_import = self.current_import();
         let identifier = current_import.symbol(index);
 
+        let class = self.fiber.with_stack(|stack| {
+            stack.peek_n(1)
+        });
+
+        if !class.is_object_of_type::<Class>() {
+            return self.fiber.runtime_error(VmError::UnexpectedConstant)
+        }
+
+        let class = class.as_object().cast::<Class>();
+
+        let closure = self.fiber.with_stack(|stack| {
+            stack.peek_n(0)
+        });
+
+        if !closure.is_object_of_type::<Closure>() {
+            return self.fiber.runtime_error(VmError::UnexpectedConstant)
+        }
+
+        let closure = closure.as_object().cast::<Closure>();
+
+        class.set_method(identifier, Value::from_object(closure));
+
         self.fiber.with_stack(|stack| {
-            let class = stack.peek_n(1);
-            if class.is_object() && class.as_object().tag != ObjectTag::Class {
-                return self.fiber.runtime_error(VmError::UnexpectedConstant)
-            }
-            let class = class.as_object().as_class();
-
-            let closure = stack.peek_n(0);
-            if closure.is_object() && closure.as_object().tag != ObjectTag::Closure {
-                return self.fiber.runtime_error(VmError::UnexpectedConstant)
-            }
-            let closure = closure.as_object().as_closure();
-
-            class.set_method(identifier, Value::from_object(closure));
-
             stack.pop();
+        });
 
-            Signal::More
-        })
+        Signal::More
     }
 
     pub fn op_return(&mut self) -> Signal {
@@ -638,7 +646,7 @@ impl Runtime {
             return self.fiber.runtime_error(VmError::UnexpectedValue);
         }
 
-        let instance = instance.as_object().as_instance();
+        let instance = instance.as_object().cast::<Instance>();
 
         self.fiber.with_stack(|stack| {
             instance.set_field(property, stack.peek_n(0));
@@ -668,7 +676,7 @@ impl Runtime {
                 return self.fiber.runtime_error(VmError::UnexpectedValue);
             }
 
-            let instance = instance.as_object().as_instance();
+            let instance = instance.as_object().cast::<Instance>();
 
             if let Some(value) = instance.field(property) {
                 stack.push(value);
@@ -748,7 +756,7 @@ impl Runtime {
             return self.fiber.runtime_error(VmError::UnexpectedValue);
         }
 
-        let instance = instance.as_object().as_instance();
+        let instance = instance.as_object().cast::<Instance>();
 
         if let Some(value) = instance.field(property) {
             self.fiber.with_stack(|stack| {
@@ -762,8 +770,8 @@ impl Runtime {
             None => return self.fiber.runtime_error(VmError::UndefinedProperty),
         };
 
-        if method.is_object() && method.as_object().tag == ObjectTag::Closure {
-            let method = method.as_object().as_closure();
+        if method.is_object_of_type::<Closure>() {
+            let method = method.as_object().cast::<Closure>();
             if method.function.arity != arity {
                 return self.fiber.runtime_error(VmError::IncorrectArity);
             }

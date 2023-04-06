@@ -69,7 +69,7 @@ impl Native<'_> {
         };
 
         let identifier = self.runtime.interner.intern(identifier);
-        let root = self.runtime.manage(Object::from_native_function(native_function));
+        let root: Gc<Object<NativeFunction>> = self.runtime.manage(native_function.into());
 
         import.set_global(identifier, Value::from_object(root))
     }

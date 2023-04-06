@@ -111,9 +111,9 @@ impl Runtime {
     }
 
     pub fn concat(&self, a: Value, b: Value) -> Signal {
-        if a.is_object() && b.is_object() && a.as_object().tag == ObjectTag::String && b.as_object().tag == ObjectTag::String {
-            let a = a.as_object().as_string();
-            let b = b.as_object().as_string();
+        if a.is_object_of_type::<String>() && b.is_object_of_type::<String>() {
+            let a = a.as_object().cast::<String>();
+            let b = b.as_object().cast::<String>();
             self.push_string(format!("{}{}", a.as_str(), b.as_str()));
             return Signal::More;
         }
@@ -205,60 +205,55 @@ impl Runtime {
 
         let callee = callee.as_object();
 
-        match callee.tag {
-            ObjectTag::Closure => {
-                let callee = callee.as_closure();
-                if callee.function.arity != arity {
-                    return self.fiber.runtime_error(VmError::IncorrectArity);
+        if callee.is::<Closure>() {
+            let callee = callee.cast::<Closure>();
+            if callee.function.arity != arity {
+                return self.fiber.runtime_error(VmError::IncorrectArity);
+            }
+            self.fiber.begin_frame(callee);
+        } else if callee.is::<NativeFunction>() {
+            let callee = callee.cast::<NativeFunction>();
+            self.fiber.with_stack(|stack| {
+                let args = stack.pop_n(arity);
+                let _this = stack.pop(); // discard callee
+                let result = (callee.code)(&args);
+                stack.push(result);
+            });
+        } else if callee.is::<Class>() {
+            let class = callee.cast::<Class>();
+            let instance: Gc<Object<Instance>> = self.manage(Instance::new(class).into());
+            self.fiber.with_stack(|stack| {
+                stack.rset(arity, Value::from_object(instance));
+            });
+
+            if let Some(initializer) = class.method(self.init_symbol) {
+                if !initializer.is_object() {
+                    return self.fiber.runtime_error(VmError::UnexpectedValue);
                 }
-                self.fiber.begin_frame(callee);
-            }
-            ObjectTag::NativeFunction => {
-                let callee = callee.as_native_function();
-                self.fiber.with_stack(|stack| {
-                    let args = stack.pop_n(arity);
-                    let _this = stack.pop(); // discard callee
-                    let result = (callee.code)(&args);
-                    stack.push(result);
-                });
-            }
-            ObjectTag::Class => {
-                let class = callee.as_class();
-                let instance: Gc<Object<Instance>> = self.manage(Instance::new(class).into());
-                self.fiber.with_stack(|stack| {
-                    stack.rset(arity, Value::from_object(instance));
-                });
 
-                if let Some(initializer) = class.method(self.init_symbol) {
-                    if !initializer.is_object() {
-                        return self.fiber.runtime_error(VmError::UnexpectedValue);
+                let initializer = initializer.as_object();
+
+                if initializer.is::<Closure>() {
+                    let initializer = initializer.cast::<Closure>();
+                    if initializer.function.arity != arity {
+                        return self.fiber.runtime_error(VmError::IncorrectArity);
                     }
-
-                    let initializer = initializer.as_object();
-
-                    if initializer.tag == ObjectTag::Closure {
-                        let initializer = initializer.as_closure();
-                        if initializer.function.arity != arity {
-                            return self.fiber.runtime_error(VmError::IncorrectArity);
-                        }
-                        self.fiber.begin_frame(initializer);
-                    } else {
-                        return self.fiber.runtime_error(VmError::UnexpectedValue);
-                    }
-                } else if arity != 0 {
-                    // Arity must be 0 without initializer
-                    return self.fiber.runtime_error(VmError::IncorrectArity);
+                    self.fiber.begin_frame(initializer);
+                } else {
+                    return self.fiber.runtime_error(VmError::UnexpectedValue);
                 }
+            } else if arity != 0 {
+                // Arity must be 0 without initializer
+                return self.fiber.runtime_error(VmError::IncorrectArity);
             }
-            ObjectTag::BoundMethod => {
-                let bind = callee.as_bound_method();
+        } else if callee.is::<BoundMethod>() {
+                let bind = callee.cast::<BoundMethod>();
                 self.fiber.with_stack(|stack| {
                     stack.rset(arity, Value::from_object(bind.receiver));
                 });
                 return self.call(arity, bind.method);
-
-            },
-            _ => return self.fiber.runtime_error(VmError::InvalidCallee),
+        } else {
+            return self.fiber.runtime_error(VmError::InvalidCallee)
         }
 
         self.load_ip();

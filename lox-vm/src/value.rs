@@ -90,15 +90,19 @@ impl Value {
     //TODO Remove me
     #[inline]
     pub fn is_import(self) -> bool {
-        use crate::memory::ObjectTag;
-        self.is_object() && self.as_object().tag == ObjectTag::Import
+        use crate::memory::Import;
+        self.is_object_of_type::<Import>()
     }
 
     //TODO Remove me
     #[inline]
     pub fn is_instance(self) -> bool {
-        use crate::memory::ObjectTag;
-        self.is_object() && self.as_object().tag == ObjectTag::Instance
+        use crate::memory::Instance;
+        self.is_object_of_type::<Instance>()
+    }
+
+    pub fn is_object_of_type<T>(self) -> bool where T: 'static {
+        self.is_object() && self.as_object().is::<T>()
     }
 }
 
