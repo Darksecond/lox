@@ -12,7 +12,7 @@ mod table;
 use lox_bytecode::bytecode::Module;
 use runtime::Runtime;
 use interner::Symbol;
-use memory::{Import, NativeFunction, Object};
+use memory::{Import, NativeFunction, Object, Class};
 use value::Value;
 use gc::{Gc, Trace};
 
@@ -62,23 +62,42 @@ impl Native<'_> {
         self.runtime.heap.manage(value)
     }
 
-    pub fn set_fn(&mut self, import: Gc<Object<Import>>, identifier: &str, code: fn(&[Value]) -> Value) {
-        let native_function = NativeFunction {
+    pub fn build_fn(&self, identifier: &str, code: fn(Value, &[Value]) -> Value) -> Gc<Object<NativeFunction>> {
+        self.runtime.heap.manage((NativeFunction {
             name: identifier.to_string(),
             code,
-        };
+        }).into())
+    }
 
+    pub fn set_fn(&mut self, import: Gc<Object<Import>>, identifier: &str, code: fn(Value, &[Value]) -> Value) {
+        let root = self.build_fn(identifier, code);
         let identifier = self.runtime.interner.intern(identifier);
-        let root: Gc<Object<NativeFunction>> = self.runtime.manage(native_function.into());
-
         import.set_global(identifier, Value::from_object(root))
     }
 
-    pub fn set_global_fn(&mut self, identifier: &str, code: fn(&[Value]) -> Value) {
+    pub fn set_method(&mut self, class: Gc<Object<Class>>, identifier: &str, code: fn(Value, &[Value]) -> Value) {
+        let root = self.build_fn(identifier, code);
+        let identifier = self.runtime.interner.intern(identifier);
+        class.set_method(identifier, Value::from_object(root));
+    }
+
+    pub fn set_global_fn(&mut self, identifier: &str, code: fn(Value, &[Value]) -> Value) {
         self.set_fn(self.global_import(), identifier, code)
     }
 
     pub fn global_import(&self) -> Gc<Object<Import>> {
         self.runtime.globals_import()
+    }
+
+    pub fn list_class(&self) -> Gc<Object<Class>> {
+        self.runtime.builtins.list_class
+    }
+
+    pub fn string_class(&self) -> Gc<Object<Class>> {
+        self.runtime.builtins.string_class
+    }
+
+    pub fn add_import(&mut self, import: Gc<Object<Import>>) {
+        self.runtime.imports.insert(import.name.clone(), import);
     }
 }

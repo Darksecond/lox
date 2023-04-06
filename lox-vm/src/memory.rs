@@ -123,6 +123,7 @@ impl Class {
         self.methods().get(symbol)
     }
 
+    // Make closure Gc<ErasedObject>
     pub fn set_method(&self, symbol: Symbol, closure: Value) {
         let methods = unsafe { &mut *self.methods.get() };
         methods.set(symbol, closure);
@@ -158,7 +159,7 @@ impl Trace for Closure {
 
 pub struct NativeFunction {
     pub name: String,
-    pub code: fn(&[Value]) -> Value,
+    pub code: fn(Value, &[Value]) -> Value,
 }
 
 impl std::fmt::Debug for NativeFunction {
@@ -201,7 +202,7 @@ impl Function {
 
 #[derive(Debug, Copy, Clone)]
 pub struct BoundMethod {
-    pub receiver: Gc<Object<Instance>>,
+    pub receiver: Gc<ErasedObject>,
     pub method: Value,
 }
 

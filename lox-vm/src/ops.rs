@@ -653,31 +653,49 @@ impl Runtime {
     pub fn op_get_property(&mut self) -> Signal {
         let index = self.next_u32() as _;
 
-        self.fiber.with_stack(|stack| {
-            let current_import = self.current_import();
-            let property = current_import.symbol(index);
+        let current_import = self.current_import();
+        let property = current_import.symbol(index);
 
-            let instance = as_obj!(self, stack.pop(), Instance);
+        let instance = self.fiber.with_stack(|stack| {
+            stack.pop()
+        });
+
+        if !instance.is_object() {
+            return self.fiber.runtime_error(VmError::UnexpectedValue);
+        }
+
+        if instance.is_object_of_type::<Instance>(){
+            let instance = instance.as_object().cast::<Instance>();
 
             if let Some(value) = instance.field(property) {
-                stack.push(value);
+                self.fiber.with_stack(|stack| {
+                    stack.push(value)
+                });
+
                 return Signal::More;
             }
+        }
 
-            let method = match instance.class.method(property) {
-                Some(method) => method,
-                None => return self.fiber.runtime_error(VmError::UndefinedProperty),
-            };
+        let class = match self.builtins.class_for_object(instance.as_object()) {
+            Some(class) => class,
+            None => return self.fiber.runtime_error(VmError::UnexpectedValue),
+        };
 
-            let bind: Gc<Object<BoundMethod>> = self.manage(BoundMethod {
-                receiver: instance,
-                method,
-            }.into());
+        let method = match class.method(property) {
+            Some(method) => method,
+            None => return self.fiber.runtime_error(VmError::UndefinedProperty),
+        };
 
-            stack.push(Value::from_object(bind));
+        let bind: Gc<Object<BoundMethod>> = self.manage(BoundMethod {
+            receiver: instance.as_object(),
+            method,
+        }.into());
 
-            Signal::More
-        })
+        self.fiber.with_stack(|stack| {
+            stack.push(Value::from_object(bind))
+        });
+
+        Signal::More
     }
 
     pub fn op_closure(&mut self) -> Signal {
@@ -733,16 +751,27 @@ impl Runtime {
             stack.peek_n(arity)
         });
 
-        let instance = as_obj!(self, instance, Instance);
-
-        if let Some(value) = instance.field(property) {
-            self.fiber.with_stack(|stack| {
-                stack.rset(arity, value);
-            });
-            return self.call(arity, value);
+        if !instance.is_object() {
+            return self.fiber.runtime_error(VmError::UnexpectedValue);
         }
 
-        let method = match instance.class.method(property) {
+        if instance.is_object_of_type::<Instance>(){
+            let instance = instance.as_object().cast::<Instance>();
+
+            if let Some(value) = instance.field(property) {
+                self.fiber.with_stack(|stack| {
+                    stack.rset(arity, value);
+                });
+                return self.call(arity, value);
+            }
+        }
+
+        let class = match self.builtins.class_for_object(instance.as_object()) {
+            Some(class) => class,
+            None => return self.fiber.runtime_error(VmError::UnexpectedValue),
+        };
+
+        let method = match class.method(property) {
             Some(value) => value,
             None => return self.fiber.runtime_error(VmError::UndefinedProperty),
         };

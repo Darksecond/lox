@@ -4,3 +4,12 @@ print x;
 print x[0];
 print x[0] = 123;
 print x[0];
+print x.append;
+var y = x.append;
+y("World!");
+print x;
+
+var z = [];
+print z;
+z.append(1).append(2).append("three");
+print z;

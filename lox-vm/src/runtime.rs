@@ -2,6 +2,8 @@ mod builtins;
 
 use lox_bytecode::bytecode::Module;
 use crate::value::Value;
+use builtins::Builtins;
+
 use super::memory::*;
 use super::interner::{Symbol, Interner};
 use super::gc::{Gc, Trace, Heap};
@@ -41,8 +43,10 @@ pub struct Runtime {
     next_fiber: Option<Gc<Fiber>>,
     init_symbol: Symbol,
     pub interner: Interner,
-    imports: HashMap<String, Gc<Object<Import>>>,
+    pub imports: HashMap<String, Gc<Object<Import>>>,
     pub heap: Heap,
+
+    pub builtins: Builtins,
 
     // Env
     pub print: for<'r> fn(&'r str),
@@ -73,10 +77,8 @@ impl Runtime {
         let mut interner = Interner::new();
         let heap = Heap::new();
         let fiber = heap.manage(Fiber::new(None));
-        let mut imports = HashMap::new();
 
-        let globals = heap.manage(Import::new("_globals").into());
-        imports.insert("_globals".to_string(), globals);
+        let builtins = Builtins::new(&heap);
 
         Self {
             fiber,
@@ -84,9 +86,11 @@ impl Runtime {
             init_symbol: interner.intern("init"),
             interner,
             heap,
-            imports,
+            imports: HashMap::new(),
             print: default_print,
             import: default_import,
+
+            builtins,
 
             ip: std::ptr::null(),
         }
@@ -191,7 +195,7 @@ impl Runtime {
     }
 
     pub fn globals_import(&self) -> Gc<Object<Import>> {
-        *self.imports.get("_globals").expect("Could not find globals import")
+        self.builtins.globals_import
     }
 
     //TODO Reduce duplicate code paths
@@ -215,8 +219,8 @@ impl Runtime {
             let callee = callee.cast::<NativeFunction>();
             self.fiber.with_stack(|stack| {
                 let args = stack.pop_n(arity);
-                let _this = stack.pop(); // discard callee
-                let result = (callee.code)(&args);
+                let this = stack.pop(); // discard callee
+                let result = (callee.code)(this, &args);
                 stack.push(result);
             });
         } else if callee.is::<Class>() {
