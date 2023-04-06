@@ -3,6 +3,10 @@ use crate::gc::{Gc, Trace};
 use super::{Closure, BoundMethod, NativeFunction, Class, Instance, Import, List};
 use std::fmt::Display;
 
+trait ObjectInner: Display {}
+
+impl<T> ObjectInner for T where T: Display {}
+
 #[derive(Debug, PartialEq, Copy, Clone)]
 pub enum ObjectTag {
     String,
@@ -19,31 +23,6 @@ pub enum ObjectTag {
 #[repr(C)]
 pub struct ErasedObject {
     pub tag: ObjectTag,
-}
-
-impl ErasedObject {
-    fn as_object<T: Trace>(&self) -> &T {
-        let ptr = self as *const ErasedObject;
-        let ptr = ptr as *const Object<T>;
-        unsafe {
-            &*ptr
-        }
-    }
-}
-
-impl Trace for ErasedObject {
-    fn trace(&self) {
-        match self.tag {
-            ObjectTag::String => self.as_object::<String>().trace(),
-            ObjectTag::Closure => self.as_object::<Closure>().trace(),
-            ObjectTag::BoundMethod => self.as_object::<BoundMethod>().trace(),
-            ObjectTag::NativeFunction => self.as_object::<NativeFunction>().trace(),
-            ObjectTag::Class => self.as_object::<Class>().trace(),
-            ObjectTag::Instance => self.as_object::<Instance>().trace(),
-            ObjectTag::Import => self.as_object::<Import>().trace(),
-            ObjectTag::List => self.as_object::<List>().trace(),
-        }
-    }
 }
 
 #[derive(Debug)]
@@ -244,6 +223,43 @@ impl Display for Gc<ErasedObject> {
             ObjectTag::Instance => write!(f, "{} instance", self.as_instance().class.name),
             ObjectTag::Import => write!(f, "<import>"),
             ObjectTag::List => write!(f, "{}", self.as_list()),
+        }
+    }
+}
+
+mod vtable {
+    use super::ObjectInner;
+
+    #[repr(C)]
+    struct Object {
+        data: *const (),
+        vtable: *mut (),
+    }
+
+    fn extract<T: ObjectInner>(data: &T) -> *mut () {
+        unsafe {
+            let obj = data as &dyn ObjectInner;
+            std::mem::transmute::<&dyn ObjectInner, Object>(obj).vtable
+        }
+    }
+
+    unsafe fn construct<'a>(data: *const (), vtable: *mut ()) -> &'a dyn ObjectInner {
+        unsafe {
+            let object = Object {
+                data,
+                vtable,
+            };
+            std::mem::transmute::<Object, &dyn ObjectInner>(object)
+        }
+    }
+
+    unsafe fn construct_mut<'a>(data: *const (), vtable: *mut ()) -> &'a mut dyn ObjectInner {
+        unsafe {
+            let object = Object {
+                data,
+                vtable,
+            };
+            std::mem::transmute::<Object, &mut dyn ObjectInner>(object)
         }
     }
 }

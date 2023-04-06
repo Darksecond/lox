@@ -16,8 +16,9 @@ impl fmt::Debug for dyn Trace {
 
 #[derive(Debug)]
 #[repr(C)]
-struct Allocation<T: 'static + Trace + ?Sized> {
-    next: Cell<Option<NonNull<Allocation<dyn Trace>>>>,
+struct Allocation<T: ?Sized> {
+    next: Cell<Option<NonNull<Allocation<()>>>>,
+    vtable: *mut (),
     marked: Cell<bool>,
     size: Cell<usize>,
     data: T,
@@ -25,24 +26,67 @@ struct Allocation<T: 'static + Trace + ?Sized> {
 
 #[derive(Debug)]
 pub struct Heap {
-    next: Cell<Option<NonNull<Allocation<dyn Trace>>>>,
+    next: Cell<Option<NonNull<Allocation<()>>>>,
     bytes_allocated: Cell<usize>,
     threshold: Cell<usize>,
 }
 
-pub struct Gc<T: 'static + Trace> {
+pub struct Gc<T: ?Sized> {
     ptr: NonNull<Allocation<T>>,
 }
 
-impl<T: 'static + Trace + ?Sized> Allocation<T> {
+impl<T: ?Sized> Allocation<T> {
     fn unmark(&self) {
         self.marked.set(false);
     }
+
+    fn erased(&self) -> &Allocation<()> {
+        let ptr = self as *const Allocation<T>;
+        let ptr = ptr as *const Allocation<()>;
+        unsafe {
+            &*ptr
+        }
+    }
+
+    pub fn dyn_data(&self) -> &dyn Trace {
+        let data = &self.erased().data as *const ();
+        unsafe {
+            vtable::construct(data, self.vtable)
+        }
+    }
+
+    pub fn dyn_data_mut(&self) -> &mut dyn Trace {
+        let data = &self.erased().data as *const ();
+        unsafe {
+            vtable::construct_mut(data, self.vtable)
+        }
+    }
 }
-impl<T: 'static + Trace + ?Sized> Trace for Allocation<T> {
+
+impl<T: Trace> Allocation<T> {
+    pub fn new(data: T) -> NonNull<Allocation<T>> {
+        let size = std::mem::size_of::<T>() + data.size_hint();
+
+        let vtable = vtable::extract(&data);
+
+        let alloc = Box::new(Allocation {
+            marked: Cell::new(false),
+            next: Cell::new(None),
+            size: Cell::new(size),
+            vtable,
+            data,
+        });
+
+        unsafe {
+            NonNull::new_unchecked(Box::into_raw(alloc))
+        }
+    }
+}
+
+impl<T: ?Sized> Trace for Allocation<T> {
     fn trace(&self) {
         if !self.marked.replace(true) {
-            self.data.trace();
+            self.dyn_data().trace();
         }
     }
 }
@@ -58,22 +102,11 @@ impl Heap {
         }
     }
 
-    fn allocate<T: 'static + Trace>(&self, data: T) -> NonNull<Allocation<T>> {
-        let size = std::mem::size_of::<T>() + data.size_hint();
-
-        let alloc = Box::new(Allocation {
-            marked: Cell::new(false),
-            next: Cell::new(self.next.get()),
-            size: Cell::new(size),
-            data,
-        });
-
-        let ptr = unsafe { NonNull::new_unchecked(Box::into_raw(alloc)) };
-
-        self.next.set(Some(ptr));
-        self.bytes_allocated.set(self.bytes_allocated.get() + size);
-
-        ptr
+    fn allocate<T: Trace>(&self, data: T) -> Gc<T> {
+        let ptr = Allocation::new(data);
+        Gc {
+            ptr,
+        }
     }
 
     pub fn adjust_size<T: 'static + Trace>(&self, object: Gc<T>) {
@@ -85,10 +118,15 @@ impl Heap {
         self.bytes_allocated.set(self.bytes_allocated.get() + size);
     }
 
-    pub fn manage<T: 'static + Trace>(&self, data: T) -> Gc<T> {
-        Gc {
-            ptr: self.allocate(data),
-        }
+    pub fn manage<T: Trace>(&self, data: T) -> Gc<T> {
+        let gc = self.allocate(data);
+
+        gc.allocation().next.set(self.next.get());
+        self.next.set(Some(gc.erased()));
+
+        self.bytes_allocated.set(self.bytes_allocated.get() + gc.allocation().size.get());
+
+        gc
     }
 
     #[inline]
@@ -143,14 +181,22 @@ impl Heap {
         }
     }
 
-    fn free_object(&self, mut ptr: NonNull<Allocation<dyn Trace>>) {
-        {
-            let object = unsafe { ptr.as_ref() };
-            self.bytes_allocated.set(self.bytes_allocated.get() - object.size.get());
+    fn free_object(&self, ptr: NonNull<Allocation<()>>) {
+        let allocation = unsafe { ptr.as_ref() };
+
+        self.bytes_allocated.set(self.bytes_allocated.get() - allocation.size.get());
+
+        // Call destructor for data.
+        unsafe {
+            let ptr = allocation.dyn_data_mut() as *mut dyn Trace;
+            std::ptr::drop_in_place(ptr);
         }
 
+        drop(allocation);
+
+        // Deallocate data.
         unsafe {
-            drop(Box::from_raw(ptr.as_mut()));
+            drop(Box::from_raw(ptr.as_ptr()));
         }
     }
 }
@@ -163,7 +209,7 @@ impl Drop for Heap {
     }
 }
 
-impl<T: 'static + Trace> Gc<T> {
+impl<T: ?Sized> Gc<T> {
     #[inline]
     fn allocation(&self) -> &Allocation<T> {
         unsafe { self.ptr.as_ref() }
@@ -173,9 +219,17 @@ impl<T: 'static + Trace> Gc<T> {
     pub fn ptr_eq(a: &Gc<T>, b: &Gc<T>) -> bool {
         a.ptr == b.ptr
     }
+
+    fn erased(&self) -> NonNull<Allocation<()>> {
+        let ptr = self.ptr.as_ptr() as *mut Allocation<()>;
+
+        unsafe {
+            NonNull::new_unchecked(ptr)
+        }
+    }
 }
 
-impl<T: 'static + Trace> Gc<T> {
+impl<T> Gc<T> {
     #[inline]
     pub fn to_bits(self) -> u64 {
         self.ptr.as_ptr() as u64
@@ -189,15 +243,15 @@ impl<T: 'static + Trace> Gc<T> {
     }
 }
 
-impl<T: 'static + Trace> Copy for Gc<T> {}
-impl<T: 'static + Trace> Clone for Gc<T> {
+impl<T: ?Sized> Copy for Gc<T> {}
+impl<T: ?Sized> Clone for Gc<T> {
     #[inline]
     fn clone(&self) -> Gc<T> {
         *self
     }
 }
 
-impl<T: 'static + Trace> Deref for Gc<T> {
+impl<T: ?Sized> Deref for Gc<T> {
     type Target = T;
 
     #[inline]
@@ -206,19 +260,19 @@ impl<T: 'static + Trace> Deref for Gc<T> {
     }
 }
 
-impl<T: fmt::Debug + 'static + Trace> fmt::Debug for Gc<T> {
+impl<T: fmt::Debug + ?Sized> fmt::Debug for Gc<T> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let inner: &T = &**self;
         write!(f, "Gc({:?})", inner)
     }
 }
-impl<T: fmt::Display + 'static + Trace> fmt::Display for Gc<T> {
+impl<T: fmt::Display + ?Sized> fmt::Display for Gc<T> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let inner: &T = &**self;
         inner.fmt(f)
     }
 }
-impl<T: 'static + Trace> Trace for Gc<T> {
+impl<T: ?Sized> Trace for Gc<T> {
     #[inline]
     fn trace(&self) {
         self.allocation().trace();
@@ -290,6 +344,43 @@ impl<T: Trace> Trace for Option<T> {
         match self {
             Some(inner) => inner.trace(),
             None => (),
+        }
+    }
+}
+
+mod vtable {
+    use super::Trace;
+
+    #[repr(C)]
+    struct Object {
+        data: *const (),
+        vtable: *mut (),
+    }
+
+    pub fn extract<T: Trace>(data: &T) -> *mut () {
+        unsafe {
+            let obj = data as &dyn Trace;
+            std::mem::transmute::<&dyn Trace, Object>(obj).vtable
+        }
+    }
+
+    pub unsafe fn construct<'a>(data: *const (), vtable: *mut ()) -> &'a dyn Trace {
+        unsafe {
+            let object = Object {
+                data,
+                vtable,
+            };
+            std::mem::transmute::<Object, &dyn Trace>(object)
+        }
+    }
+
+    pub unsafe fn construct_mut<'a>(data: *const (), vtable: *mut ()) -> &'a mut dyn Trace {
+        unsafe {
+            let object = Object {
+                data,
+                vtable,
+            };
+            std::mem::transmute::<Object, &mut dyn Trace>(object)
         }
     }
 }
