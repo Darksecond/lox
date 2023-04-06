@@ -106,7 +106,7 @@ impl Display for Gc<ErasedObject> {
         } else if self.is::<Instance>() {
             write!(f, "{} instance", self.cast::<Instance>().class.name)
         } else if self.is::<Import>() {
-            write!(f, "<import>")
+            write!(f, "<import {}>", self.cast::<Import>().name)
         } else if self.is::<List>() {
             write!(f, "{}", self.cast::<List>())
         } else {

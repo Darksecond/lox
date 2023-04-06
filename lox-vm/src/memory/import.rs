@@ -9,6 +9,7 @@ use crate::memory::Object;
 
 #[derive(Debug)]
 pub struct Import {
+    pub name: String,
     module: Module,
     globals: UnsafeCell<Table>,
     symbols: Vec<Symbol>,
@@ -24,8 +25,9 @@ impl Trace for Import {
 }
 
 impl Import {
-    pub fn new() -> Self {
+    pub fn new(name: impl Into<String>) -> Self {
         Self {
+            name: name.into(),
             module: Module::new(),
             globals: Default::default(),
             symbols: Default::default(),
@@ -33,7 +35,7 @@ impl Import {
         }
     }
 
-    pub(crate) fn with_module(module: Module, interner: &mut Interner, heap: &Heap) -> Self {
+    pub(crate) fn with_module(name: impl Into<String>, module: Module, interner: &mut Interner, heap: &Heap) -> Self {
         let symbols = module.identifiers().iter().map(|identifier| {
             interner.intern(identifier)
         }).collect();
@@ -43,6 +45,7 @@ impl Import {
         }).collect();
 
         Self {
+            name: name.into(),
             module,
             globals: Default::default(),
             symbols,

@@ -9,7 +9,7 @@ pub struct Builtins {
 impl Builtins {
     pub fn new(heap: &Heap) -> Self {
         Self {
-            globals_import: heap.manage(Import::new().into()),
+            globals_import: heap.manage(Import::new("globals").into()),
             list_class: heap.manage(Class::new("List".to_string()).into()),
         }
     }

@@ -75,7 +75,7 @@ impl Runtime {
         let fiber = heap.manage(Fiber::new(None));
         let mut imports = HashMap::new();
 
-        let globals = heap.manage(Import::new().into());
+        let globals = heap.manage(Import::new("_globals").into());
         imports.insert("_globals".to_string(), globals);
 
         Self {
@@ -145,9 +145,9 @@ impl Runtime {
 
     //TODO Use name given instead of _root
     fn prepare_interpret(&mut self, module: Module) -> Gc<Object<Closure>> {
-        let import = Import::with_module(module, &mut self.interner, &self.heap);
-        let import = self.manage(import.into());
-        self.imports.insert("_root".into(), import);
+        let import = Import::with_module("_root", module, &mut self.interner, &self.heap);
+        let import: Gc<Object<Import>> = self.manage(import.into());
+        self.imports.insert(import.name.clone(), import);
         self.globals_import().copy_to(&import);
 
         let function = Function {
@@ -174,7 +174,7 @@ impl Runtime {
     pub fn load_import(&mut self, path: &str) -> Result<Gc<Object<Import>>, VmError> {
         let module = (self.import)(path);
         if let Some(module) = module {
-            let import = Import::with_module(module, &mut self.interner, &self.heap);
+            let import = Import::with_module(path, module, &mut self.interner, &self.heap);
             let import = self.manage(import.into());
             self.imports.insert(path.into(), import);
             self.globals_import().copy_to(&import);

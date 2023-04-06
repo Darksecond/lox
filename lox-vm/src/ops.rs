@@ -5,6 +5,19 @@ use std::cell::Cell;
 use super::fiber::Fiber;
 use crate::value::Value;
 
+macro_rules! as_obj {
+    ($self:ident, $value:expr, $tag:ident) => {
+        {
+            let value = $value;
+            if value.is_object_of_type::<$tag>() {
+                value.as_object().cast::<$tag>()
+            } else {
+                return $self.fiber.runtime_error(VmError::UnexpectedValue);
+            }
+        }
+    };
+}
+
 impl Runtime {
     pub fn interpret(&mut self) -> Result<(), VmError> {
         use lox_bytecode::opcode;
@@ -74,11 +87,7 @@ impl Runtime {
             let index = stack.pop();
             let list = stack.pop();
 
-            let list = if list.is_object_of_type::<List>() {
-                list.as_object().cast::<List>()
-            } else {
-                return self.fiber.runtime_error(VmError::UnexpectedValue);
-            };
+            let list = as_obj!(self, list, List);
 
             let index = if index.is_number() {
                 index.as_number() as usize
@@ -103,11 +112,7 @@ impl Runtime {
             let index = stack.pop();
             let list = stack.pop();
 
-            let list = if list.is_object_of_type::<List>() {
-                list.as_object().cast::<List>()
-            } else {
-                return self.fiber.runtime_error(VmError::UnexpectedValue);
-            };
+            let list = as_obj!(self, list, List);
 
             let index = if index.is_number() {
                 index.as_number() as usize
@@ -200,18 +205,16 @@ impl Runtime {
         let current_import = self.current_import();
         let identifier = current_import.symbol(index);
 
-        self.fiber.with_stack(|stack| {
-            let import = stack.peek_n(0);
-            if import.is_import() {
-                let import = import.as_object().cast::<Import>();
-                let value = import.global(identifier).unwrap_or(Value::NIL);
-                stack.push(value);
-            } else {
-                return self.fiber.runtime_error(VmError::UnexpectedConstant)
-            }
+        let import = self.fiber.with_stack(|stack| {
+            stack.peek_n(0)
+        });
 
-            Signal::More
-        })
+        let import = as_obj!(self, import, Import);
+
+        let value = import.global(identifier).unwrap_or(Value::NIL);
+        self.fiber.with_stack(|stack| stack.push(value));
+
+        Signal::More
     }
 
     pub fn op_jump(&mut self) -> Signal {
@@ -279,21 +282,12 @@ impl Runtime {
             stack.peek_n(1)
         });
 
-        if !class.is_object_of_type::<Class>() {
-            return self.fiber.runtime_error(VmError::UnexpectedConstant)
-        }
-
-        let class = class.as_object().cast::<Class>();
-
         let closure = self.fiber.with_stack(|stack| {
             stack.peek_n(0)
         });
 
-        if !closure.is_object_of_type::<Closure>() {
-            return self.fiber.runtime_error(VmError::UnexpectedConstant)
-        }
-
-        let closure = closure.as_object().cast::<Closure>();
+        let class = as_obj!(self, class, Class);
+        let closure = as_obj!(self, closure, Closure);
 
         class.set_method(identifier, Value::from_object(closure));
 
@@ -481,31 +475,28 @@ impl Runtime {
     }
 
     pub fn op_add(&mut self) -> Signal {
-        self.fiber.with_stack(|stack| {
-            let b = stack.pop();
-            let a = stack.pop();
+        let (b, a) = self.fiber.with_stack(|stack| {
+            (stack.pop(), stack.pop())
+        });
 
-            if a.is_number() && b.is_number() {
-                let a = a.as_number();
-                let b = b.as_number();
-                stack.push((a + b).into());
-                return Signal::More;
-            }
+        if a.is_number() && b.is_number() {
+            let a = a.as_number();
+            let b = b.as_number();
+            self.fiber.with_stack(|stack| stack.push((a + b).into()));
+            return Signal::More;
+        }
 
-            self.concat(a, b)
-        })
+        self.concat(a, b)
     }
 
     pub fn op_get_upvalue(&mut self) -> Signal {
         let index = self.next_u32() as usize;
 
-        self.fiber.with_stack(|stack| {
             let upvalue = self.fiber.current_frame().closure.upvalues[index];
             let value = self.fiber.resolve_upvalue_into_value(upvalue);
-            stack.push(value);
+            self.fiber.with_stack(|stack| stack.push(value));
 
             Signal::More
-        })
     }
 
     pub fn op_set_upvalue(&mut self) -> Signal {
@@ -642,11 +633,7 @@ impl Runtime {
             stack.peek_n(1)
         });
 
-        if !instance.is_instance() {
-            return self.fiber.runtime_error(VmError::UnexpectedValue);
-        }
-
-        let instance = instance.as_object().cast::<Instance>();
+        let instance = as_obj!(self, instance, Instance);
 
         self.fiber.with_stack(|stack| {
             instance.set_field(property, stack.peek_n(0));
@@ -670,13 +657,7 @@ impl Runtime {
             let current_import = self.current_import();
             let property = current_import.symbol(index);
 
-            let instance = stack.pop();
-
-            if !instance.is_instance() {
-                return self.fiber.runtime_error(VmError::UnexpectedValue);
-            }
-
-            let instance = instance.as_object().cast::<Instance>();
+            let instance = as_obj!(self, stack.pop(), Instance);
 
             if let Some(value) = instance.field(property) {
                 stack.push(value);
@@ -752,11 +733,7 @@ impl Runtime {
             stack.peek_n(arity)
         });
 
-        if !instance.is_instance() {
-            return self.fiber.runtime_error(VmError::UnexpectedValue);
-        }
-
-        let instance = instance.as_object().cast::<Instance>();
+        let instance = as_obj!(self, instance, Instance);
 
         if let Some(value) = instance.field(property) {
             self.fiber.with_stack(|stack| {
@@ -786,3 +763,5 @@ impl Runtime {
         }
     }
 }
+
+
