@@ -96,7 +96,7 @@ impl Runtime {
         }
     }
 
-    #[inline(never)]
+    #[cold]
     pub fn context_switch(&mut self) {
         if let Some(next_fiber) = self.next_fiber {
             if self.fiber.has_current_frame() {
@@ -109,11 +109,13 @@ impl Runtime {
         self.next_fiber = None;
     }
 
+    #[cold]
     pub fn switch_to(&mut self, fiber: Gc<Fiber>) -> Signal {
         self.next_fiber = Some(fiber);
         Signal::ContextSwitch
     }
 
+    #[cold]
     pub fn concat(&self, a: Value, b: Value) -> Signal {
         if a.is_object_of_type::<String>() && b.is_object_of_type::<String>() {
             let a = a.as_object().cast::<String>();
@@ -142,6 +144,7 @@ impl Runtime {
         self.heap.adjust_size(object);
     }
 
+    #[cold]
     pub fn manage<T: Trace>(&self, data: T) -> Gc<T> {
         self.heap.collect(&[self]);
         self.heap.manage(data)
@@ -199,7 +202,7 @@ impl Runtime {
     }
 
     //TODO Reduce duplicate code paths
-    #[inline(never)]
+    #[cold]
     pub fn call(&mut self, arity: usize, callee: Value) -> Signal {
         self.store_ip();
 
@@ -265,6 +268,7 @@ impl Runtime {
         Signal::More
     }
 
+    #[cold]
     pub fn push_string(&self, string: impl Into<String>) {
         let string = string.into();
         let root: Gc<Object<String>> = self.manage(string.into());

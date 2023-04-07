@@ -1,5 +1,5 @@
 use crate::gc::{Gc, Trace};
-use crate::memory::ErasedObject;
+use crate::memory::{ErasedObject, Object};
 use std::fmt::Display;
 
 const QNAN: u64 = 0x7ffc000000000000;
@@ -73,7 +73,7 @@ impl Value {
     }
 
     #[inline]
-    pub fn is_same_type(a: &Self, b: &Self) -> bool {
+    pub fn is_same_type(a: Self, b: Self) -> bool {
         if a.is_number() && b.is_number() {
             true
         } else if a.is_nil() && b.is_nil() {
@@ -87,8 +87,18 @@ impl Value {
         }
     }
 
+    #[inline]
     pub fn is_object_of_type<T>(self) -> bool where T: 'static {
         self.is_object() && self.as_object().is::<T>()
+    }
+
+    #[inline]
+    pub fn try_cast<T>(self) -> Option<Gc<Object<T>>> where T: 'static {
+        if self.is_object() && self.as_object().is::<T>() {
+            Some(self.as_object().cast::<T>())
+        } else {
+            None
+        }
     }
 }
 

@@ -30,12 +30,12 @@ impl CallFrame {
         }
     }
 
-    #[inline]
+    #[inline(always)]
     pub fn load_ip(&self) -> *const u8 {
         self.ip.get()
     }
 
-    #[inline]
+    #[inline(always)]
     pub fn store_ip(&self, ip: *const u8) {
         self.ip.set(ip);
     }
@@ -54,7 +54,6 @@ pub struct Fiber {
 }
 
 impl Trace for Fiber {
-    #[inline]
     fn trace(&self) {
         self.parent.trace();
         self.frames.trace();
@@ -80,7 +79,7 @@ impl Fiber {
     }
 
     #[inline]
-    pub fn with_stack<T>(&self, mut func: impl FnMut(&mut Stack) -> T) -> T {
+    pub fn with_stack<T>(&self, func: impl FnOnce(&mut Stack) -> T) -> T {
         let stack = unsafe {
             &mut *self.stack.get()
         };
@@ -92,6 +91,7 @@ impl Fiber {
         self.error.get()
     }
 
+    #[cold]
     pub fn runtime_error(&self, error: VmError) -> Signal {
         //panic!("runtime error: {:?}", error);
         self.error.set(Some(error));
