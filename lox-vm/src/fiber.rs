@@ -5,6 +5,7 @@ use std::cell::{Cell, UnsafeCell};
 use crate::stack::{Stack, StackBlock};
 use crate::VmError;
 use crate::runtime::Signal;
+use arrayvec::ArrayVec;
 
 pub struct CallFrame {
     pub base_counter: usize,
@@ -43,14 +44,11 @@ impl CallFrame {
 
 pub struct Fiber {
     pub parent: Option<Gc<Fiber>>,
-    frames: UnsafeCell<Vec<CallFrame>>,
+    frames: UnsafeCell<ArrayVec<CallFrame, 1024>>,
     stack: UnsafeCell<Stack>,
     _stack_block: StackBlock,
     upvalues: UnsafeCell<Vec<Gc<Cell<Upvalue>>>>,
     error: Cell<Option<VmError>>,
-
-    // We use a pointer for the current call frame becaeuse this is way faster than using last().
-    current_frame: Cell<*mut CallFrame>,
 }
 
 impl Trace for Fiber {
@@ -64,8 +62,8 @@ impl Trace for Fiber {
 
 impl Fiber {
     pub fn new(parent: Option<Gc<Fiber>>) -> Self {
-        let block = StackBlock::new(2028);
-        let frames = Vec::with_capacity(2048);
+        let block = StackBlock::new(2048);
+        let frames = ArrayVec::new();
         Self {
             parent,
             frames: UnsafeCell::new(frames),
@@ -73,8 +71,6 @@ impl Fiber {
             _stack_block: block,
             upvalues: UnsafeCell::new(Vec::with_capacity(2048)),
             error: Cell::new(None),
-
-            current_frame: Cell::new(std::ptr::null_mut()),
         }
     }
 
@@ -106,24 +102,12 @@ impl Fiber {
         let frames = unsafe { &mut *self.frames.get() };
 
         frames.push(CallFrame::new(closure, base_counter));
-
-        // We don't just offset(1) here because Vec might reallocate contents.
-        unsafe {
-            self.current_frame.set(frames.as_mut_ptr().add(frames.len() - 1));
-        }
     }
 
     pub fn end_frame(&self) -> Option<Signal> {
         let frames = unsafe { &mut *self.frames.get() };
 
         if frames.pop().is_some() {
-            if frames.is_empty() {
-                self.current_frame.set(std::ptr::null_mut());
-            } else {
-                unsafe {
-                    self.current_frame.set(self.current_frame.get().offset(-1));
-                }
-            }
             None
         } else {
             Some(self.runtime_error(VmError::FrameEmpty))
@@ -132,14 +116,16 @@ impl Fiber {
 
     #[inline]
     pub fn has_current_frame(&self) -> bool {
-        self.current_frame.get() != std::ptr::null_mut()
+        let frames = unsafe { &*self.frames.get() };
+
+        frames.len() > 0
     }
 
     #[inline]
     pub fn current_frame(&self) -> &CallFrame {
-        unsafe {
-            &*self.current_frame.get()
-        }
+        let frames = unsafe { &*self.frames.get() };
+
+        frames.last().expect("No frame!")
     }
 
     pub fn push_upvalue(&self, upvalue: Gc<Cell<Upvalue>>) {

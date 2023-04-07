@@ -282,6 +282,7 @@ impl<T: ?Sized> Trace for Gc<T> {
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::hash::Hash;
+use arrayvec::ArrayVec;
 impl<T: Trace> Trace for RefCell<T> {
     #[inline]
     fn trace(&self) {
@@ -290,6 +291,15 @@ impl<T: Trace> Trace for RefCell<T> {
 }
 
 impl<T: Trace> Trace for Vec<T> {
+    #[inline]
+    fn trace(&self) {
+        for el in self {
+            el.trace();
+        }
+    }
+}
+
+impl<T: Trace, const C: usize> Trace for ArrayVec<T, C> {
     #[inline]
     fn trace(&self) {
         for el in self {
