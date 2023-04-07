@@ -125,7 +125,9 @@ impl Fiber {
     pub fn current_frame(&self) -> &CallFrame {
         let frames = unsafe { &*self.frames.get() };
 
-        frames.last().expect("No frame!")
+        unsafe {
+            frames.last().unwrap_unchecked()
+        }
     }
 
     pub fn push_upvalue(&self, upvalue: Gc<Cell<Upvalue>>) {
