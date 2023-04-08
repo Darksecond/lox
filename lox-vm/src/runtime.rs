@@ -187,8 +187,6 @@ impl Runtime {
         self.builtins.globals_import
     }
 
-    //TODO Reduce duplicate code paths
-    #[cold]
     pub fn call(&mut self, arity: usize, callee: Value) -> Signal {
         self.store_ip();
 
@@ -198,25 +196,22 @@ impl Runtime {
 
         let callee = callee.as_object();
 
-        if callee.is::<Closure>() {
-            let callee = callee.cast::<Closure>();
+        if let Some(callee) = callee.try_cast::<Closure>() {
             if callee.function.arity != arity {
                 return self.fiber.runtime_error(VmError::IncorrectArity);
             }
             self.fiber.begin_frame(callee);
-        } else if callee.is::<NativeFunction>() {
-            let callee = callee.cast::<NativeFunction>();
+        } else if let Some(callee) = callee.try_cast::<NativeFunction>() {
             self.fiber.with_stack(|stack| {
                 let args = stack.pop_n(arity);
                 let this = stack.pop(); // discard callee
                 let result = (callee.code)(this, &args);
                 stack.push(result);
             });
-        } else if callee.is::<Class>() {
-            let class = callee.cast::<Class>();
+        } else if let Some(class) = callee.try_cast::<Class>() {
             let instance: Gc<Object<Instance>> = self.manage(Instance::new(class).into());
             self.fiber.with_stack(|stack| {
-                stack.rset(arity, Value::from_object(instance));
+                stack.rset(arity, Value::from_object(instance))
             });
 
             if let Some(initializer) = class.method(self.init_symbol) {
@@ -226,8 +221,7 @@ impl Runtime {
 
                 let initializer = initializer.as_object();
 
-                if initializer.is::<Closure>() {
-                    let initializer = initializer.cast::<Closure>();
+                if let Some(initializer) = initializer.try_cast::<Closure>() {
                     if initializer.function.arity != arity {
                         return self.fiber.runtime_error(VmError::IncorrectArity);
                     }
@@ -239,10 +233,9 @@ impl Runtime {
                 // Arity must be 0 without initializer
                 return self.fiber.runtime_error(VmError::IncorrectArity);
             }
-        } else if callee.is::<BoundMethod>() {
-                let bind = callee.cast::<BoundMethod>();
+        } else if let Some(bind) = callee.try_cast::<BoundMethod>() {
                 self.fiber.with_stack(|stack| {
-                    stack.rset(arity, Value::from_object(bind.receiver));
+                    stack.rset(arity, Value::from_object(bind.receiver))
                 });
                 return self.call(arity, bind.method);
         } else {

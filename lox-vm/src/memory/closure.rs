@@ -1,5 +1,4 @@
 use lox_bytecode::bytecode;
-use lox_bytecode::bytecode::ChunkIndex;
 use std::cell::Cell;
 use crate::gc::{Gc, Trace, Heap};
 use crate::memory::{Import, Object, Upvalue};
@@ -22,7 +21,7 @@ impl Trace for Closure {
 //TODO Drop this entirely and merge this into Closure
 pub struct Function {
     pub name: String,
-    pub chunk_index: ChunkIndex,
+    pub chunk_index: bytecode::ChunkIndex,
     pub import: Gc<Object<Import>>,
     pub arity: usize,
 }

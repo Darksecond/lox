@@ -64,6 +64,14 @@ impl Gc<ErasedObject> {
         }
     }
 
+    pub fn try_cast<T>(self) -> Option<Gc<Object<T>>> where T: 'static {
+        if self.is::<T>() {
+            Some(self.cast::<T>())
+        } else {
+            None
+        }
+    }
+
     pub fn is<T>(self) -> bool where T: 'static {
         self.tag == TypeId::of::<T>()
     }
