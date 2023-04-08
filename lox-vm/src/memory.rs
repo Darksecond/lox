@@ -1,21 +1,22 @@
 mod object;
 mod import;
 mod list;
+mod closure;
 
 pub use object::*;
 pub use import::*;
 pub use list::*;
+pub use closure::*;
 
 use crate::value::Value;
 use super::gc::{Gc, Trace};
-use lox_bytecode::bytecode::ChunkIndex;
-use std::cell::{Cell, UnsafeCell};
+use std::cell::UnsafeCell;
 use super::interner::Symbol;
 use super::table::Table;
 
 #[derive(Debug, Copy, Clone)]
 pub enum Upvalue {
-    Open(usize),
+    Open(usize), //TODO Track fiber (for closures over fibers)
     Closed(Value),
 }
 
@@ -143,20 +144,6 @@ impl Trace for Class {
     }
 }
 
-#[derive(Debug)]
-pub struct Closure {
-    pub function: Function,
-    pub upvalues: Vec<Gc<Cell<Upvalue>>>,
-}
-
-impl Trace for Closure {
-    #[inline]
-    fn trace(&self) {
-        self.upvalues.trace();
-        self.function.import.trace();
-    }
-}
-
 pub struct NativeFunction {
     pub name: String,
     pub code: fn(Value, &[Value]) -> Value,
@@ -171,33 +158,6 @@ impl std::fmt::Debug for NativeFunction {
 impl Trace for NativeFunction {
     #[inline]
     fn trace(&self) {}
-}
-
-//TODO Drop this entirely and merge this into Closure
-pub struct Function {
-    pub name: String,
-    pub chunk_index: ChunkIndex,
-    pub import: Gc<Object<Import>>,
-    pub arity: usize,
-}
-
-impl std::fmt::Debug for Function {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("Function")
-        .field("name", &self.name)
-        .finish()
-    }
-}
-
-impl Function {
-    pub(crate) fn new(value: &lox_bytecode::bytecode::Function, import: Gc<Object<Import>>) -> Self {
-        Self {
-            name: value.name.clone(),
-            chunk_index: value.chunk_index,
-            arity: value.arity,
-            import,
-        }
-    }
 }
 
 #[derive(Debug, Copy, Clone)]

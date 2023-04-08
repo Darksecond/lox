@@ -41,7 +41,7 @@ pub enum VmError {
 pub struct Runtime {
     pub fiber: Gc<Fiber>,
     next_fiber: Option<Gc<Fiber>>,
-    init_symbol: Symbol,
+    init_symbol: Symbol, //TODO Move to builtins
     pub interner: Interner,
     pub imports: HashMap<String, Gc<Object<Import>>>,
     pub heap: Heap,
@@ -61,6 +61,7 @@ impl Trace for Runtime {
         self.fiber.trace();
         self.next_fiber.trace();
         self.imports.trace();
+        self.builtins.trace();
     }
 }
 
@@ -146,7 +147,7 @@ impl Runtime {
 
     #[cold]
     pub fn manage<T: Trace>(&self, data: T) -> Gc<T> {
-        self.heap.collect(&[self]);
+        self.heap.collect(&[self, &data]);
         self.heap.manage(data)
     }
 
@@ -157,17 +158,7 @@ impl Runtime {
         self.imports.insert(import.name.clone(), import);
         self.globals_import().copy_to(&import);
 
-        let function = Function {
-            arity: 0,
-            chunk_index: 0,
-            name: "top".into(),
-            import,
-        };
-
-        self.manage(Closure {
-            upvalues: vec![],
-            function,
-        }.into())
+        self.manage(Closure::with_import(import).into())
     }
 
     pub fn import(&mut self, path: &str) -> Option<Gc<Object<Import>>> {
@@ -190,11 +181,6 @@ impl Runtime {
         } else {
             Err(VmError::UnknownImport)
         }
-    }
-
-    #[inline]
-    pub fn current_import(&self) -> Gc<Object<Import>> {
-        self.fiber.current_frame().closure.function.import
     }
 
     pub fn globals_import(&self) -> Gc<Object<Import>> {

@@ -44,7 +44,7 @@ impl CallFrame {
 
 pub struct Fiber {
     pub parent: Option<Gc<Fiber>>,
-    frames: UnsafeCell<ArrayVec<CallFrame, 1024>>,
+    frames: UnsafeCell<ArrayVec<CallFrame, 256>>,
     stack: UnsafeCell<Stack>,
     _stack_block: StackBlock,
     upvalues: UnsafeCell<Vec<Gc<Cell<Upvalue>>>>,
@@ -128,6 +128,11 @@ impl Fiber {
         unsafe {
             frames.last().unwrap_unchecked()
         }
+    }
+
+    #[inline]
+    pub fn current_import(&self) -> Gc<Object<Import>> {
+        self.current_frame().closure.function.import
     }
 
     pub fn push_upvalue(&self, upvalue: Gc<Cell<Upvalue>>) {

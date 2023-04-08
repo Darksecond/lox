@@ -1,7 +1,6 @@
 use crate::runtime::{Runtime, Signal, VmError};
 use crate::memory::*;
 use super::gc::Gc;
-use std::cell::Cell;
 use super::fiber::Fiber;
 use crate::value::Value;
 
@@ -156,13 +155,14 @@ impl Runtime {
     pub fn op_import(&mut self) -> Signal {
         let index: usize = self.next_u32() as _;
 
-        let current_import = self.current_import();
+        let current_import = self.fiber.current_import();
         let path = current_import.string(index);
 
         if let Some(import) = self.import(path.as_str()) {
             self.fiber.with_stack(|stack| {
-                stack.push(Value::from_object(import));
+                stack.push(Value::from_object(import))
             });
+
             return Signal::More;
         }
 
@@ -172,26 +172,17 @@ impl Runtime {
         };
 
         self.fiber.with_stack(|stack| {
-            stack.push(Value::from_object(import));
+            stack.push(Value::from_object(import))
         });
 
         let fiber = Fiber::new(Some(self.fiber));
 
-        let function = Function {
-            arity: 0,
-            chunk_index: 0,
-            name: "top".into(),
-            import,
-        };
-
-        let closure = self.manage(Closure {
-            upvalues: vec![],
-            function,
-        }.into());
+        let closure = self.manage(Closure::with_import(import).into());
 
         fiber.with_stack(|stack| {
-            stack.push(Value::from_object(closure));
+            stack.push(Value::from_object(closure))
         });
+
         fiber.begin_frame(closure);
 
         let fiber = self.manage(fiber);
@@ -202,7 +193,7 @@ impl Runtime {
     #[cold]
     pub fn op_import_global(&mut self) -> Signal {
         let index: usize = self.next_u32() as _;
-        let current_import = self.current_import();
+        let current_import = self.fiber.current_import();
         let identifier = current_import.symbol(index);
 
         let import = self.fiber.with_stack(|stack| {
@@ -243,7 +234,7 @@ impl Runtime {
     pub fn op_class(&mut self) -> Signal {
         let index = self.next_u8() as _;
 
-        let current_import = self.current_import();
+        let current_import = self.fiber.current_import();
         let class = current_import.class(index);
         let class: Gc<Object<Class>> = self.manage(Class::new(class.name.clone()).into());
         self.fiber.with_stack(|stack| {
@@ -275,7 +266,7 @@ impl Runtime {
     pub fn op_method(&mut self) -> Signal {
         let index = self.next_u32() as _;
 
-        let current_import = self.current_import();
+        let current_import = self.fiber.current_import();
         let identifier = current_import.symbol(index);
 
         let (class, closure) = self.fiber.with_stack(|stack| {
@@ -340,7 +331,7 @@ impl Runtime {
 
     pub fn op_number(&mut self) -> Signal {
         let index = self.next_u16();
-        let current_import = self.current_import();
+        let current_import = self.fiber.current_import();
         let value = current_import.number(index as _);
 
         self.fiber.with_stack(|stack| {
@@ -352,7 +343,7 @@ impl Runtime {
 
     pub fn op_string(&mut self) -> Signal {
         let index = self.next_u16();
-        let current_import = self.current_import();
+        let current_import = self.fiber.current_import();
         let value = current_import.string(index as _);
 
         self.fiber.with_stack(|stack| {
@@ -567,7 +558,7 @@ impl Runtime {
     pub fn op_define_global(&mut self) -> Signal {
         let index = self.next_u32() as _;
 
-        let current_import = self.current_import();
+        let current_import = self.fiber.current_import();
         let identifier = current_import.symbol(index);
         let value = self.fiber.with_stack(|stack| stack.pop());
         current_import.set_global(identifier, value);
@@ -578,7 +569,7 @@ impl Runtime {
     pub fn op_get_global(&mut self) -> Signal {
         let index = self.next_u32() as _;
 
-        let current_import = self.current_import();
+        let current_import = self.fiber.current_import();
         let identifier = current_import.symbol(index);
         let value = current_import.global(identifier);
         if let Some(value) = value {
@@ -593,7 +584,7 @@ impl Runtime {
     pub fn op_set_global(&mut self) -> Signal {
         let index = self.next_u32() as _;
 
-        let current_import = self.current_import();
+        let current_import = self.fiber.current_import();
         let identifier = current_import.symbol(index);
         let value = self.fiber.with_stack(|stack| stack.peek_n(0));
         if current_import.has_global(identifier) {
@@ -608,7 +599,7 @@ impl Runtime {
     pub fn op_set_property(&mut self) -> Signal {
         let index = self.next_u32() as _;
 
-        let current_import = self.current_import();
+        let current_import = self.fiber.current_import();
         let property = current_import.symbol(index);
 
         let instance = self.fiber.with_stack(|stack| {
@@ -635,7 +626,7 @@ impl Runtime {
     pub fn op_get_property(&mut self) -> Signal {
         let index = self.next_u32() as _;
 
-        let current_import = self.current_import();
+        let current_import = self.fiber.current_import();
         let property = current_import.symbol(index);
 
         let instance = self.fiber.with_stack(|stack| stack.pop());
@@ -676,40 +667,10 @@ impl Runtime {
     pub fn op_closure(&mut self) -> Signal {
         let index = self.next_u32() as _;
 
-        let current_import = self.current_import();
-        let closure = current_import.closure(index);
-        let base = self.fiber.current_frame().base_counter;
-        let upvalues = closure
-            .upvalues
-            .iter()
-            .map(|u| {
-                match u {
-                    lox_bytecode::bytecode::Upvalue::Local(index) => {
-                        let index = base + *index;
-
-                        if let Some(upvalue) = self.fiber.find_open_upvalue_with_index(index)
-                        {
-                            upvalue
-                        } else {
-                            let root = self.manage(Cell::new(Upvalue::Open(index)));
-                            self.fiber.push_upvalue(root);
-                            root
-                        }
-                    }
-                    lox_bytecode::bytecode::Upvalue::Upvalue(u) => {
-                        self.fiber.find_upvalue_by_index(*u)
-                    }
-                }
-            })
-        .collect();
-
-        let closure_root: Gc<Object<Closure>> = self.manage(Closure {
-            function: Function::new(&closure.function, current_import),
-            upvalues,
-        }.into());
+        let closure: Gc<Object<Closure>> = self.manage(Closure::new(index, self.fiber, &self.heap).into());
 
         self.fiber.with_stack(|stack| {
-            stack.push(Value::from_object(closure_root));
+            stack.push(Value::from_object(closure))
         });
 
         Signal::More
@@ -719,7 +680,7 @@ impl Runtime {
         let arity = self.next_u8() as _;
         let index = self.next_u32() as _;
 
-        let current_import = self.current_import();
+        let current_import = self.fiber.current_import();
         let property = current_import.symbol(index);
 
         let instance = self.fiber.with_stack(|stack| {
