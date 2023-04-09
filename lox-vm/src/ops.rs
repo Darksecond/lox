@@ -131,24 +131,21 @@ impl Runtime {
         })
     }
 
-    //TODO Rework this
     #[cold]
     pub fn op_list(&mut self) -> Signal {
         let arity = self.next_u8();
 
+        let list = self.fiber.with_stack(|stack| {
+            List::with_stack(arity as _, stack)
+        });
+
+        let list: Gc<Object<List>> = self.manage(list.into());
+
         self.fiber.with_stack(|stack| {
-            let list = List::new(arity as _);
-            for index in (0..arity as usize).rev() {
-                let value = stack.pop();
-                list.set(index, value);
-            }
+            stack.push(Value::from_object(list))
+        });
 
-            let list: Gc<Object<List>> = self.manage(list.into());
-
-            stack.push(Value::from_object(list));
-
-            Signal::More
-        })
+        Signal::More
     }
 
     #[cold]
@@ -187,7 +184,7 @@ impl Runtime {
 
         let fiber = self.manage(fiber);
 
-        return self.switch_to(fiber);
+        return self.switch_to(Some(fiber));
     }
 
     #[cold]
@@ -246,7 +243,7 @@ impl Runtime {
 
     pub fn op_bool(&mut self, value: bool) -> Signal {
         self.fiber.with_stack(|stack| {
-            stack.push(value.into());
+            stack.push(value.into())
         });
 
         Signal::More
@@ -254,7 +251,7 @@ impl Runtime {
 
     pub fn op_nil(&mut self) -> Signal {
         self.fiber.with_stack(|stack| {
-            stack.push(Value::NIL);
+            stack.push(Value::NIL)
         });
 
         Signal::More
@@ -279,7 +276,7 @@ impl Runtime {
         class.set_method(identifier, Value::from_object(closure));
 
         self.fiber.with_stack(|stack| {
-            stack.pop();
+            stack.pop()
         });
 
         Signal::More
@@ -296,24 +293,18 @@ impl Runtime {
             return error;
         }
 
-        if !self.fiber.has_current_frame() {
-            // If we have a parent, switch back to it.
-            if let Some(parent) = self.fiber.parent {
-                return self.switch_to(parent);
-            }
-
-            // We are done interpreting, don't push a result as it'll be nil
-            Signal::Done
-        } else {
+        if self.fiber.has_current_frame() {
             self.load_ip();
             self.fiber.with_stack(|stack| stack.push(result));
             Signal::More
+        } else {
+            self.switch_to(self.fiber.parent)
         }
     }
 
     pub fn op_pop(&mut self) -> Signal {
         self.fiber.with_stack(|stack| {
-            stack.pop();
+            stack.pop()
         });
 
         Signal::More
@@ -331,11 +322,10 @@ impl Runtime {
 
     pub fn op_number(&mut self) -> Signal {
         let index = self.next_u16();
-        let current_import = self.fiber.current_import();
-        let value = current_import.number(index as _);
+        let value = self.fiber.current_import().number(index as _);
 
         self.fiber.with_stack(|stack| {
-            stack.push(value.into());
+            stack.push(value.into())
         });
 
         Signal::More
@@ -343,11 +333,10 @@ impl Runtime {
 
     pub fn op_string(&mut self) -> Signal {
         let index = self.next_u16();
-        let current_import = self.fiber.current_import();
-        let value = current_import.string(index as _);
+        let value = self.fiber.current_import().string(index as _);
 
         self.fiber.with_stack(|stack| {
-            stack.push(Value::from_object(value));
+            stack.push(Value::from_object(value))
         });
 
         Signal::More
@@ -609,7 +598,7 @@ impl Runtime {
         let instance = as_obj!(self, instance, Instance);
 
         self.fiber.with_stack(|stack| {
-            instance.set_field(property, stack.peek_n(0));
+            instance.set_field(property, stack.peek_n(0))
         });
 
         self.adjust_size(instance);
@@ -617,7 +606,7 @@ impl Runtime {
         self.fiber.with_stack(|stack| {
             let value = stack.pop();
             stack.pop();
-            stack.push(value);
+            stack.push(value)
         });
 
         Signal::More

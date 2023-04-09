@@ -83,6 +83,7 @@ impl Fiber {
         func(stack)
     }
 
+    #[cold]
     pub fn error(&self) -> Option<VmError> {
         self.error.get()
     }

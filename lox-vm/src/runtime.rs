@@ -111,9 +111,13 @@ impl Runtime {
     }
 
     #[cold]
-    pub fn switch_to(&mut self, fiber: Gc<Fiber>) -> Signal {
-        self.next_fiber = Some(fiber);
-        Signal::ContextSwitch
+    pub fn switch_to(&mut self, fiber: Option<Gc<Fiber>>) -> Signal {
+        if let Some(fiber) = fiber {
+            self.next_fiber = Some(fiber);
+            Signal::ContextSwitch
+        } else {
+            Signal::Done
+        }
     }
 
     #[cold]
