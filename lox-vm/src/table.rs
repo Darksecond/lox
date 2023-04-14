@@ -1,6 +1,7 @@
 use super::value::Value;
 use super::interner::Symbol;
-use super::gc::Trace;
+use super::gc::{Trace, Tracer};
+use crate::array::Array;
 
 #[derive(Copy, Clone)]
 struct Entry {
@@ -8,9 +9,9 @@ struct Entry {
     value: Value,
 }
 
-impl Trace for Entry {
-    fn trace(&self) {
-        self.value.trace();
+unsafe impl Trace for Entry {
+    fn trace(&self, tracer: &mut Tracer) {
+        self.value.trace(tracer);
     }
 }
 
@@ -18,14 +19,12 @@ pub struct Table {
     count: usize,
     capacity: usize,
     max_capacity: usize,
-    entries: Box<[Entry]>,
+    entries: Array<Entry>,
 }
 
-impl Trace for Table {
-    fn trace(&self) {
-        for entry in self.entries.iter() {
-            entry.trace();
-        }
+unsafe impl Trace for Table {
+    fn trace(&self, tracer: &mut Tracer) {
+        self.entries.trace(tracer);
     }
 }
 
@@ -41,7 +40,7 @@ impl Table {
 
     #[allow(dead_code)]
     pub fn new() -> Self {
-        let entries = vec![Entry { key: Symbol::invalid(), value: Value::NIL }; Self::INITIAL_CAPACITY].into_boxed_slice();
+        let entries = Array::with_contents(Entry { key: Symbol::invalid(), value: Value::NIL }, Self::INITIAL_CAPACITY);
 
         Self {
             count: 0,
@@ -118,7 +117,7 @@ impl Table {
         let new_capacity = if self.capacity < 8 { 8 } else { self.capacity * 2 };
 
         //TODO Use realloc (see https://doc.rust-lang.org/nomicon/vec/vec-alloc.html)
-        let mut new_entries = vec![Entry { key: Symbol::invalid(), value: Value::NIL }; new_capacity].into_boxed_slice();
+        let mut new_entries = Array::with_contents(Entry { key: Symbol::invalid(), value: Value::NIL }, new_capacity);
 
         for entry in self.entries.iter() {
             let new_index = find_entry(new_capacity, &new_entries, entry.key);

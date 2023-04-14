@@ -1,20 +1,19 @@
 use lox_bytecode::bytecode;
 use std::cell::Cell;
-use crate::gc::{Gc, Trace, Heap};
-use crate::memory::{Import, Object, Upvalue};
+use crate::gc::{Gc, Trace, Tracer};
+use crate::memory::{Import, Upvalue};
 use crate::fiber::Fiber;
 use arrayvec::ArrayVec;
 
-#[derive(Debug)]
 pub struct Closure {
     pub function: Function,
     pub upvalues: ArrayVec<Gc<Cell<Upvalue>>, 128>,
 }
 
-impl Trace for Closure {
-    fn trace(&self) {
-        self.upvalues.trace();
-        self.function.import.trace();
+unsafe impl Trace for Closure {
+    fn trace(&self, tracer: &mut Tracer) {
+        self.upvalues.trace(tracer);
+        self.function.import.trace(tracer);
     }
 }
 
@@ -22,7 +21,7 @@ impl Trace for Closure {
 pub struct Function {
     pub name: String,
     pub chunk_index: bytecode::ChunkIndex,
-    pub import: Gc<Object<Import>>,
+    pub import: Gc<Import>,
     pub arity: usize,
 }
 
@@ -35,7 +34,7 @@ impl std::fmt::Debug for Function {
 }
 
 impl Function {
-    pub(crate) fn new(value: &bytecode::Function, import: Gc<Object<Import>>) -> Self {
+    pub(crate) fn new(value: &bytecode::Function, import: Gc<Import>) -> Self {
         Self {
             name: value.name.clone(),
             chunk_index: value.chunk_index,
@@ -47,7 +46,7 @@ impl Function {
 
 
 impl Closure {
-    pub(crate) fn with_import(import: Gc<Object<Import>>) -> Self {
+    pub(crate) fn with_import(import: Gc<Import>) -> Self {
         let function = Function {
             arity: 0,
             chunk_index: 0,
@@ -62,7 +61,7 @@ impl Closure {
     }
 
     #[inline]
-    pub(crate) fn new(index: usize, fiber: Gc<Fiber>, heap: &Heap) -> Self {
+    pub(crate) fn new(index: usize, fiber: Gc<Fiber>) -> Self {
         let import = fiber.current_import();
         let closure = import.closure(index);
 
@@ -74,12 +73,12 @@ impl Closure {
             .map(|u| {
                 match u {
                     bytecode::Upvalue::Local(index) => {
-                        let index = base + *index;
+                        let index = base + index;
 
                         if let Some(upvalue) = fiber.find_open_upvalue_with_index(index) {
                             upvalue
                         } else {
-                            let root = heap.manage(Cell::new(Upvalue::Open(index)));
+                            let root = lox_gc::manage(Cell::new(Upvalue::Open(index)));
                             fiber.push_upvalue(root);
                             root
                         }

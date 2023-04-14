@@ -1,5 +1,5 @@
 use crate::value::Value;
-use crate::gc::Trace;
+use crate::gc::{Trace, Tracer};
 
 pub struct NativeFunction {
     pub name: String,
@@ -12,7 +12,7 @@ impl std::fmt::Debug for NativeFunction {
     }
 }
 
-impl Trace for NativeFunction {
+unsafe impl Trace for NativeFunction {
     #[inline]
-    fn trace(&self) {}
+    fn trace(&self, _tracer: &mut Tracer) {}
 }

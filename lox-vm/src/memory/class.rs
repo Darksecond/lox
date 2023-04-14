@@ -2,7 +2,7 @@ use std::cell::UnsafeCell;
 use crate::interner::Symbol;
 use crate::table::Table;
 use crate::value::Value;
-use crate::gc::Trace;
+use crate::gc::{Trace, Tracer};
 
 #[derive(Debug)]
 pub struct Class {
@@ -36,9 +36,9 @@ impl Class {
     }
 }
 
-impl Trace for Class {
+unsafe impl Trace for Class {
     #[inline]
-    fn trace(&self) {
-        self.methods().trace();
+    fn trace(&self, tracer: &mut Tracer) {
+        self.methods().trace(tracer);
     }
 }

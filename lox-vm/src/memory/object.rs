@@ -1,5 +1,5 @@
 use std::ops::Deref;
-use crate::gc::{Gc, Trace};
+use crate::gc::{Gc, Trace, Tracer};
 use super::{Closure, BoundMethod, NativeFunction, Class, Instance, Import, List};
 use std::fmt::Display;
 use std::any::TypeId;
@@ -31,9 +31,9 @@ impl<T> Deref for Object<T> {
     }
 }
 
-impl<T: Trace> Trace for Object<T> {
-    fn trace(&self) {
-        self.data.trace();
+unsafe impl<T: Trace> Trace for Object<T> {
+    fn trace(&self, tracer: &mut Tracer) {
+        self.data.trace(tracer);
     }
 }
 
@@ -47,37 +47,13 @@ impl<T> From<T> for Object<T> where T: 'static {
 }
 
 
-impl<T> From<Gc<Object<T>>> for Gc<ErasedObject> where T: Trace {
-    fn from(value: Gc<Object<T>>) -> Self {
+impl<T> Object<T> {
+    fn erase(value: Gc<Object<T>>) -> Gc<ErasedObject> {
         unsafe {
             Gc::from_bits(value.to_bits())
         }
     }
-}
 
-impl Gc<ErasedObject> {
-    pub fn cast<T>(self) -> Gc<Object<T>> where T: 'static {
-        debug_assert_eq!(self.tag, TypeId::of::<T>());
-
-        unsafe {
-            Gc::from_bits(self.to_bits())
-        }
-    }
-
-    pub fn try_cast<T>(self) -> Option<Gc<Object<T>>> where T: 'static {
-        if self.is::<T>() {
-            Some(self.cast::<T>())
-        } else {
-            None
-        }
-    }
-
-    pub fn is<T>(self) -> bool where T: 'static {
-        self.tag == TypeId::of::<T>()
-    }
-}
-
-impl<T> Object<T> {
     pub fn is_same_type(a: &Self, b: &Self) -> bool {
         a.tag == b.tag
     }
@@ -87,19 +63,41 @@ impl ErasedObject {
     pub fn is_same_type(a: &Self, b: &Self) -> bool {
         a.tag == b.tag
     }
-}
 
-impl PartialEq for Gc<ErasedObject> {
-    fn eq(&self, other: &Self) -> bool {
-        if self.is::<String>() && other.is::<String>() {
-            self.cast::<String>().as_str() == other.cast::<String>().as_str()
+    pub fn is<T>(&self) -> bool where T: 'static {
+        self.tag == TypeId::of::<T>()
+    }
+
+    pub fn cast<T>(&self) -> &Object<T> where T: 'static {
+        debug_assert_eq!(self.tag, TypeId::of::<T>());
+
+        unsafe {
+            std::mem::transmute(self)
+        }
+    }
+
+    pub fn try_cast<T>(&self) -> Option<&Object<T>> where T: 'static {
+        if self.is::<T>() {
+            Some(self.cast::<T>())
         } else {
-            Gc::ptr_eq(self, other)
+            None
         }
     }
 }
 
-impl Display for Gc<ErasedObject> {
+impl PartialEq for ErasedObject {
+    fn eq(&self, other: &Self) -> bool {
+        if self.is::<String>() && other.is::<String>() {
+            self.cast::<String>().as_str() == other.cast::<String>().as_str()
+        } else {
+            let a = self as *const ErasedObject;
+            let b = other as *const ErasedObject;
+            a == b
+        }
+    }
+}
+
+impl Display for ErasedObject {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         if self.is::<String>() {
             write!(f, "{}", self.cast::<String>().as_str())
@@ -114,7 +112,7 @@ impl Display for Gc<ErasedObject> {
         } else if self.is::<Instance>() {
             write!(f, "{} instance", self.cast::<Instance>().class.name)
         } else if self.is::<Import>() {
-            write!(f, "<import {}>", self.cast::<Import>().name)
+            write!(f, "<import {}>", self.cast:: <Import>().name)
         } else if self.is::<List>() {
             write!(f, "{}", self.cast::<List>())
         } else {

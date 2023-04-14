@@ -6,7 +6,7 @@ use builtins::Builtins;
 
 use super::memory::*;
 use super::interner::{Symbol, Interner};
-use super::gc::{Gc, Trace, Heap};
+use super::gc::{Gc, Trace, Tracer};
 use crate::fiber::Fiber;
 use std::collections::HashMap;
 
@@ -43,8 +43,7 @@ pub struct Runtime {
     next_fiber: Option<Gc<Fiber>>,
     init_symbol: Symbol, //TODO Move to builtins
     pub interner: Interner,
-    pub imports: HashMap<String, Gc<Object<Import>>>,
-    pub heap: Heap,
+    pub imports: HashMap<String, Gc<Import>>,
 
     pub builtins: Builtins,
 
@@ -55,13 +54,13 @@ pub struct Runtime {
     ip: *const u8,
 }
 
-impl Trace for Runtime {
+unsafe impl Trace for Runtime {
     #[inline]
-    fn trace(&self) {
-        self.fiber.trace();
-        self.next_fiber.trace();
-        self.imports.trace();
-        self.builtins.trace();
+    fn trace(&self, tracer: &mut Tracer) {
+        self.fiber.trace(tracer);
+        self.next_fiber.trace(tracer);
+        self.imports.trace(tracer);
+        self.builtins.trace(tracer);
     }
 }
 
@@ -76,17 +75,15 @@ pub fn default_import(_value: &str) -> Option<Module> {
 impl Runtime {
     pub fn new() -> Self {
         let mut interner = Interner::new();
-        let heap = Heap::new();
-        let fiber = heap.manage(Fiber::new(None));
+        let fiber = lox_gc::manage(Fiber::new(None));
 
-        let builtins = Builtins::new(&heap);
+        let builtins = Builtins::new();
 
         Self {
             fiber,
             next_fiber: None,
             init_symbol: interner.intern("init"),
             interner,
-            heap,
             imports: HashMap::new(),
             print: default_print,
             import: default_import,
@@ -139,33 +136,32 @@ impl Runtime {
     pub fn with_module(&mut self, module: Module) {
         let closure = self.prepare_interpret(module);
         self.fiber.with_stack(|stack| {
-            stack.push(Value::from_object(closure));
+            stack.push(Value::from_object(closure.erase()));
         });
         self.fiber.begin_frame(closure);
         self.load_ip();
     }
 
-    pub fn adjust_size<T: 'static + Trace>(&mut self, object: Gc<T>) {
-        self.heap.adjust_size(object);
+    pub fn adjust_size<T: 'static + Trace>(&mut self, _object: Gc<T>) {
     }
 
     #[cold]
-    pub fn manage<T: Trace>(&self, data: T) -> Gc<T> {
-        self.heap.collect(&[self, &data]);
-        self.heap.manage(data)
+    pub fn manage<T: Trace + 'static>(&self, data: T) -> Gc<T> {
+        lox_gc::collect(&[self, &data]);
+        lox_gc::manage(data)
     }
 
     //TODO Use name given instead of _root
-    fn prepare_interpret(&mut self, module: Module) -> Gc<Object<Closure>> {
-        let import = Import::with_module("_root", module, &mut self.interner, &self.heap);
-        let import: Gc<Object<Import>> = self.manage(import.into());
+    fn prepare_interpret(&mut self, module: Module) -> Gc<Closure> {
+        let import = Import::with_module("_root", module, &mut self.interner);
+        let import: Gc<Import> = self.manage(import.into());
         self.imports.insert(import.name.clone(), import);
         self.globals_import().copy_to(&import);
 
         self.manage(Closure::with_import(import).into())
     }
 
-    pub fn import(&mut self, path: &str) -> Option<Gc<Object<Import>>> {
+    pub fn import(&mut self, path: &str) -> Option<Gc<Import>> {
         if let Some(import) = self.imports.get(path) {
             Some(*import)
         } else {
@@ -173,10 +169,10 @@ impl Runtime {
         }
     }
 
-    pub fn load_import(&mut self, path: &str) -> Result<Gc<Object<Import>>, VmError> {
+    pub fn load_import(&mut self, path: &str) -> Result<Gc<Import>, VmError> {
         let module = (self.import)(path);
         if let Some(module) = module {
-            let import = Import::with_module(path, module, &mut self.interner, &self.heap);
+            let import = Import::with_module(path, module, &mut self.interner);
             let import = self.manage(import.into());
             self.imports.insert(path.into(), import);
             self.globals_import().copy_to(&import);
@@ -187,7 +183,7 @@ impl Runtime {
         }
     }
 
-    pub fn globals_import(&self) -> Gc<Object<Import>> {
+    pub fn globals_import(&self) -> Gc<Import> {
         self.builtins.globals_import
     }
 
@@ -213,9 +209,9 @@ impl Runtime {
                 stack.push(result);
             });
         } else if let Some(class) = callee.try_cast::<Class>() {
-            let instance: Gc<Object<Instance>> = self.manage(Instance::new(class).into());
+            let instance: Gc<Instance> = self.manage(Instance::new(class).into());
             self.fiber.with_stack(|stack| {
-                stack.rset(arity, Value::from_object(instance))
+                stack.rset(arity, Value::from_object(instance.erase()))
             });
 
             if let Some(initializer) = class.method(self.init_symbol) {
@@ -254,9 +250,9 @@ impl Runtime {
     #[cold]
     pub fn push_string(&self, string: impl Into<String>) {
         let string = string.into();
-        let root: Gc<Object<String>> = self.manage(string.into());
+        let root: Gc<String> = self.manage(string.into());
         self.fiber.with_stack(|stack| {
-            stack.push(Value::from_object(root));
+            stack.push(Value::from_object(root.erase()));
         });
     }
 

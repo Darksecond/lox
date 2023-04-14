@@ -1,28 +1,29 @@
 use crate::memory::*;
 use crate::value::Value;
-use super::gc::{Trace, Gc};
+use super::gc::{Trace, Gc, Tracer};
 use std::cell::{Cell, UnsafeCell};
 use crate::stack::{Stack, StackBlock};
 use crate::VmError;
 use crate::runtime::Signal;
 use arrayvec::ArrayVec;
+use crate::array::Array;
 
 pub struct CallFrame {
     pub base_counter: usize,
-    pub closure: Gc<Object<Closure>>,
+    pub closure: Gc<Closure>,
 
-    ip: Cell<*const u8>,
+    pub ip: Cell<*const u8>,
 }
 
-impl Trace for CallFrame {
+unsafe impl Trace for CallFrame {
     #[inline]
-    fn trace(&self) {
-        self.closure.trace();
+    fn trace(&self, tracer: &mut Tracer) {
+        self.closure.trace(tracer);
     }
 }
 
 impl CallFrame {
-    pub fn new(object: Gc<Object<Closure>>, base_counter: usize) -> Self {
+    pub fn new(object: Gc<Closure>, base_counter: usize) -> Self {
         let ip = object.function.import.chunk(object.function.chunk_index).as_ptr();
         Self {
             base_counter,
@@ -46,17 +47,18 @@ pub struct Fiber {
     pub parent: Option<Gc<Fiber>>,
     frames: UnsafeCell<ArrayVec<CallFrame, 256>>,
     stack: UnsafeCell<Stack>,
-    _stack_block: StackBlock,
-    upvalues: UnsafeCell<Vec<Gc<Cell<Upvalue>>>>,
+    stack_block: StackBlock,
+    upvalues: UnsafeCell<Array<Gc<Cell<Upvalue>>>>,
     error: Cell<Option<VmError>>,
 }
 
-impl Trace for Fiber {
-    fn trace(&self) {
-        self.parent.trace();
-        self.frames.trace();
-        self.stack.trace();
-        self.upvalues.trace();
+unsafe impl Trace for Fiber {
+    fn trace(&self, tracer: &mut Tracer) {
+        self.parent.trace(tracer);
+        self.frames.trace(tracer);
+        self.stack_block.trace(tracer);
+        self.stack.trace(tracer);
+        self.upvalues.trace(tracer);
     }
 }
 
@@ -68,8 +70,8 @@ impl Fiber {
             parent,
             frames: UnsafeCell::new(frames),
             stack: UnsafeCell::new(Stack::with_block(&block)),
-            _stack_block: block,
-            upvalues: UnsafeCell::new(Vec::with_capacity(2048)),
+            stack_block: block,
+            upvalues: UnsafeCell::new(Array::with_capacity(128)),
             error: Cell::new(None),
         }
     }
@@ -91,11 +93,12 @@ impl Fiber {
     #[cold]
     pub fn runtime_error(&self, error: VmError) -> Signal {
         //panic!("runtime error: {:?}", error);
+
         self.error.set(Some(error));
         Signal::RuntimeError
     }
 
-    pub fn begin_frame(&self, closure: Gc<Object<Closure>>) {
+    pub fn begin_frame(&self, closure: Gc<Closure>) {
         let base_counter = self.with_stack(|stack| {
             stack.len() - closure.function.arity - 1
         });
@@ -132,7 +135,7 @@ impl Fiber {
     }
 
     #[inline]
-    pub fn current_import(&self) -> Gc<Object<Import>> {
+    pub fn current_import(&self) -> Gc<Import> {
         self.current_frame().closure.function.import
     }
 

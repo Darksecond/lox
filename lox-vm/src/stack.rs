@@ -1,15 +1,16 @@
 use crate::value::Value;
-use super::gc::Trace;
+use super::gc::{Trace, Tracer};
 use std::ptr;
 
 pub struct StackBlock {
-    stack: *mut [Value],
+    stack: *mut u8,
 }
 
 impl StackBlock {
     pub fn new(size: usize) -> Self {
-        let stack = vec![Value::NIL; size].into_boxed_slice();
-        let stack = Box::into_raw(stack);
+        let stack = unsafe {
+            lox_gc::alloc(std::alloc::Layout::array::<Value>(size).unwrap())
+        };
 
         Self {
             stack,
@@ -17,10 +18,10 @@ impl StackBlock {
     }
 }
 
-impl Drop for StackBlock {
-    fn drop(&mut self) {
+unsafe impl Trace for StackBlock {
+    fn trace(&self, _tracer: &mut Tracer) {
         unsafe {
-            drop(Box::from_raw(self.stack));
+            lox_gc::mark(self.stack);
         }
     }
 }
@@ -110,10 +111,10 @@ impl Stack {
     }
 }
 
-impl Trace for Stack {
-    fn trace(&self) {
+unsafe impl Trace for Stack {
+    fn trace(&self, tracer: &mut Tracer) {
         for i in 0..self.len() {
-            self.get(i).trace();
+            self.get(i).trace(tracer);
         }
     }
 }

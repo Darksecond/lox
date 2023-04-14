@@ -1,5 +1,4 @@
-use crate::gc::{Gc, Trace};
-use crate::memory::{ErasedObject, Object};
+use crate::gc::{Gc, Trace, Tracer};
 use std::fmt::Display;
 
 const QNAN: u64 = 0x7ffc000000000000;
@@ -18,8 +17,8 @@ impl Value {
     pub const TRUE: Self = Self(QNAN | TAG_TRUE);
 
     #[inline]
-    pub fn from_object(value: impl Into<Gc<ErasedObject>>) -> Self {
-        let bits = value.into().to_bits();
+    pub fn from_object<T>(value: Gc<T>) -> Self {
+        let bits = value.to_bits();
         Self(SIGN_BIT | QNAN | bits)
     }
 
@@ -29,7 +28,7 @@ impl Value {
     }
 
     #[inline]
-    pub fn as_object(self) -> Gc<ErasedObject> {
+    pub fn as_object(self) -> Gc<()> {
         unsafe {
             let bits = self.0 & (!(SIGN_BIT | QNAN));
             Gc::from_bits(bits)
@@ -81,7 +80,7 @@ impl Value {
         } else if a.is_bool() && b.is_bool() {
             true
         } else if a.is_object() && b.is_object() {
-            ErasedObject::is_same_type(&a.as_object(), &b.as_object())
+            Gc::is_same_type(&a.as_object(), &b.as_object())
         } else {
             false
         }
@@ -93,7 +92,7 @@ impl Value {
     }
 
     #[inline]
-    pub fn try_cast<T>(self) -> Option<Gc<Object<T>>> where T: 'static {
+    pub fn try_cast<T>(self) -> Option<Gc<T>> where T: 'static {
         if self.is_object() && self.as_object().is::<T>() {
             Some(self.as_object().cast::<T>())
         } else {
@@ -142,17 +141,17 @@ impl Display for Value {
         } else if self.0 == Self::FALSE.0 {
             write!(f, "false")
         } else if self.is_object() {
-            write!(f, "{}", self.as_object())
+            crate::memory::print(self.as_object(), f)
         } else {
             write!(f, "{}", self.as_number())
         }
     }
 }
 
-impl Trace for Value {
-    fn trace(&self) {
+unsafe impl Trace for Value {
+    fn trace(&self, tracer: &mut Tracer) {
         if self.is_object() {
-            self.as_object().trace()
+            self.as_object().trace(tracer)
         }
     }
 }
