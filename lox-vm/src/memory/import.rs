@@ -1,26 +1,26 @@
 use lox_bytecode::bytecode::{Chunk, ConstantIndex, Module, ClosureIndex, ClassIndex};
-use crate::gc::{Trace, Heap, Gc};
+use crate::gc::{Trace, Gc, Tracer};
 use std::cell::UnsafeCell;
 use crate::interner::{Symbol, Interner};
 use lox_bytecode::bytecode;
 use crate::table::Table;
 use crate::value::Value;
-use crate::memory::Object;
+use crate::array::Array;
 
-#[derive(Debug)]
 pub struct Import {
     pub name: String,
     module: Module,
     globals: UnsafeCell<Table>,
-    symbols: Vec<Symbol>,
-    strings: Vec<Gc<Object<String>>>,
+    symbols: Array<Symbol>,
+    strings: Array<Gc<String>>,
 }
 
-impl Trace for Import {
+unsafe impl Trace for Import {
     #[inline]
-    fn trace(&self) {
-        self.globals().trace();
-        self.strings.trace();
+    fn trace(&self, tracer: &mut Tracer) {
+        self.globals().trace(tracer);
+        self.symbols.mark();
+        self.strings.trace(tracer);
     }
 }
 
@@ -35,13 +35,13 @@ impl Import {
         }
     }
 
-    pub(crate) fn with_module(name: impl Into<String>, module: Module, interner: &mut Interner, heap: &Heap) -> Self {
+    pub(crate) fn with_module(name: impl Into<String>, module: Module, interner: &mut Interner) -> Self {
         let symbols = module.identifiers().iter().map(|identifier| {
             interner.intern(identifier)
         }).collect();
 
         let strings = module.strings.iter().map(|value| {
-            heap.manage(value.clone().into())
+            lox_gc::manage(value.clone().into())
         }).collect();
 
         Self {
@@ -81,7 +81,7 @@ impl Import {
     }
 
     #[inline]
-    pub(crate) fn string(&self, index: ConstantIndex) -> Gc<Object<String>> {
+    pub(crate) fn string(&self, index: ConstantIndex) -> Gc<String> {
         unsafe {
             *self.strings.get_unchecked(index)
         }

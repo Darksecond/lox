@@ -139,10 +139,10 @@ impl Runtime {
             List::with_stack(arity as _, stack)
         });
 
-        let list: Gc<Object<List>> = self.manage(list.into());
+        let list: Gc<List> = self.manage(list.into());
 
         self.fiber.with_stack(|stack| {
-            stack.push(Value::from_object(list))
+            stack.push(Value::from_object(list.erase()))
         });
 
         Signal::More
@@ -157,7 +157,7 @@ impl Runtime {
 
         if let Some(import) = self.import(path.as_str()) {
             self.fiber.with_stack(|stack| {
-                stack.push(Value::from_object(import))
+                stack.push(Value::from_object(import.erase()))
             });
 
             return Signal::More;
@@ -169,15 +169,15 @@ impl Runtime {
         };
 
         self.fiber.with_stack(|stack| {
-            stack.push(Value::from_object(import))
+            stack.push(Value::from_object(import.erase()))
         });
 
         let fiber = Fiber::new(Some(self.fiber));
 
-        let closure = self.manage(Closure::with_import(import).into());
+        let closure = self.manage(Closure::with_import(import));
 
         fiber.with_stack(|stack| {
-            stack.push(Value::from_object(closure))
+            stack.push(Value::from_object(closure.erase()))
         });
 
         fiber.begin_frame(closure);
@@ -233,9 +233,9 @@ impl Runtime {
 
         let current_import = self.fiber.current_import();
         let class = current_import.class(index);
-        let class: Gc<Object<Class>> = self.manage(Class::new(class.name.clone()).into());
+        let class: Gc<Class> = self.manage(Class::new(class.name.clone()).into());
         self.fiber.with_stack(|stack| {
-            stack.push(Value::from_object(class));
+            stack.push(Value::from_object(class.erase()));
         });
 
         Signal::More
@@ -273,7 +273,7 @@ impl Runtime {
         let class = as_obj!(self, class, Class);
         let closure = as_obj!(self, closure, Closure);
 
-        class.set_method(identifier, Value::from_object(closure));
+        class.set_method(identifier, Value::from_object(closure.erase()));
 
         self.fiber.with_stack(|stack| {
             stack.pop()
@@ -336,7 +336,7 @@ impl Runtime {
         let value = self.fiber.current_import().string(index as _);
 
         self.fiber.with_stack(|stack| {
-            stack.push(Value::from_object(value))
+            stack.push(Value::from_object(value.erase()))
         });
 
         Signal::More
@@ -641,13 +641,13 @@ impl Runtime {
             None => return self.fiber.runtime_error(VmError::UndefinedProperty),
         };
 
-        let bind: Gc<Object<BoundMethod>> = self.manage(BoundMethod {
+        let bind: Gc<BoundMethod> = self.manage(BoundMethod {
             receiver: instance.as_object(),
             method,
         }.into());
 
         self.fiber.with_stack(|stack| {
-            stack.push(Value::from_object(bind))
+            stack.push(Value::from_object(bind.erase()))
         });
 
         Signal::More
@@ -656,10 +656,11 @@ impl Runtime {
     pub fn op_closure(&mut self) -> Signal {
         let index = self.next_u32() as _;
 
-        let closure: Gc<Object<Closure>> = self.manage(Closure::new(index, self.fiber, &self.heap).into());
+        let closure: Gc<Closure> = self.manage(Closure::new(index, self.fiber));
 
+        let obj = Value::from_object(closure.erase());
         self.fiber.with_stack(|stack| {
-            stack.push(Value::from_object(closure))
+            stack.push(obj)
         });
 
         Signal::More

@@ -1,5 +1,5 @@
 use crate::value::Value;
-use crate::gc::Trace;
+use crate::gc::{Trace, Tracer};
 
 #[derive(Debug, Copy, Clone)]
 pub enum Upvalue {
@@ -38,11 +38,11 @@ impl Upvalue {
     }
 }
 
-impl Trace for Upvalue {
+unsafe impl Trace for Upvalue {
     #[inline]
-    fn trace(&self) {
+    fn trace(&self, tracer: &mut Tracer) {
         match self {
-            Upvalue::Closed(value) => value.trace(),
+            Upvalue::Closed(value) => value.trace(tracer),
             Upvalue::Open(_) => (),
         }
     }

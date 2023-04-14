@@ -6,4 +6,5 @@ edition = "2021"
 
 [dependencies]
 lox-bytecode = { path = "../lox-bytecode" }
+lox-gc = { path = "../lox-gc" }
 arrayvec = "0.7.2"

@@ -1,17 +1,18 @@
 use std::fmt::Display;
 use crate::value::Value;
 use std::cell::UnsafeCell;
-use crate::gc::Trace;
+use crate::gc::{Trace, Tracer};
 use crate::stack::Stack;
+use crate::array::Array;
 
 pub struct List {
-    data: UnsafeCell<Vec<Value>>,
+    data: UnsafeCell<Array<Value>>,
 }
 
 impl List {
     pub fn new(size: usize) -> Self {
         Self {
-            data: UnsafeCell::new(vec![Value::NIL; size]),
+            data: UnsafeCell::new(Array::with_contents(Value::NIL, size)),
         }
     }
 
@@ -42,22 +43,22 @@ impl List {
         index < self.data().len()
     }
 
-    fn data(&self) -> &Vec<Value> {
+    fn data(&self) -> &Array<Value> {
         unsafe {
             &*self.data.get()
         }
     }
 
-    fn data_mut(&self) -> &mut Vec<Value> {
+    fn data_mut(&self) -> &mut Array<Value> {
         unsafe {
             &mut *self.data.get()
         }
     }
 }
 
-impl Trace for List {
-    fn trace(&self) {
-        self.data.trace();
+unsafe impl Trace for List {
+    fn trace(&self, tracer: &mut Tracer) {
+        self.data.trace(tracer);
     }
 }
 

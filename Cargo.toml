@@ -6,7 +6,8 @@ members = [
     "lox-compiler",
     "lox-vm",
     "lox-syntax",
-    "lox-std"
+    "lox-std",
+    "lox-gc"
 ]
 
 # For flamegraph
