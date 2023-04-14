@@ -43,6 +43,30 @@ impl<T> Array<T> where T: Copy {
     }
 }
 
+impl<T> Array<T> where T: Clone {
+    //TODO rewrite.
+    pub fn extend_from_slice(&mut self, other: &[T]) {
+        for elem in other {
+            self.push(elem.clone());
+        }
+    }
+}
+
+impl<T> Clone for Array<T> {
+    fn clone(&self) -> Self {
+        unsafe {
+            let ptr = lox_gc::alloc(std::alloc::Layout::array::<T>(self.cap).unwrap()) as *mut T;
+            std::ptr::copy_nonoverlapping(self.ptr.as_ptr(), ptr, self.cap);
+
+            Self {
+                cap: self.cap,
+                len: self.len,
+                ptr: NonNull::new_unchecked(ptr),
+            }
+        }
+    }
+}
+
 impl<T> Array<T> {
     pub fn new() -> Self {
         assert!(mem::size_of::<T>() != 0, "must not be ZST");
@@ -127,15 +151,20 @@ impl<T> Array<T> {
         assert!(new_layout.size() <= isize::MAX as usize, "Allocation too large");
 
         let new_ptr = if self.cap == 0 {
-            unsafe { lox_gc::alloc(new_layout) }
+            let new_ptr = unsafe { lox_gc::alloc(new_layout) };
+            dbg!(new_layout, new_ptr);
+            new_ptr
         } else {
             //TODO We copy more than we need to.
             let old_layout = Layout::array::<T>(self.cap).unwrap();
             let old_ptr = self.ptr.as_ptr() as *mut u8;
             let new_ptr = unsafe { lox_gc::alloc(new_layout) };
+            dbg!(new_layout, old_layout.size(), old_ptr, new_ptr);
+
             unsafe {
-                ptr::copy_nonoverlapping(old_ptr, new_ptr, old_layout.size());
+                ptr::copy(old_ptr, new_ptr, old_layout.size());
             }
+
             new_ptr
         };
 

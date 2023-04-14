@@ -6,13 +6,14 @@ use lox_bytecode::bytecode;
 use crate::table::Table;
 use crate::value::Value;
 use crate::array::Array;
+use crate::string::LoxString;
 
 pub struct Import {
     pub name: String,
     module: Module,
     globals: UnsafeCell<Table>,
     symbols: Array<Symbol>,
-    strings: Array<Gc<String>>,
+    strings: Array<Gc<LoxString>>,
 }
 
 unsafe impl Trace for Import {
@@ -40,9 +41,14 @@ impl Import {
             interner.intern(identifier)
         }).collect();
 
-        let strings = module.strings.iter().map(|value| {
-            lox_gc::manage(value.clone().into())
+        println!("HERE");
+        let strings: Array<Gc<LoxString>> = module.strings.iter().map(|value| {
+            lox_gc::manage(value.into())
         }).collect();
+
+        for value in strings.iter() {
+            println!("STR {}", value);
+        }
 
         Self {
             name: name.into(),
@@ -81,7 +87,7 @@ impl Import {
     }
 
     #[inline]
-    pub(crate) fn string(&self, index: ConstantIndex) -> Gc<String> {
+    pub(crate) fn string(&self, index: ConstantIndex) -> Gc<LoxString> {
         unsafe {
             *self.strings.get_unchecked(index)
         }

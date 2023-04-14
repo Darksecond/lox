@@ -12,7 +12,10 @@ mod stack;
 mod ops;
 mod fiber;
 mod table;
+
+//TODO Move to lox-gc
 mod array;
+mod string;
 
 use lox_bytecode::bytecode::Module;
 use runtime::Runtime;

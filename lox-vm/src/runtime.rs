@@ -8,6 +8,7 @@ use super::memory::*;
 use super::interner::{Symbol, Interner};
 use super::gc::{Gc, Trace, Tracer};
 use crate::fiber::Fiber;
+use crate::string::LoxString;
 use std::collections::HashMap;
 
 #[derive(PartialEq, Eq, Copy, Clone)]
@@ -119,9 +120,9 @@ impl Runtime {
 
     #[cold]
     pub fn concat(&self, a: Value, b: Value) -> Signal {
-        if a.is_object_of_type::<String>() && b.is_object_of_type::<String>() {
-            let a = a.as_object().cast::<String>();
-            let b = b.as_object().cast::<String>();
+        if a.is_object_of_type::<LoxString>() && b.is_object_of_type::<LoxString>() {
+            let a = a.as_object().cast::<LoxString>();
+            let b = b.as_object().cast::<LoxString>();
             self.push_string(format!("{}{}", a.as_str(), b.as_str()));
             return Signal::More;
         }
@@ -248,9 +249,9 @@ impl Runtime {
     }
 
     #[cold]
-    pub fn push_string(&self, string: impl Into<String>) {
+    pub fn push_string(&self, string: impl Into<LoxString>) {
         let string = string.into();
-        let root: Gc<String> = self.manage(string.into());
+        let root: Gc<LoxString> = self.manage(string);
         self.fiber.with_stack(|stack| {
             stack.push(Value::from_object(root.erase()));
         });
