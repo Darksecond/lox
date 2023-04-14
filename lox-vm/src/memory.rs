@@ -16,9 +16,13 @@ pub use class::*;
 pub use native_function::*;
 pub use bound_method::*;
 
+use crate::string::LoxString;
+
 pub fn print(value: crate::gc::Gc<()>, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     if value.is::<String>() {
         write!(f, "{}", value.cast::<String>().as_str())
+    } else if value.is::<LoxString>() {
+        write!(f, "{}", value.cast::<LoxString>().as_str())
     } else if value.is::<Closure>() {
         write!(f, "<fn {}>", value.cast::<Closure>().function.name)
     } else if value.is::<BoundMethod>() {

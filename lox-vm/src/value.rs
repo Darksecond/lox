@@ -122,8 +122,12 @@ impl From<bool> for Value {
 impl PartialEq for Value {
     #[inline]
     fn eq(&self, other: &Self) -> bool {
+        use crate::string::LoxString;
+
         if self.is_number() && other.is_number() {
             self.as_number() == other.as_number()
+        } else if self.is_object_of_type::<LoxString>() && other.is_object_of_type::<LoxString>() {
+            &*self.as_object().cast::<LoxString>() == &*other.as_object().cast::<LoxString>()
         } else if self.is_object() && other.is_object() {
             self.as_object() == other.as_object()
         } else {
