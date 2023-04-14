@@ -1,7 +1,7 @@
 use std::cell::Cell;
 
-/*
 struct MemoryMap {
+    size: usize,
     data: *mut u8,
 }
 
@@ -12,6 +12,7 @@ impl MemoryMap {
             let data = std::alloc::alloc(layout);
 
             Self {
+                size,
                 data,
             }
         }
@@ -21,7 +22,15 @@ impl MemoryMap {
         self.data
     }
 }
-*/
+
+impl Drop for MemoryMap {
+    fn drop(&mut self) {
+        let layout = std::alloc::Layout::array::<u8>(self.size).unwrap().align_to(4096).unwrap();
+        unsafe {
+            std::alloc::dealloc(self.data, layout);
+        }
+    }
+}
 
 /// Returns the number of pages needed for `n` bytes (rounding up).
 const fn bytes_to_pages(n: usize) -> usize {
@@ -37,7 +46,8 @@ const fn bytes_to_pages(n: usize) -> usize {
 struct PdIdx(u32);
 
 struct AddrSpace {
-    mem: mmap::MemoryMap,
+    //mem: mmap::MemoryMap,
+    mem: MemoryMap,
 
     used_pds: Cell<u32>,
 }
@@ -45,9 +55,9 @@ struct AddrSpace {
 impl AddrSpace {
     const PAGE_BYTES: usize = 4096;
 
-    const DATA_BYTES: usize = 4 * 1024 * 1024 * 1024; // 4G
+    //const DATA_BYTES: usize = 4 * 1024 * 1024 * 1024; // 4G
     //const DATA_BYTES: usize = 64 * 1024 * 1024; // 64MB
-    //const DATA_BYTES: usize = 32 * 1024 * 1024; // 32MB
+    const DATA_BYTES: usize = 32 * 1024 * 1024; // 32MB
     const DATA_PAGES: usize = Self::DATA_BYTES / Self::PAGE_BYTES;
 
     const PD_PAGES: usize = bytes_to_pages(Self::DATA_PAGES * std::mem::size_of::<PageDescriptor>());
@@ -63,9 +73,10 @@ impl AddrSpace {
 
     /// Constructs a new [`AddrSpace`]. This will return `None` on error.
     pub fn create() -> Option<Self> {
-        use mmap::*;
+        //use mmap::*;
 
-        let mem = MemoryMap::new(Self::TOTAL_BYTES, &[MapOption::MapReadable, MapOption::MapWritable]).ok()?;
+        //let mem = MemoryMap::new(Self::TOTAL_BYTES, &[MapOption::MapReadable, MapOption::MapWritable]).ok()?;
+        let mem = self::MemoryMap::new(Self::TOTAL_BYTES);
 
         Some(Self {
             mem,
@@ -659,8 +670,8 @@ impl Heap {
             },
         };
 
-        //println!("page {:?}", page.idx);
         let index = page.take_next_block().expect("Full page in free list");
+        //println!("page {:?} {:?} {} {:?}", size_class, page.idx, index, size_class.block_bytes());
 
         if page.is_full() {
             //println!("full {:?}", page.idx);
