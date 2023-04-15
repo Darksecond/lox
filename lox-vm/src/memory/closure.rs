@@ -4,6 +4,7 @@ use crate::gc::{Gc, Trace, Tracer};
 use crate::memory::{Import, Upvalue};
 use crate::fiber::Fiber;
 use arrayvec::ArrayVec;
+use crate::string::LoxString;
 
 pub struct Closure {
     pub function: Function,
@@ -13,13 +14,14 @@ pub struct Closure {
 unsafe impl Trace for Closure {
     fn trace(&self, tracer: &mut Tracer) {
         self.upvalues.trace(tracer);
+        self.function.name.trace(tracer);
         self.function.import.trace(tracer);
     }
 }
 
 //TODO Drop this entirely and merge this into Closure
 pub struct Function {
-    pub name: String,
+    pub name: LoxString,
     pub chunk_index: bytecode::ChunkIndex,
     pub import: Gc<Import>,
     pub arity: usize,
@@ -36,7 +38,7 @@ impl std::fmt::Debug for Function {
 impl Function {
     pub(crate) fn new(value: &bytecode::Function, import: Gc<Import>) -> Self {
         Self {
-            name: value.name.clone(),
+            name: value.name.as_str().into(),
             chunk_index: value.chunk_index,
             arity: value.arity,
             import,

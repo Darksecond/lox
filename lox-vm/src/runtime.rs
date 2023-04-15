@@ -44,7 +44,7 @@ pub struct Runtime {
     next_fiber: Option<Gc<Fiber>>,
     init_symbol: Symbol, //TODO Move to builtins
     pub interner: Interner,
-    pub imports: HashMap<String, Gc<Import>>,
+    pub imports: HashMap<LoxString, Gc<Import>>,
 
     pub builtins: Builtins,
 
@@ -250,8 +250,7 @@ impl Runtime {
 
     #[cold]
     pub fn push_string(&self, string: impl Into<LoxString>) {
-        let string = string.into();
-        let root: Gc<LoxString> = self.manage(string);
+        let root: Gc<LoxString> = self.manage(string.into());
         self.fiber.with_stack(|stack| {
             stack.push(Value::from_object(root.erase()));
         });

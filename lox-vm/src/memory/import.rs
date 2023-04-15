@@ -8,8 +8,9 @@ use crate::value::Value;
 use crate::array::Array;
 use crate::string::LoxString;
 
+//TODO Drop module 
 pub struct Import {
-    pub name: String,
+    pub name: LoxString,
     module: Module,
     globals: UnsafeCell<Table>,
     symbols: Array<Symbol>,
@@ -19,6 +20,7 @@ pub struct Import {
 unsafe impl Trace for Import {
     #[inline]
     fn trace(&self, tracer: &mut Tracer) {
+        self.name.trace(tracer);
         self.globals.trace(tracer);
         self.symbols.mark();
         self.strings.trace(tracer);
@@ -26,7 +28,7 @@ unsafe impl Trace for Import {
 }
 
 impl Import {
-    pub fn new(name: impl Into<String>) -> Self {
+    pub fn new(name: impl Into<LoxString>) -> Self {
         Self {
             name: name.into(),
             module: Module::new(),
@@ -36,7 +38,7 @@ impl Import {
         }
     }
 
-    pub(crate) fn with_module(name: impl Into<String>, module: Module, interner: &mut Interner) -> Self {
+    pub(crate) fn with_module(name: impl Into<LoxString>, module: Module, interner: &mut Interner) -> Self {
         let symbols = module.identifiers().iter().map(|identifier| {
             interner.intern(identifier)
         }).collect();

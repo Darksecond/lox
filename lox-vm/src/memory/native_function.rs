@@ -1,8 +1,9 @@
 use crate::value::Value;
 use crate::gc::{Trace, Tracer};
+use crate::string::LoxString;
 
 pub struct NativeFunction {
-    pub name: String,
+    pub name: LoxString,
     pub code: fn(Value, &[Value]) -> Value,
 }
 
@@ -13,6 +14,7 @@ impl std::fmt::Debug for NativeFunction {
 }
 
 unsafe impl Trace for NativeFunction {
-    #[inline]
-    fn trace(&self, _tracer: &mut Tracer) {}
+    fn trace(&self, tracer: &mut Tracer) {
+        self.name.trace(tracer);
+    }
 }
