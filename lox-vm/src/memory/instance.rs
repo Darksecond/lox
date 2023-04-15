@@ -39,6 +39,6 @@ unsafe impl Trace for Instance {
     #[inline]
     fn trace(&self, tracer: &mut Tracer) {
         self.class.trace(tracer);
-        self.fields().trace(tracer);
+        self.fields.trace(tracer);
     }
 }
