@@ -1,5 +1,10 @@
 use std::cell::Cell;
 
+//TODO Use mmap again
+//TODO Impl mmap ourselves
+//TODO Merge reams when sweeping
+//TODO Figure out dropping
+
 struct MemoryMap {
     size: usize,
     data: *mut u8,

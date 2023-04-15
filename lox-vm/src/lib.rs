@@ -72,7 +72,7 @@ impl Native<'_> {
 
     pub fn build_fn(&self, identifier: &str, code: fn(Value, &[Value]) -> Value) -> Gc<NativeFunction> {
         lox_gc::manage((NativeFunction {
-            name: identifier.to_string(),
+            name: identifier.into(),
             code,
         }).into())
     }

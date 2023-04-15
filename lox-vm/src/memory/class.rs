@@ -3,17 +3,18 @@ use crate::interner::Symbol;
 use crate::table::Table;
 use crate::value::Value;
 use crate::gc::{Trace, Tracer};
+use crate::string::LoxString;
 
 #[derive(Debug)]
 pub struct Class {
-    pub name: String,
+    pub name: LoxString,
     methods: UnsafeCell<Table>,
 }
 
 impl Class {
-    pub fn new(name: String) -> Self {
+    pub fn new(name: impl Into<LoxString>) -> Self {
         Self {
-            name,
+            name: name.into(),
             methods: Default::default(),
         }
     }
@@ -39,6 +40,7 @@ impl Class {
 unsafe impl Trace for Class {
     #[inline]
     fn trace(&self, tracer: &mut Tracer) {
+        self.name.trace(tracer);
         self.methods.trace(tracer);
     }
 }

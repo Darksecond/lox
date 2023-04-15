@@ -296,9 +296,12 @@ mod trace_impls {
         }
     }
 
-    unsafe impl<K: Eq + Hash, T: Trace> Trace for HashMap<K, T> {
+    unsafe impl<K: Eq + Hash + Trace, T: Trace> Trace for HashMap<K, T> {
         #[inline]
         fn trace(&self, tracer: &mut Tracer) {
+            for key in self.keys() {
+                key.trace(tracer);
+            }
             for val in self.values() {
                 val.trace(tracer);
             }

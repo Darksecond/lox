@@ -68,6 +68,22 @@ impl From<&String> for LoxString {
     }
 }
 
+impl From<&str> for LoxString {
+    fn from(value: &str) -> Self {
+        let mut str = LoxString::with_capacity(value.len());
+        str.push_str(value);
+        str
+    }
+}
+
+impl Clone for LoxString {
+    fn clone(&self) -> Self {
+        Self {
+            vec: self.vec.clone(),
+        }
+    }
+}
+
 impl fmt::Debug for LoxString {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt::Debug::fmt(&**self, f)
@@ -79,6 +95,8 @@ impl fmt::Display for LoxString {
         fmt::Display::fmt(&**self, f)
     }
 }
+
+impl Eq for LoxString {}
 
 impl Hash for LoxString {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
