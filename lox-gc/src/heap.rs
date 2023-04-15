@@ -55,9 +55,9 @@ struct AddrSpace {
 impl AddrSpace {
     const PAGE_BYTES: usize = 4096;
 
-    //const DATA_BYTES: usize = 4 * 1024 * 1024 * 1024; // 4G
+    const DATA_BYTES: usize = 4 * 1024 * 1024 * 1024; // 4G
     //const DATA_BYTES: usize = 64 * 1024 * 1024; // 64MB
-    const DATA_BYTES: usize = 32 * 1024 * 1024; // 32MB
+    //const DATA_BYTES: usize = 32 * 1024 * 1024; // 32MB
     const DATA_PAGES: usize = Self::DATA_BYTES / Self::PAGE_BYTES;
 
     const PD_PAGES: usize = bytes_to_pages(Self::DATA_PAGES * std::mem::size_of::<PageDescriptor>());
@@ -386,6 +386,7 @@ impl<'space> PdRef<'space> {
         self.pd().prev.set(self.idx);
     }
 
+    //TODO Move to bitmap
     pub fn take_next_block(self) -> Option<usize> {
         let mut blocks = self.class().total_blocks();
         let mut mask = || {
@@ -399,14 +400,18 @@ impl<'space> PdRef<'space> {
             mask
         };
 
-        self.bitmap().0.iter()
-            .skip_while(|w| w.get() == mask())
-            .next()
-            .map(|w| {
-                let idx = w.get().trailing_ones() as usize;
-                w.set(w.get() | 1 << idx);
-                idx
-            })
+        for (index, word) in self.bitmap().0.iter().enumerate() {
+            if word.get() == mask() {
+                continue;
+            }
+
+            let idx = word.get().trailing_ones() as usize;
+            word.set(word.get() | 1 << idx);
+
+            return Some(index*64 + idx);
+        }
+
+        None
     }
 
     pub fn split(self, split: usize) -> Option<(Self, Option<Self>)> {
@@ -583,7 +588,6 @@ impl Heap {
     pub unsafe fn sweep(&self) {
         let mut count = 0;
         for pd in self.space.pds() {
-            //println!("{:?} {:?} {} {}", pd.idx, pd.class(), pd.bits_used(), pd.bytes_used());
             count += pd.bytes_used() as usize;
 
             if pd.class() == SizeClass::Reserved {
@@ -671,10 +675,8 @@ impl Heap {
         };
 
         let index = page.take_next_block().expect("Full page in free list");
-        //println!("page {:?} {:?} {} {:?}", size_class, page.idx, index, size_class.block_bytes());
 
         if page.is_full() {
-            //println!("full {:?}", page.idx);
             page.unlink();
             self.full_pages.push(page);
         }

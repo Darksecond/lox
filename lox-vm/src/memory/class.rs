@@ -39,6 +39,6 @@ impl Class {
 unsafe impl Trace for Class {
     #[inline]
     fn trace(&self, tracer: &mut Tracer) {
-        self.methods().trace(tracer);
+        self.methods.trace(tracer);
     }
 }

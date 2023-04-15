@@ -152,17 +152,15 @@ impl<T> Array<T> {
 
         let new_ptr = if self.cap == 0 {
             let new_ptr = unsafe { lox_gc::alloc(new_layout) };
-            dbg!(new_layout, new_ptr);
             new_ptr
         } else {
             //TODO We copy more than we need to.
             let old_layout = Layout::array::<T>(self.cap).unwrap();
             let old_ptr = self.ptr.as_ptr() as *mut u8;
             let new_ptr = unsafe { lox_gc::alloc(new_layout) };
-            dbg!(new_layout, old_layout.size(), old_ptr, new_ptr);
 
             unsafe {
-                ptr::copy(old_ptr, new_ptr, old_layout.size());
+                ptr::copy_nonoverlapping(old_ptr, new_ptr, old_layout.size());
             }
 
             new_ptr
@@ -173,6 +171,8 @@ impl<T> Array<T> {
     }
 
     pub fn mark(&self) {
+        if self.cap == 0 { return; }
+
         unsafe {
             lox_gc::mark(self.ptr.as_ptr() as *const u8);
         }

@@ -19,7 +19,7 @@ pub struct Import {
 unsafe impl Trace for Import {
     #[inline]
     fn trace(&self, tracer: &mut Tracer) {
-        self.globals().trace(tracer);
+        self.globals.trace(tracer);
         self.symbols.mark();
         self.strings.trace(tracer);
     }
@@ -41,14 +41,9 @@ impl Import {
             interner.intern(identifier)
         }).collect();
 
-        println!("HERE");
         let strings: Array<Gc<LoxString>> = module.strings.iter().map(|value| {
             lox_gc::manage(value.into())
         }).collect();
-
-        for value in strings.iter() {
-            println!("STR {}", value);
-        }
 
         Self {
             name: name.into(),
