@@ -1,4 +1,4 @@
-use crate::gc::{Gc, Trace, Tracer};
+use lox_gc::{Gc, Trace, Tracer};
 use crate::memory::{Import, Class};
 
 pub struct Builtins {

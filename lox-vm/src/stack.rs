@@ -1,5 +1,5 @@
 use crate::value::Value;
-use super::gc::{Trace, Tracer};
+use lox_gc::{Trace, Tracer};
 use std::ptr;
 
 pub struct StackBlock {
@@ -19,9 +19,9 @@ impl StackBlock {
 }
 
 unsafe impl Trace for StackBlock {
-    fn trace(&self, _tracer: &mut Tracer) {
+    fn trace(&self, tracer: &mut Tracer) {
         unsafe {
-            lox_gc::mark(self.stack);
+            tracer.mark(self.stack);
         }
     }
 }

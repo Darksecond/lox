@@ -1,6 +1,6 @@
 use crate::runtime::{Runtime, Signal, VmError};
 use crate::memory::*;
-use super::gc::Gc;
+use lox_gc::Gc;
 use super::fiber::Fiber;
 use crate::value::Value;
 

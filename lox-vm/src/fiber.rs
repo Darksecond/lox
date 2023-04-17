@@ -1,6 +1,6 @@
 use crate::memory::*;
 use crate::value::Value;
-use super::gc::{Trace, Gc, Tracer};
+use lox_gc::{Trace, Gc, Tracer};
 use std::cell::{Cell, UnsafeCell};
 use crate::stack::{Stack, StackBlock};
 use crate::VmError;
@@ -12,7 +12,7 @@ pub struct CallFrame {
     pub base_counter: usize,
     pub closure: Gc<Closure>,
 
-    pub ip: Cell<*const u8>,
+    ip: Cell<*const u8>,
 }
 
 unsafe impl Trace for CallFrame {

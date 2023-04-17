@@ -2,7 +2,7 @@ use std::cell::UnsafeCell;
 use crate::interner::Symbol;
 use crate::table::Table;
 use crate::value::Value;
-use crate::gc::{Trace, Tracer};
+use lox_gc::{Trace, Tracer};
 use crate::string::LoxString;
 
 #[derive(Debug)]

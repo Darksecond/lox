@@ -17,8 +17,10 @@ pub use native_function::*;
 pub use bound_method::*;
 
 use crate::string::LoxString;
+use lox_gc::Gc;
+use std::fmt;
 
-pub fn print(value: crate::gc::Gc<()>, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+pub fn print(value: Gc<()>, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     if value.is::<String>() {
         write!(f, "{}", value.cast::<String>().as_str())
     } else if value.is::<LoxString>() {

@@ -1,4 +1,4 @@
-use crate::gc::{Trace, Gc, Tracer};
+use lox_gc::{Trace, Gc, Tracer};
 use crate::memory::Class;
 use crate::interner::Symbol;
 use crate::value::Value;

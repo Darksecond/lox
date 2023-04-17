@@ -1,5 +1,5 @@
 use crate::value::Value;
-use crate::gc::{Trace, Tracer};
+use lox_gc::{Trace, Tracer};
 
 #[derive(Debug, Copy, Clone)]
 pub enum Upvalue {

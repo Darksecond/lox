@@ -1,6 +1,6 @@
 use super::value::Value;
 use super::interner::Symbol;
-use super::gc::{Trace, Tracer};
+use lox_gc::{Trace, Tracer};
 use crate::array::Array;
 
 #[derive(Copy, Clone)]

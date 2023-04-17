@@ -1,6 +1,6 @@
 use lox_bytecode::bytecode;
 use std::cell::Cell;
-use crate::gc::{Gc, Trace, Tracer};
+use lox_gc::{Gc, Trace, Tracer};
 use crate::memory::{Import, Upvalue};
 use crate::fiber::Fiber;
 use arrayvec::ArrayVec;
