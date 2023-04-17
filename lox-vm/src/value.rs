@@ -1,4 +1,4 @@
-use crate::gc::{Gc, Trace, Tracer};
+use lox_gc::{Gc, Trace, Tracer};
 use std::fmt::Display;
 
 const QNAN: u64 = 0x7ffc000000000000;

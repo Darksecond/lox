@@ -1,5 +1,5 @@
 use crate::value::Value;
-use crate::gc::{Trace, Tracer};
+use lox_gc::{Trace, Tracer};
 use crate::string::LoxString;
 
 pub struct NativeFunction {

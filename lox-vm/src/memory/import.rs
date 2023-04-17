@@ -1,5 +1,5 @@
 use lox_bytecode::bytecode::{Chunk, ConstantIndex, Module, ClosureIndex, ClassIndex};
-use crate::gc::{Trace, Gc, Tracer};
+use lox_gc::{Trace, Gc, Tracer};
 use std::cell::UnsafeCell;
 use crate::interner::{Symbol, Interner};
 use lox_bytecode::bytecode;
@@ -22,7 +22,7 @@ unsafe impl Trace for Import {
     fn trace(&self, tracer: &mut Tracer) {
         self.name.trace(tracer);
         self.globals.trace(tracer);
-        self.symbols.mark();
+        self.symbols.mark(tracer);
         self.strings.trace(tracer);
     }
 }

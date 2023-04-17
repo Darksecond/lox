@@ -55,6 +55,7 @@ struct AddrSpace {
     mem: MemoryMap,
 
     used_pds: Cell<u32>,
+    reserved_pds: Cell<u32>,
 }
 
 impl AddrSpace {
@@ -86,6 +87,7 @@ impl AddrSpace {
         Some(Self {
             mem,
             used_pds: Cell::new(0),
+            reserved_pds: Cell::new(0),
         })
     }
 
@@ -115,10 +117,8 @@ impl AddrSpace {
 
     /// Return an iterator over all created [`PageDescriptor`]s.
     pub fn pds(&self) -> impl Iterator<Item = PdRef> {
-        //(0..self.used_pds.get()).map(move |i| unsafe { self.pd_at(i) })
-
         let end = self.used_pds.get();
-        let mut index = 0;
+        let mut index = self.reserved_pds.get();
         std::iter::from_fn(move || {
             if index >= end {
                 return None;
@@ -137,6 +137,14 @@ impl AddrSpace {
     pub fn available_pages(&self) -> u32 {
         let used_pages = self.used_pds.get();
         Self::DATA_PAGES as u32 - used_pages
+    }
+
+    pub(crate) fn new_reserved(&self) -> PdList {
+        debug_assert_eq!(self.reserved_pds.get(), self.used_pds.get(), "You cannot call new_reserved after init");
+
+        let ream = self.new_ream(1);
+        self.reserved_pds.set(self.reserved_pds.get() + 1);
+        PdList::new(ream.idx)
     }
 
     /// Constructs a ream of specified size.
@@ -179,7 +187,6 @@ enum SizeClass {
     Block1024 = 10,
     Block2048 = 11,
     Block4096 = 12,
-    Reserved = 255,
 }
 
 impl SizeClass {
@@ -209,11 +216,6 @@ impl SizeClass {
         } else {
             1
         }
-    }
-
-    pub const fn words(self) -> usize {
-        // Divide rounding up
-        (self.total_blocks()+64-1) / 64
     }
 }
 
@@ -316,9 +318,7 @@ impl<'space> PdRef<'space> {
 
     fn bytes_used(self) -> u32 {
         let class = self.class();
-        if class == SizeClass::Reserved {
-            0
-        } else if class == SizeClass::Ream {
+        if class == SizeClass::Ream {
             if self.is_empty() {
                 0
             } else {
@@ -519,29 +519,23 @@ impl Heap {
     pub fn new() -> Option<Heap> {
         let space = AddrSpace::create()?;
 
-        let new_list = || {
-            let ream = space.new_ream(1);
-            ream.set_class(SizeClass::Reserved);
-            PdList::new(ream.idx)
-        };
-
         let heap = Self {
-            free_reams: new_list(),
-            free_pages: new_list(),
+            free_reams: space.new_reserved(),
+            free_pages: space.new_reserved(),
             free_sized: [
-                new_list(),
-                new_list(),
-                new_list(),
-                new_list(),
-                new_list(),
-                new_list(),
-                new_list(),
-                new_list(),
-                new_list(),
+                space.new_reserved(),
+                space.new_reserved(),
+                space.new_reserved(),
+                space.new_reserved(),
+                space.new_reserved(),
+                space.new_reserved(),
+                space.new_reserved(),
+                space.new_reserved(),
+                space.new_reserved(),
             ],
 
-            full_reams: new_list(),
-            full_pages: new_list(),
+            full_reams: space.new_reserved(),
+            full_pages: space.new_reserved(),
             space,
             bytes_used: Cell::new(0),
         };
@@ -558,7 +552,7 @@ impl Heap {
 
     pub fn alloc(&self, layout: std::alloc::Layout) -> *mut u8 {
         let bytes = layout.size();
-        if bytes <= 4096 {
+        if bytes <= AddrSpace::PAGE_BYTES {
             let bin_log = bytes.next_power_of_two().trailing_zeros();
             let class = SizeClass::SMALL[bin_log.saturating_sub(4) as usize]; //TODO constant
             self.alloc_small(class)
@@ -595,10 +589,6 @@ impl Heap {
         for pd in self.space.pds() {
             count += pd.bytes_used() as usize;
 
-            if pd.class() == SizeClass::Reserved {
-                continue;
-            }
-
             if pd.is_empty() {
                 pd.unlink();
                 if pd.is_single_page() {
@@ -622,6 +612,12 @@ impl Heap {
     }
 
     fn take_ream(&self, pages: u32) -> PdRef {
+        #[inline(never)]
+        #[cold]
+        fn alloc_failed(pages: u32) -> ! {
+            panic!("No ream of sufficient size available, requested {} pages", pages);
+        }
+
         for ream in self.free_reams.iter(&self.space) {
             let (ream, rest) = match ream.split(pages as _) {
                 Some(x) => x,
@@ -642,7 +638,7 @@ impl Heap {
             return ream;
         }
 
-        panic!("No ream of sufficient size available");
+        alloc_failed(pages);
     }
 
     fn alloc_ream(&self, pages: u32) -> *mut u8 {

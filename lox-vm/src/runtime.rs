@@ -6,7 +6,7 @@ use builtins::Builtins;
 
 use super::memory::*;
 use super::interner::{Symbol, Interner};
-use super::gc::{Gc, Trace, Tracer};
+use lox_gc::{Gc, Trace, Tracer};
 use crate::fiber::Fiber;
 use crate::string::LoxString;
 use std::collections::HashMap;

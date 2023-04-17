@@ -2,11 +2,6 @@ pub mod memory;
 pub mod interner;
 pub mod value;
 
-pub mod gc {
-    pub use lox_gc::*;
-    pub type Heap = ManagedHeap;
-}
-
 mod runtime;
 mod stack;
 mod ops;
@@ -22,7 +17,7 @@ use runtime::Runtime;
 use interner::Symbol;
 use memory::{Import, NativeFunction, Class};
 use value::Value;
-use gc::{Gc, Trace};
+use lox_gc::{Gc, Trace};
 
 pub use runtime::VmError;
 

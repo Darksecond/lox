@@ -1,5 +1,5 @@
 use crate::value::Value;
-use crate::gc::{Gc, Trace, Tracer};
+use lox_gc::{Gc, Trace, Tracer};
 
 #[derive(Copy, Clone)]
 pub struct BoundMethod {

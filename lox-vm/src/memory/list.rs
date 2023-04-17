@@ -1,7 +1,7 @@
 use std::fmt::Display;
 use crate::value::Value;
 use std::cell::UnsafeCell;
-use crate::gc::{Trace, Tracer};
+use lox_gc::{Trace, Tracer};
 use crate::stack::Stack;
 use crate::array::Array;
 

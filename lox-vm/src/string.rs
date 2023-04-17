@@ -37,8 +37,8 @@ impl LoxString {
 }
 
 unsafe impl Trace for LoxString {
-    fn trace(&self, _tracer: &mut Tracer) {
-        self.vec.mark();
+    fn trace(&self, tracer: &mut Tracer) {
+        self.vec.mark(tracer);
     }
 }
 

@@ -170,11 +170,11 @@ impl<T> Array<T> {
         self.cap = new_cap;
     }
 
-    pub fn mark(&self) {
+    pub fn mark(&self, tracer: &mut Tracer) {
         if self.cap == 0 { return; }
 
         unsafe {
-            lox_gc::mark(self.ptr.as_ptr() as *const u8);
+            tracer.mark(self.ptr.as_ptr() as *const u8);
         }
     }
 }
@@ -199,7 +199,7 @@ impl<T> DerefMut for Array<T> {
 
 unsafe impl<T> Trace for Array<T> where T: Trace {
     fn trace(&self, tracer: &mut Tracer) {
-        self.mark();
+        self.mark(tracer);
 
         for elem in self.iter() {
             elem.trace(tracer);
