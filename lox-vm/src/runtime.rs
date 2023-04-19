@@ -156,6 +156,7 @@ impl Runtime {
     fn prepare_interpret(&mut self, module: Module) -> Gc<Closure> {
         let import = Import::with_module("_root", module, &mut self.interner);
         let import: Gc<Import> = self.manage(import.into());
+        lox_gc::finalize(import);
         self.imports.insert(import.name.clone(), import);
         self.globals_import().copy_to(&import);
 
@@ -175,6 +176,7 @@ impl Runtime {
         if let Some(module) = module {
             let import = Import::with_module(path, module, &mut self.interner);
             let import = self.manage(import.into());
+            lox_gc::finalize(import);
             self.imports.insert(path.into(), import);
             self.globals_import().copy_to(&import);
 
