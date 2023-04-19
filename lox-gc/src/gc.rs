@@ -1,4 +1,4 @@
-use std::{ptr::NonNull, ops::Deref, any::TypeId, cell::Cell};
+use std::{ptr::NonNull, ops::Deref, any::TypeId, cell::{Cell, RefCell}};
 use crate::heap;
 
 #[repr(C)]
@@ -36,7 +36,18 @@ pub unsafe trait Trace {
 
 pub struct ManagedHeap {
     pub(crate) heap: heap::Heap,
+    finalizers: RefCell<Vec<Gc<()>>>,
     threshold: Cell<usize>,
+}
+
+impl Drop for ManagedHeap {
+    fn drop(&mut self) {
+        unsafe {
+            self.heap.start_gc();
+        }
+
+        self.force_finalize();
+    }
 }
 
 impl ManagedHeap {
@@ -46,6 +57,29 @@ impl ManagedHeap {
         Self {
             threshold: Cell::new(1024 * 1024),
             heap: heap::Heap::new().unwrap(),
+            finalizers: RefCell::new(Vec::new()),
+        }
+    }
+
+    pub fn finalize(&self, gc: Gc<()>) {
+        self.finalizers.borrow_mut().push(gc);
+    }
+
+    //TODO Replace with intrusive linked list
+    pub fn force_finalize(&self) {
+        let mut finalizers = self.finalizers.borrow_mut();
+        let mut index = 0;
+        while index < finalizers.len() {
+            let ptr = finalizers[index];
+            if self.heap.is_marked(ptr.ptr.as_ptr() as *const u8) {
+                index += 1;
+            } else {
+                finalizers.swap_remove(index);
+
+                unsafe {
+                    std::ptr::drop_in_place(ptr.dyn_data_mut() as *mut dyn Trace)
+                }
+            }
         }
     }
 
@@ -84,6 +118,8 @@ impl ManagedHeap {
         for root in roots {
             root.trace(&mut tracer);
         }
+        
+        self.force_finalize();
 
         unsafe {
             self.heap.sweep();
@@ -133,7 +169,11 @@ impl Gc<()> {
     }
 }
 
-impl<T> Gc<T> where T: 'static {
+impl<T> Gc<T> {
+    pub fn is_same_type(a: &Self, b: &Self) -> bool {
+        a.allocation().tag == b.allocation().tag
+    }
+
     pub fn erase(self) -> Gc<()> {
         Gc {
             ptr: unsafe {
@@ -142,12 +182,6 @@ impl<T> Gc<T> where T: 'static {
         }
     }
 
-    pub fn is_same_type(a: &Self, b: &Self) -> bool {
-        a.allocation().tag == b.allocation().tag
-    }
-}
-
-impl<T> Gc<T> {
     #[inline]
     pub fn to_bits(self) -> u64 {
         self.ptr.as_ptr() as u64
@@ -200,6 +234,14 @@ impl<T: ?Sized> Gc<T> {
             vtable::construct(data, self.allocation().vtable)
         }
     }
+
+    fn dyn_data_mut(&self) -> &mut dyn Trace {
+        let ptr = self.ptr.as_ptr() as *mut Allocation<()>;
+        unsafe {
+            let data = std::ptr::addr_of_mut!((*ptr).data);
+            vtable::construct_mut(data, self.allocation().vtable)
+        }
+    }
 }
 
 unsafe impl<T: ?Sized> Trace for Gc<T> {
@@ -239,6 +281,16 @@ mod vtable {
                 vtable,
             };
             std::mem::transmute::<Object, &dyn Trace>(object)
+        }
+    }
+
+    pub unsafe fn construct_mut<'a>(data: *mut (), vtable: *mut ()) -> &'a mut dyn Trace {
+        unsafe {
+            let object = Object {
+                data,
+                vtable,
+            };
+            std::mem::transmute::<Object, &mut dyn Trace>(object)
         }
     }
 }

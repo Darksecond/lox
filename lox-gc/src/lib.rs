@@ -25,3 +25,9 @@ pub fn collect(roots: &[&dyn Trace]) {
         heap.collect(roots)
     })
 }
+
+pub fn finalize<T>(gc: Gc<T>) {
+    HEAP.with(|heap| {
+        heap.finalize(gc.erase())
+    })
+}

@@ -182,14 +182,14 @@ impl Fiber {
     pub fn resolve_upvalue_into_value(&self, upvalue: Gc<Cell<Upvalue>>) -> Value {
         match upvalue.get() {
             Upvalue::Closed(value) => value,
-            Upvalue::Open(index) => self.with_stack(|stack| stack.get(index)),
+            Upvalue::Open(index, fiber) => fiber.with_stack(|stack| stack.get(index)),
         }
     }
 
     pub fn set_upvalue(&self, upvalue: Gc<Cell<Upvalue>>, new_value: Value) {
         match upvalue.get() {
             Upvalue::Closed(_) => upvalue.set(Upvalue::Closed(new_value)),
-            Upvalue::Open(index) => self.with_stack(|stack| stack.set(index, new_value)),
+            Upvalue::Open(index, fiber) => fiber.with_stack(|stack| stack.set(index, new_value)),
         }
     }
 }

@@ -80,7 +80,7 @@ impl Closure {
                         if let Some(upvalue) = fiber.find_open_upvalue_with_index(index) {
                             upvalue
                         } else {
-                            let root = lox_gc::manage(Cell::new(Upvalue::Open(index)));
+                            let root = lox_gc::manage(Cell::new(Upvalue::Open(index, fiber)));
                             fiber.push_upvalue(root);
                             root
                         }

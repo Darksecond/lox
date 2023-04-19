@@ -1,16 +1,17 @@
 use crate::value::Value;
-use lox_gc::{Trace, Tracer};
+use lox_gc::{Trace, Tracer, Gc};
+use crate::fiber::Fiber;
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Copy, Clone)]
 pub enum Upvalue {
-    Open(usize), //TODO Track fiber (for closures over fibers)
+    Open(usize, Gc<Fiber>),
     Closed(Value),
 }
 
 impl Upvalue {
     pub const fn is_open_with_range(&self, index: usize) -> Option<usize> {
         match self {
-            Self::Open(i) => {
+            Self::Open(i, _) => {
                 if *i >= index {
                     Some(*i)
                 } else {
@@ -23,7 +24,7 @@ impl Upvalue {
 
     pub const fn is_open_with_index(&self, index: usize) -> bool {
         match self {
-            Self::Open(i) => {
+            Self::Open(i, _) => {
                 *i == index
             }
             Self::Closed(_) => false,
@@ -32,7 +33,7 @@ impl Upvalue {
 
     pub const fn is_open(&self) -> bool {
         match self {
-            Self::Open(_) => true,
+            Self::Open(..) => true,
             Self::Closed(_) => false,
         }
     }
@@ -43,7 +44,7 @@ unsafe impl Trace for Upvalue {
     fn trace(&self, tracer: &mut Tracer) {
         match self {
             Upvalue::Closed(value) => value.trace(tracer),
-            Upvalue::Open(_) => (),
+            Upvalue::Open(_, fiber) => fiber.trace(tracer),
         }
     }
 }
