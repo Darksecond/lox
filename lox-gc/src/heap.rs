@@ -1,41 +1,7 @@
 use std::cell::Cell;
+use lox_mmap::MemoryMap;
 
-//TODO Use mmap again
-//TODO Impl mmap ourselves
 //TODO Merge reams when sweeping
-//TODO Figure out dropping
-
-struct MemoryMap {
-    size: usize,
-    data: *mut u8,
-}
-
-impl MemoryMap {
-    pub fn new(size: usize) -> Self {
-        unsafe {
-            let layout = std::alloc::Layout::array::<u8>(size).unwrap().align_to(4096).unwrap();
-            let data = std::alloc::alloc(layout);
-
-            Self {
-                size,
-                data,
-            }
-        }
-    }
-
-    pub fn data(&self) -> *mut u8 {
-        self.data
-    }
-}
-
-impl Drop for MemoryMap {
-    fn drop(&mut self) {
-        let layout = std::alloc::Layout::array::<u8>(self.size).unwrap().align_to(4096).unwrap();
-        unsafe {
-            std::alloc::dealloc(self.data, layout);
-        }
-    }
-}
 
 /// Returns the number of pages needed for `n` bytes (rounding up).
 const fn bytes_to_pages(n: usize) -> usize {
@@ -51,7 +17,6 @@ const fn bytes_to_pages(n: usize) -> usize {
 struct PdIdx(u32);
 
 struct AddrSpace {
-    //mem: mmap::MemoryMap,
     mem: MemoryMap,
 
     used_pds: Cell<u32>,
@@ -79,9 +44,6 @@ impl AddrSpace {
 
     /// Constructs a new [`AddrSpace`]. This will return `None` on error.
     pub fn create() -> Option<Self> {
-        //use mmap::*;
-
-        //let mem = MemoryMap::new(Self::TOTAL_BYTES, &[MapOption::MapReadable, MapOption::MapWritable]).ok()?;
         let mem = self::MemoryMap::new(Self::TOTAL_BYTES);
 
         Some(Self {
