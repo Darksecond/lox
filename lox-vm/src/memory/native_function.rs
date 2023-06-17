@@ -1,10 +1,11 @@
 use crate::value::Value;
 use lox_gc::{Trace, Tracer};
 use crate::string::LoxString;
+use crate::Native;
 
 pub struct NativeFunction {
     pub name: LoxString,
-    pub code: fn(Value, &[Value]) -> Value,
+    pub code: fn(Native, Value, &[Value]) -> Value,
 }
 
 impl std::fmt::Debug for NativeFunction {

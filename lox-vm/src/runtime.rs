@@ -5,16 +5,23 @@ use crate::value::Value;
 use builtins::Builtins;
 
 use super::memory::*;
-use super::interner::{Symbol, Interner};
+use super::interner::{Symbol, intern};
 use lox_gc::{Gc, Trace, Tracer};
 use crate::fiber::Fiber;
 use crate::string::LoxString;
 use std::collections::HashMap;
 
+#[derive(PartialEq, Eq, Copy, Clone, Debug)]
+pub enum Mode {
+    Continuous,
+    Function(usize), //TODO Add fiber
+}
+
 #[derive(PartialEq, Eq, Copy, Clone)]
 pub enum Signal {
     Done,
     More,
+    Return,
     RuntimeError,
     ContextSwitch,
 }
@@ -43,7 +50,6 @@ pub struct Runtime {
     pub fiber: Gc<Fiber>,
     next_fiber: Option<Gc<Fiber>>,
     init_symbol: Symbol, //TODO Move to builtins
-    pub interner: Interner,
     pub imports: HashMap<LoxString, Gc<Import>>,
 
     pub builtins: Builtins,
@@ -75,7 +81,6 @@ pub fn default_import(_value: &str) -> Option<Module> {
 
 impl Runtime {
     pub fn new() -> Self {
-        let mut interner = Interner::new();
         let fiber = lox_gc::manage(Fiber::new(None));
 
         let builtins = Builtins::new();
@@ -83,8 +88,7 @@ impl Runtime {
         Self {
             fiber,
             next_fiber: None,
-            init_symbol: interner.intern("init"),
-            interner,
+            init_symbol: intern("init"),
             imports: HashMap::new(),
             print: default_print,
             import: default_import,
@@ -154,7 +158,7 @@ impl Runtime {
 
     //TODO Use name given instead of _root
     fn prepare_interpret(&mut self, module: Module) -> Gc<Closure> {
-        let import = Import::with_module("_root", module, &mut self.interner);
+        let import = Import::with_module("_root", module);
         let import: Gc<Import> = self.manage(import.into());
         lox_gc::finalize(import);
         self.imports.insert(import.name.clone(), import);
@@ -174,7 +178,7 @@ impl Runtime {
     pub fn load_import(&mut self, path: &str) -> Result<Gc<Import>, VmError> {
         let module = (self.import)(path);
         if let Some(module) = module {
-            let import = Import::with_module(path, module, &mut self.interner);
+            let import = Import::with_module(path, module);
             let import = self.manage(import.into());
             lox_gc::finalize(import);
             self.imports.insert(path.into(), import);
@@ -190,9 +194,14 @@ impl Runtime {
         self.builtins.globals_import
     }
 
-    pub fn call(&mut self, arity: usize, callee: Value) -> Signal {
-        self.store_ip();
+    fn native(&mut self) -> crate::Native {
+        crate::Native {
+            runtime: self,
+        }
+    }
 
+    //TODO should this take a Gc<()>
+    pub fn call(&mut self, arity: usize, callee: Value) -> Signal {
         if !callee.is_object() {
             return self.fiber.runtime_error(VmError::InvalidCallee);
         }
@@ -200,54 +209,90 @@ impl Runtime {
         let callee = callee.as_object();
 
         if let Some(callee) = callee.try_cast::<Closure>() {
-            if callee.function.arity != arity {
-                return self.fiber.runtime_error(VmError::IncorrectArity);
-            }
-            self.fiber.begin_frame(callee);
+            self.call_closure(arity, callee)
         } else if let Some(callee) = callee.try_cast::<NativeFunction>() {
-            self.fiber.with_stack(|stack| {
-                let args = stack.pop_n(arity);
-                let this = stack.pop(); // discard callee
-                let result = (callee.code)(this, &args);
-                stack.push(result);
-            });
+            self.call_native_function(arity, callee)
         } else if let Some(class) = callee.try_cast::<Class>() {
-            let instance: Gc<Instance> = self.manage(Instance::new(class).into());
-            self.fiber.with_stack(|stack| {
-                stack.rset(arity, Value::from_object(instance.erase()))
-            });
-
-            if let Some(initializer) = class.method(self.init_symbol) {
-                if !initializer.is_object() {
-                    return self.fiber.runtime_error(VmError::UnexpectedValue);
-                }
-
-                let initializer = initializer.as_object();
-
-                if let Some(initializer) = initializer.try_cast::<Closure>() {
-                    if initializer.function.arity != arity {
-                        return self.fiber.runtime_error(VmError::IncorrectArity);
-                    }
-                    self.fiber.begin_frame(initializer);
-                } else {
-                    return self.fiber.runtime_error(VmError::UnexpectedValue);
-                }
-            } else if arity != 0 {
-                // Arity must be 0 without initializer
-                return self.fiber.runtime_error(VmError::IncorrectArity);
-            }
+            self.call_class(arity, class)
         } else if let Some(bind) = callee.try_cast::<BoundMethod>() {
-                self.fiber.with_stack(|stack| {
-                    stack.rset(arity, Value::from_object(bind.receiver))
-                });
-                return self.call(arity, bind.method);
+            self.call_bound_method(arity, bind)
         } else {
-            return self.fiber.runtime_error(VmError::InvalidCallee)
+            self.fiber.runtime_error(VmError::InvalidCallee)
+        }
+    }
+
+    pub fn call_closure(&mut self, arity: usize, callee: Gc<Closure>) -> Signal {
+
+        if callee.function.arity != arity {
+            return self.fiber.runtime_error(VmError::IncorrectArity);
         }
 
+        self.store_ip();
+        self.fiber.begin_frame(callee);
         self.load_ip();
 
         Signal::More
+    }
+
+    fn call_native_function(&mut self, arity: usize, callee: Gc<NativeFunction>) -> Signal {
+        self.store_ip();
+
+        let (this, args) = self.fiber.with_stack(|stack| {
+            let args = stack.pop_n(arity);
+            let this = stack.pop(); // discard callee
+            (this, args)
+        });
+
+        let result = (callee.code)(self.native(), this, &args);
+
+        self.fiber.with_stack(|stack| {
+            stack.push(result);
+        });
+
+        self.load_ip();
+        Signal::Return
+    }
+
+    fn call_class(&mut self, arity: usize, class: Gc<Class>) -> Signal {
+        self.store_ip();
+
+        let instance: Gc<Instance> = self.manage(Instance::new(class).into());
+        self.fiber.with_stack(|stack| {
+            stack.rset(arity, Value::from_object(instance.erase()))
+        });
+
+        if let Some(initializer) = class.method(self.init_symbol) {
+            if !initializer.is_object() {
+                return self.fiber.runtime_error(VmError::UnexpectedValue);
+            }
+
+            let initializer = initializer.as_object();
+
+            if let Some(initializer) = initializer.try_cast::<Closure>() {
+                if initializer.function.arity != arity {
+                    return self.fiber.runtime_error(VmError::IncorrectArity);
+                }
+                self.fiber.begin_frame(initializer);
+            } else {
+                return self.fiber.runtime_error(VmError::UnexpectedValue);
+            }
+        } else if arity != 0 {
+            // Arity must be 0 without initializer
+            return self.fiber.runtime_error(VmError::IncorrectArity);
+        }
+
+        self.load_ip();
+        Signal::More
+    }
+
+    fn call_bound_method(&mut self, arity: usize, bind: Gc<BoundMethod>) -> Signal {
+        self.store_ip();
+
+        self.fiber.with_stack(|stack| {
+            stack.rset(arity, Value::from_object(bind.receiver))
+        });
+
+        self.call(arity, bind.method)
     }
 
     #[cold]

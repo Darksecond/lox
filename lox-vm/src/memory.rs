@@ -6,6 +6,7 @@ mod instance;
 mod class;
 mod native_function;
 mod bound_method;
+mod runtime_error;
 
 pub use import::*;
 pub use list::*;
@@ -15,6 +16,7 @@ pub use instance::*;
 pub use class::*;
 pub use native_function::*;
 pub use bound_method::*;
+pub use runtime_error::*;
 
 use crate::string::LoxString;
 use lox_gc::Gc;
@@ -39,6 +41,8 @@ pub fn print(value: Gc<()>, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "<import {}>", value.cast:: <Import>().name)
     } else if value.is::<List>() {
         write!(f, "{}", value.cast::<List>())
+    } else if value.is::<RuntimeError>() {
+        todo!()
     } else {
         write!(f, "<unknown>")
     }

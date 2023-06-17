@@ -1,7 +1,7 @@
 use lox_bytecode::bytecode::{Chunk, ConstantIndex, Module, ClosureIndex, ClassIndex};
 use lox_gc::{Trace, Gc, Tracer};
 use std::cell::UnsafeCell;
-use crate::interner::{Symbol, Interner};
+use crate::interner::{Symbol, intern};
 use lox_bytecode::bytecode;
 use crate::table::Table;
 use crate::value::Value;
@@ -38,9 +38,9 @@ impl Import {
         }
     }
 
-    pub(crate) fn with_module(name: impl Into<LoxString>, module: Module, interner: &mut Interner) -> Self {
+    pub(crate) fn with_module(name: impl Into<LoxString>, module: Module) -> Self {
         let symbols = module.identifiers().iter().map(|identifier| {
-            interner.intern(identifier)
+            intern(identifier)
         }).collect();
 
         let strings: Array<Gc<LoxString>> = module.strings.iter().map(|value| {

@@ -1,4 +1,4 @@
-use crate::runtime::{Runtime, Signal, VmError};
+use crate::runtime::{Runtime, Signal, VmError, Mode};
 use crate::memory::*;
 use lox_gc::Gc;
 use super::fiber::Fiber;
@@ -18,7 +18,7 @@ macro_rules! as_obj {
 }
 
 impl Runtime {
-    pub fn interpret(&mut self) -> Result<(), VmError> {
+    pub fn interpret(&mut self, mode: Mode) -> Result<(), Gc<RuntimeError>> {
         use lox_bytecode::opcode;
 
         loop {
@@ -70,8 +70,17 @@ impl Runtime {
             match result {
                 Signal::Done => return Ok(()),
                 Signal::More => (),
+                Signal::Return => match mode {
+                    Mode::Continuous => (),
+                    Mode::Function(depth) => {
+                        //TODO check fiber as well!
+                        if depth == self.fiber.frame_depth() {
+                            return Ok(());
+                        }
+                    },
+                },
                 Signal::RuntimeError => {
-                    return Err(self.fiber.error().unwrap_or(VmError::Unknown));
+                    return Err(self.fiber.error().expect("No RuntimeError set!"));
                 },
                 Signal::ContextSwitch => {
                     self.context_switch();
@@ -296,7 +305,7 @@ impl Runtime {
         if self.fiber.has_current_frame() {
             self.load_ip();
             self.fiber.with_stack(|stack| stack.push(result));
-            Signal::More
+            Signal::Return
         } else {
             self.switch_to(self.fiber.parent)
         }
@@ -698,15 +707,7 @@ impl Runtime {
         };
 
         if let Some(method) = method.try_cast::<Closure>() {
-            if method.function.arity != arity {
-                return self.fiber.runtime_error(VmError::IncorrectArity);
-            }
-
-            self.store_ip();
-            self.fiber.begin_frame(method);
-            self.load_ip();
-
-            Signal::More
+            self.call_closure(arity, method)
         } else {
             self.call(arity, method)
         }

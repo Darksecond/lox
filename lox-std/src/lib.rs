@@ -5,7 +5,7 @@ use lox_vm::VirtualMachine;
 pub fn set_stdlib(vm: &mut VirtualMachine) {
     let mut native = vm.native();
 
-    native.set_global_fn("clock", |_this, _args| {
+    native.set_global_fn("clock", |_native, _this, _args| {
         use std::time::{SystemTime, UNIX_EPOCH};
 
         let time = SystemTime::now()
@@ -15,7 +15,7 @@ pub fn set_stdlib(vm: &mut VirtualMachine) {
         time.into()
     });
 
-    native.set_method(native.list_class(), "append", |this, args| {
+    native.set_method(native.list_class(), "append", |_native, this, args| {
         use lox_vm::memory::List;
 
         if !this.is_object_of_type::<List>() {
@@ -29,6 +29,23 @@ pub fn set_stdlib(vm: &mut VirtualMachine) {
         }
 
         this
+    });
+
+    native.set_global_fn("printx", |mut native, _this, args| {
+        let symbol_to_string = native.intern("toString");
+        let func = native.get_global(symbol_to_string).expect("Could not find toString");
+        let func = func.as_object();
+
+        for arg in args {
+            let string = native.call(func, &[*arg]);
+            println!("{}", string);
+        }
+
+        lox_vm::value::Value::NIL
+    });
+
+    native.set_global_fn("toString", |native, _this, _args| {
+        lox_vm::value::Value::from_object(native.manage(lox_vm::string::LoxString::from("Hello, World!")))
     });
 }
 

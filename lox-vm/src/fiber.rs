@@ -49,7 +49,7 @@ pub struct Fiber {
     stack: UnsafeCell<Stack>,
     stack_block: StackBlock,
     upvalues: UnsafeCell<Array<Gc<Cell<Upvalue>>>>,
-    error: Cell<Option<VmError>>,
+    error: Cell<Option<Gc<RuntimeError>>>,
 }
 
 unsafe impl Trace for Fiber {
@@ -86,12 +86,12 @@ impl Fiber {
     }
 
     #[cold]
-    pub fn error(&self) -> Option<VmError> {
+    pub fn error(&self) -> Option<Gc<RuntimeError>> {
         self.error.get()
     }
 
     #[cold]
-    pub fn runtime_error(&self, error: VmError) -> Signal {
+    pub fn runtime_error(&self, error: Gc<RuntimeError>) -> Signal {
         //panic!("runtime error: {:?}", error);
 
         self.error.set(Some(error));
@@ -132,6 +132,11 @@ impl Fiber {
         unsafe {
             frames.last().unwrap_unchecked()
         }
+    }
+
+    pub fn frame_depth(&self) -> usize {
+        let frames = unsafe { &*self.frames.get() };
+        frames.len()
     }
 
     #[inline]

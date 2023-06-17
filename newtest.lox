@@ -1,0 +1,11 @@
+
+
+fun toString(x) {
+  return "Hi from lox!";
+}
+
+print "before";
+
+printx("test", "asdf");
+
+print "after";
