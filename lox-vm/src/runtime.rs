@@ -143,9 +143,6 @@ impl Runtime {
         self.load_ip();
     }
 
-    pub fn adjust_size<T: 'static + Trace>(&mut self, _object: Gc<T>) {
-    }
-
     #[cold]
     pub fn manage<T: Trace + 'static>(&self, data: T) -> Gc<T> {
         lox_gc::collect(&[self, &data]);
@@ -191,8 +188,6 @@ impl Runtime {
     }
 
     pub fn call(&mut self, arity: usize, callee: Value) -> Signal {
-        self.store_ip();
-
         if !callee.is_object() {
             return self.fiber.runtime_error(VmError::InvalidCallee);
         }
@@ -200,54 +195,87 @@ impl Runtime {
         let callee = callee.as_object();
 
         if let Some(callee) = callee.try_cast::<Closure>() {
-            if callee.function.arity != arity {
-                return self.fiber.runtime_error(VmError::IncorrectArity);
-            }
-            self.fiber.begin_frame(callee);
+            return self.call_closure(arity, callee);
         } else if let Some(callee) = callee.try_cast::<NativeFunction>() {
-            self.fiber.with_stack(|stack| {
-                let args = stack.pop_n(arity);
-                let this = stack.pop(); // discard callee
-                let result = (callee.code)(this, &args);
-                stack.push(result);
-            });
+            return self.call_native_function(arity, callee);
         } else if let Some(class) = callee.try_cast::<Class>() {
-            let instance: Gc<Instance> = self.manage(Instance::new(class).into());
-            self.fiber.with_stack(|stack| {
-                stack.rset(arity, Value::from_object(instance.erase()))
-            });
-
-            if let Some(initializer) = class.method(self.init_symbol) {
-                if !initializer.is_object() {
-                    return self.fiber.runtime_error(VmError::UnexpectedValue);
-                }
-
-                let initializer = initializer.as_object();
-
-                if let Some(initializer) = initializer.try_cast::<Closure>() {
-                    if initializer.function.arity != arity {
-                        return self.fiber.runtime_error(VmError::IncorrectArity);
-                    }
-                    self.fiber.begin_frame(initializer);
-                } else {
-                    return self.fiber.runtime_error(VmError::UnexpectedValue);
-                }
-            } else if arity != 0 {
-                // Arity must be 0 without initializer
-                return self.fiber.runtime_error(VmError::IncorrectArity);
-            }
+            return self.call_class(arity, class);
         } else if let Some(bind) = callee.try_cast::<BoundMethod>() {
-                self.fiber.with_stack(|stack| {
-                    stack.rset(arity, Value::from_object(bind.receiver))
-                });
-                return self.call(arity, bind.method);
+            return self.call_bound_method(arity, bind);
         } else {
             return self.fiber.runtime_error(VmError::InvalidCallee)
+        }
+    }
+
+    pub fn call_closure(&mut self, arity: usize, callee: Gc<Closure>) -> Signal {
+        self.store_ip();
+
+        if callee.function.arity != arity {
+            return self.fiber.runtime_error(VmError::IncorrectArity);
+        }
+        self.fiber.begin_frame(callee);
+
+        self.load_ip();
+
+        Signal::More
+    }
+
+    pub fn call_native_function(&mut self, arity: usize, callee: Gc<NativeFunction>) -> Signal {
+        self.store_ip();
+
+        self.fiber.with_stack(|stack| {
+            let args = stack.pop_n(arity);
+            let this = stack.pop(); // discard callee
+            let result = (callee.code)(this, &args);
+            stack.push(result);
+        });
+
+        self.load_ip();
+
+        Signal::More
+    }
+
+    pub fn call_class(&mut self, arity: usize, class: Gc<Class>) -> Signal {
+        self.store_ip();
+
+        let instance: Gc<Instance> = self.manage(Instance::new(class).into());
+        self.fiber.with_stack(|stack| {
+            stack.rset(arity, Value::from_object(instance.erase()))
+        });
+
+        if let Some(initializer) = class.method(self.init_symbol) {
+            if !initializer.is_object() {
+                return self.fiber.runtime_error(VmError::UnexpectedValue);
+            }
+
+            let initializer = initializer.as_object();
+
+            if let Some(initializer) = initializer.try_cast::<Closure>() {
+                if initializer.function.arity != arity {
+                    return self.fiber.runtime_error(VmError::IncorrectArity);
+                }
+                self.fiber.begin_frame(initializer);
+            } else {
+                return self.fiber.runtime_error(VmError::UnexpectedValue);
+            }
+        } else if arity != 0 {
+            // Arity must be 0 without initializer
+            return self.fiber.runtime_error(VmError::IncorrectArity);
         }
 
         self.load_ip();
 
         Signal::More
+    }
+
+    pub fn call_bound_method(&mut self, arity: usize, bind: Gc<BoundMethod>) -> Signal {
+        self.store_ip();
+
+        self.fiber.with_stack(|stack| {
+            stack.rset(arity, Value::from_object(bind.receiver))
+        });
+
+        return self.call(arity, bind.method);
     }
 
     #[cold]

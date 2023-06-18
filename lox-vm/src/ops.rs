@@ -601,8 +601,6 @@ impl Runtime {
             instance.set_field(property, stack.peek_n(0))
         });
 
-        self.adjust_size(instance);
-
         self.fiber.with_stack(|stack| {
             let value = stack.pop();
             stack.pop();
