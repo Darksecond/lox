@@ -35,7 +35,12 @@ fn compile_stmt(compiler: &mut Compiler, stmt: &WithSpan<Stmt>) {
                 compiler.add_error("Invalid return", stmt.span);
                 return;
             }
-            compile_return(compiler, expr.as_ref())
+
+            if compiler.context_type() == ContextType::TopLevel {
+                compile_return_top(compiler)
+            } else {
+                compile_return(compiler, expr.as_ref())
+            }
         },
         Stmt::Class(ref identifier, ref extends, ref stmts) => {
             compile_class(compiler, identifier.as_ref(), extends.as_ref(), stmts)
@@ -130,6 +135,10 @@ fn compile_method(
     let constant = compiler.add_identifier(identifier.value.as_str());
     compiler.add_u8(opcode::METHOD);
     compiler.add_u32(constant as _);
+}
+
+fn compile_return_top(compiler: &mut Compiler) {
+    compiler.add_u8(opcode::RETURN_TOP);
 }
 
 fn compile_return<E: AsRef<WithSpan<Expr>>>(

@@ -17,8 +17,7 @@ pub fn compile(ast: &Ast) -> Result<Module, Vec<Diagnostic>> {
 
     let _ = compiler.with_context(ContextType::TopLevel, |compiler| {
         compile_ast(compiler, ast);
-        compiler.add_u8(opcode::NIL);
-        compiler.add_u8(opcode::RETURN);
+        compiler.add_u8(opcode::RETURN_TOP);
     });
 
     if compiler.has_errors() {

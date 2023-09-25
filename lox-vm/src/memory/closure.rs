@@ -63,7 +63,7 @@ impl Closure {
     }
 
     #[inline]
-    pub(crate) fn new(index: usize, fiber: Gc<Fiber>) -> Self {
+    pub(crate) fn new(index: usize, fiber: &mut Fiber) -> Self {
         let import = fiber.current_import();
         let closure = import.closure(index);
 
@@ -80,7 +80,7 @@ impl Closure {
                         if let Some(upvalue) = fiber.find_open_upvalue_with_index(index) {
                             upvalue
                         } else {
-                            let root = lox_gc::manage(Cell::new(Upvalue::Open(index, fiber)));
+                            let root = lox_gc::manage(Cell::new(Upvalue::Open(index)));
                             fiber.push_upvalue(root);
                             root
                         }

@@ -7,7 +7,7 @@ use super::locals::*;
 use crate::bytecode::*;
 use lox_bytecode::opcode;
 
-#[derive(Copy, Clone, PartialEq)]
+#[derive(Copy, Clone, PartialEq, Debug)]
 pub enum ContextType {
     Function,
     Initializer,

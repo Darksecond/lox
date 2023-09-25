@@ -1,7 +1,7 @@
 use crate::memory::*;
 use crate::value::Value;
 use lox_gc::{Trace, Gc, Tracer};
-use std::cell::{Cell, UnsafeCell};
+use std::cell::Cell;
 use crate::stack::{Stack, StackBlock};
 use crate::VmError;
 use crate::runtime::Signal;
@@ -44,17 +44,15 @@ impl CallFrame {
 }
 
 pub struct Fiber {
-    pub parent: Option<Gc<Fiber>>,
-    frames: UnsafeCell<ArrayVec<CallFrame, 256>>,
-    stack: UnsafeCell<Stack>,
+    pub stack: Stack,
+    frames: ArrayVec<CallFrame, 256>,
     stack_block: StackBlock,
-    upvalues: UnsafeCell<Array<Gc<Cell<Upvalue>>>>,
-    error: Cell<Option<VmError>>,
+    upvalues: Array<Gc<Cell<Upvalue>>>,
+    error: Option<VmError>,
 }
 
 unsafe impl Trace for Fiber {
     fn trace(&self, tracer: &mut Tracer) {
-        self.parent.trace(tracer);
         self.frames.trace(tracer);
         self.stack_block.trace(tracer);
         self.stack.trace(tracer);
@@ -63,55 +61,39 @@ unsafe impl Trace for Fiber {
 }
 
 impl Fiber {
-    pub fn new(parent: Option<Gc<Fiber>>) -> Self {
+    pub fn new() -> Self {
         let block = StackBlock::new(2048);
         let frames = ArrayVec::new();
         Self {
-            parent,
-            frames: UnsafeCell::new(frames),
-            stack: UnsafeCell::new(Stack::with_block(&block)),
+            frames,
+            stack: Stack::with_block(&block),
             stack_block: block,
-            upvalues: UnsafeCell::new(Array::with_capacity(128)),
-            error: Cell::new(None),
+            upvalues: Array::with_capacity(128),
+            error: None,
         }
-    }
-
-    #[inline]
-    pub fn with_stack<T>(&self, func: impl FnOnce(&mut Stack) -> T) -> T {
-        let stack = unsafe {
-            &mut *self.stack.get()
-        };
-
-        func(stack)
     }
 
     #[cold]
     pub fn error(&self) -> Option<VmError> {
-        self.error.get()
+        self.error
     }
 
     #[cold]
-    pub fn runtime_error(&self, error: VmError) -> Signal {
+    pub fn runtime_error(&mut self, error: VmError) -> Signal {
         //panic!("runtime error: {:?}", error);
 
-        self.error.set(Some(error));
+        self.error = Some(error);
         Signal::RuntimeError
     }
 
-    pub fn begin_frame(&self, closure: Gc<Closure>) {
-        let base_counter = self.with_stack(|stack| {
-            stack.len() - closure.function.arity - 1
-        });
+    pub fn begin_frame(&mut self, closure: Gc<Closure>) {
+        let base_counter = self.stack.len() - closure.function.arity - 1;
 
-        let frames = unsafe { &mut *self.frames.get() };
-
-        frames.push(CallFrame::new(closure, base_counter));
+        self.frames.push(CallFrame::new(closure, base_counter));
     }
 
-    pub fn end_frame(&self) -> Option<Signal> {
-        let frames = unsafe { &mut *self.frames.get() };
-
-        if frames.pop().is_some() {
+    pub fn end_frame(&mut self) -> Option<Signal> {
+        if self.frames.pop().is_some() {
             None
         } else {
             Some(self.runtime_error(VmError::FrameEmpty))
@@ -120,17 +102,13 @@ impl Fiber {
 
     #[inline]
     pub fn has_current_frame(&self) -> bool {
-        let frames = unsafe { &*self.frames.get() };
-
-        frames.len() > 0
+        self.frames.len() > 0
     }
 
     #[inline]
     pub fn current_frame(&self) -> &CallFrame {
-        let frames = unsafe { &*self.frames.get() };
-
         unsafe {
-            frames.last().unwrap_unchecked()
+            self.frames.last().unwrap_unchecked()
         }
     }
 
@@ -139,26 +117,22 @@ impl Fiber {
         self.current_frame().closure.function.import
     }
 
-    pub fn push_upvalue(&self, upvalue: Gc<Cell<Upvalue>>) {
-        let upvalues = unsafe { &mut *self.upvalues.get() };
-        upvalues.push(upvalue);
+    pub fn push_upvalue(&mut self, upvalue: Gc<Cell<Upvalue>>) {
+        self.upvalues.push(upvalue);
     }
 
-    pub fn close_upvalues(&self, index: usize) {
-        let upvalues = unsafe { &mut *self.upvalues.get() };
-        for upvalue in upvalues.iter() {
+    pub fn close_upvalues(&mut self, index: usize) {
+        for upvalue in self.upvalues.iter() {
             if let Some(index) = upvalue.get().is_open_with_range(index) {
-                self.with_stack(|stack| {
-                    let value = stack.get(index);
-                    upvalue.set(Upvalue::Closed(value));
-                });
+                let value = self.stack.get(index);
+                upvalue.set(Upvalue::Closed(value));
             }
         }
 
-        for index in (0..upvalues.len()).rev() {
-            let upvalue = unsafe { upvalues.get_unchecked(index) };
+        for index in (0..self.upvalues.len()).rev() {
+            let upvalue = unsafe { self.upvalues.get_unchecked(index) };
             if !upvalue.get().is_open() {
-                upvalues.swap_remove(index);
+                self.upvalues.swap_remove(index);
             }
         }
     }
@@ -169,8 +143,7 @@ impl Fiber {
     }
 
     pub fn find_open_upvalue_with_index(&self, index: usize) -> Option<Gc<Cell<Upvalue>>> {
-        let upvalues = unsafe { &*self.upvalues.get() };
-        for upvalue in upvalues.iter().rev() {
+        for upvalue in self.upvalues.iter().rev() {
             if upvalue.get().is_open_with_index(index) {
                 return Some(*upvalue);
             }
@@ -182,14 +155,14 @@ impl Fiber {
     pub fn resolve_upvalue_into_value(&self, upvalue: Gc<Cell<Upvalue>>) -> Value {
         match upvalue.get() {
             Upvalue::Closed(value) => value,
-            Upvalue::Open(index, fiber) => fiber.with_stack(|stack| stack.get(index)),
+            Upvalue::Open(index) => self.stack.get(index),
         }
     }
 
-    pub fn set_upvalue(&self, upvalue: Gc<Cell<Upvalue>>, new_value: Value) {
+    pub fn set_upvalue(&mut self, upvalue: Gc<Cell<Upvalue>>, new_value: Value) {
         match upvalue.get() {
             Upvalue::Closed(_) => upvalue.set(Upvalue::Closed(new_value)),
-            Upvalue::Open(index, fiber) => fiber.with_stack(|stack| stack.set(index, new_value)),
+            Upvalue::Open(index) => self.stack.set(index, new_value),
         }
     }
 }

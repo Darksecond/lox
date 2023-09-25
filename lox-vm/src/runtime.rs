@@ -16,7 +16,6 @@ pub enum Signal {
     Done,
     More,
     RuntimeError,
-    ContextSwitch,
 }
 
 //TODO thiserror
@@ -40,8 +39,7 @@ pub enum VmError {
 }
 
 pub struct Runtime {
-    pub fiber: Gc<Fiber>,
-    next_fiber: Option<Gc<Fiber>>,
+    pub fiber: Fiber,
     init_symbol: Symbol, //TODO Move to builtins
     pub interner: Interner,
     pub imports: HashMap<LoxString, Gc<Import>>,
@@ -59,7 +57,6 @@ unsafe impl Trace for Runtime {
     #[inline]
     fn trace(&self, tracer: &mut Tracer) {
         self.fiber.trace(tracer);
-        self.next_fiber.trace(tracer);
         self.imports.trace(tracer);
         self.builtins.trace(tracer);
     }
@@ -76,13 +73,10 @@ pub fn default_import(_value: &str) -> Option<Module> {
 impl Runtime {
     pub fn new() -> Self {
         let mut interner = Interner::new();
-        let fiber = lox_gc::manage(Fiber::new(None));
-
         let builtins = Builtins::new();
 
         Self {
-            fiber,
-            next_fiber: None,
+            fiber: Fiber::new(),
             init_symbol: interner.intern("init"),
             interner,
             imports: HashMap::new(),
@@ -96,30 +90,7 @@ impl Runtime {
     }
 
     #[cold]
-    pub fn context_switch(&mut self) {
-        if let Some(next_fiber) = self.next_fiber {
-            if self.fiber.has_current_frame() {
-                self.store_ip();
-            }
-            self.fiber = next_fiber;
-            self.load_ip();
-        }
-
-        self.next_fiber = None;
-    }
-
-    #[cold]
-    pub fn switch_to(&mut self, fiber: Option<Gc<Fiber>>) -> Signal {
-        if let Some(fiber) = fiber {
-            self.next_fiber = Some(fiber);
-            Signal::ContextSwitch
-        } else {
-            Signal::Done
-        }
-    }
-
-    #[cold]
-    pub fn concat(&self, a: Value, b: Value) -> Signal {
+    pub fn concat(&mut self, a: Value, b: Value) -> Signal {
         if a.is_object_of_type::<LoxString>() && b.is_object_of_type::<LoxString>() {
             let a = a.as_object().cast::<LoxString>();
             let b = b.as_object().cast::<LoxString>();
@@ -136,9 +107,7 @@ impl Runtime {
 
     pub fn with_module(&mut self, module: Module) {
         let closure = self.prepare_interpret(module);
-        self.fiber.with_stack(|stack| {
-            stack.push(Value::from_object(closure.erase()));
-        });
+        self.fiber.stack.push(Value::from_object(closure.erase()));
         self.fiber.begin_frame(closure);
         self.load_ip();
     }
@@ -223,12 +192,10 @@ impl Runtime {
     pub fn call_native_function(&mut self, arity: usize, callee: Gc<NativeFunction>) -> Signal {
         self.store_ip();
 
-        self.fiber.with_stack(|stack| {
-            let args = stack.pop_n(arity);
-            let this = stack.pop(); // discard callee
-            let result = (callee.code)(this, &args);
-            stack.push(result);
-        });
+        let args = self.fiber.stack.pop_n(arity);
+        let this = self.fiber.stack.pop(); // discard callee
+        let result = (callee.code)(this, &args);
+        self.fiber.stack.push(result);
 
         self.load_ip();
 
@@ -239,9 +206,7 @@ impl Runtime {
         self.store_ip();
 
         let instance: Gc<Instance> = self.manage(Instance::new(class).into());
-        self.fiber.with_stack(|stack| {
-            stack.rset(arity, Value::from_object(instance.erase()))
-        });
+        self.fiber.stack.rset(arity, Value::from_object(instance.erase()));
 
         if let Some(initializer) = class.method(self.init_symbol) {
             if !initializer.is_object() {
@@ -271,19 +236,15 @@ impl Runtime {
     pub fn call_bound_method(&mut self, arity: usize, bind: Gc<BoundMethod>) -> Signal {
         self.store_ip();
 
-        self.fiber.with_stack(|stack| {
-            stack.rset(arity, Value::from_object(bind.receiver))
-        });
+            self.fiber.stack.rset(arity, Value::from_object(bind.receiver));
 
         return self.call(arity, bind.method);
     }
 
     #[cold]
-    pub fn push_string(&self, string: impl Into<LoxString>) {
+    pub fn push_string(&mut self, string: impl Into<LoxString>) {
         let root: Gc<LoxString> = self.manage(string.into());
-        self.fiber.with_stack(|stack| {
-            stack.push(Value::from_object(root.erase()));
-        });
+        self.fiber.stack.push(Value::from_object(root.erase()));
     }
 
 

@@ -50,6 +50,8 @@ pub const SET_INDEX    : u8 = 37;
 pub const NUMBER       : u8 = 38;
 pub const STRING       : u8 = 39;
 
+pub const RETURN_TOP   : u8 = 40;
+
 #[derive(Copy, Clone, Debug)]
 pub enum Opcode {
     True,
@@ -101,6 +103,8 @@ pub enum Opcode {
 
     Number(u16),
     String(u16),
+
+    ReturnTop,
 }
 
 pub struct OpcodeIterator<T: Iterator<Item = u8>> {
@@ -195,6 +199,8 @@ impl<T> Iterator for OpcodeIterator<T> where T: Iterator<Item = u8> {
 
             NUMBER => Opcode::Number(self.next_u16()),
             STRING => Opcode::String(self.next_u16()),
+
+            RETURN_TOP => Opcode::ReturnTop,
 
             _ => unreachable!(),
         };

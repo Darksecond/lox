@@ -1,7 +1,6 @@
 use crate::runtime::{Runtime, Signal, VmError};
 use crate::memory::*;
 use lox_gc::Gc;
-use super::fiber::Fiber;
 use crate::value::Value;
 
 macro_rules! as_obj {
@@ -64,6 +63,7 @@ impl Runtime {
                 opcode::SET_INDEX     => self.op_set_index(),
                 opcode::NUMBER        => self.op_number(),
                 opcode::STRING        => self.op_string(),
+                opcode::RETURN_TOP    => self.op_return_top(),
                 _ => unreachable!(),
             };
 
@@ -73,77 +73,66 @@ impl Runtime {
                 Signal::RuntimeError => {
                     return Err(self.fiber.error().unwrap_or(VmError::Unknown));
                 },
-                Signal::ContextSwitch => {
-                    self.context_switch();
-                },
             }
         }
     }
 
     pub fn op_set_index(&mut self) -> Signal {
-        self.fiber.with_stack(|stack| {
-            let value = stack.pop();
-            let index = stack.pop();
-            let list = stack.pop();
+        let value = self.fiber.stack.pop();
+        let index = self.fiber.stack.pop();
+        let list = self.fiber.stack.pop();
 
-            let list = as_obj!(self, list, List);
+        let list = as_obj!(self, list, List);
 
-            let index = if index.is_number() {
-                index.as_number() as usize
-            } else {
-                return self.fiber.runtime_error(VmError::UnexpectedValue);
-            };
+        let index = if index.is_number() {
+            index.as_number() as usize
+        } else {
+            return self.fiber.runtime_error(VmError::UnexpectedValue);
+        };
 
-            if !list.is_valid(index) {
-                return self.fiber.runtime_error(VmError::IndexOutOfRange);
-            }
+        if !list.is_valid(index) {
+            return self.fiber.runtime_error(VmError::IndexOutOfRange);
+        }
 
-            list.set(index, value);
+        list.set(index, value);
 
-            stack.push(value);
+        self.fiber.stack.push(value);
 
-            Signal::More
-        })
+        Signal::More
     }
 
     pub fn op_get_index(&mut self) -> Signal {
-        self.fiber.with_stack(|stack| {
-            let index = stack.pop();
-            let list = stack.pop();
+        let index = self.fiber.stack.pop();
+        let list = self.fiber.stack.pop();
 
-            let list = as_obj!(self, list, List);
+        let list = as_obj!(self, list, List);
 
-            let index = if index.is_number() {
-                index.as_number() as usize
-            } else {
-                return self.fiber.runtime_error(VmError::UnexpectedValue);
-            };
+        let index = if index.is_number() {
+            index.as_number() as usize
+        } else {
+            return self.fiber.runtime_error(VmError::UnexpectedValue);
+        };
 
-            if !list.is_valid(index) {
-                return self.fiber.runtime_error(VmError::IndexOutOfRange);
-            }
+        if !list.is_valid(index) {
+            return self.fiber.runtime_error(VmError::IndexOutOfRange);
+        }
 
-            let value = list.get(index);
+        let value = list.get(index);
 
-            stack.push(value);
+        self.fiber.stack.push(value);
 
-            Signal::More
-        })
+        Signal::More
     }
 
     #[cold]
     pub fn op_list(&mut self) -> Signal {
         let arity = self.next_u8();
 
-        let list = self.fiber.with_stack(|stack| {
-            List::with_stack(arity as _, stack)
-        });
+        let list = List::with_stack(arity as _, &mut self.fiber.stack);
 
         let list: Gc<List> = self.manage(list.into());
 
-        self.fiber.with_stack(|stack| {
-            stack.push(Value::from_object(list.erase()))
-        });
+        self.fiber.stack.push(Value::from_object(list.erase()));
 
         Signal::More
     }
@@ -156,9 +145,7 @@ impl Runtime {
         let path = current_import.string(index);
 
         if let Some(import) = self.import(path.as_str()) {
-            self.fiber.with_stack(|stack| {
-                stack.push(Value::from_object(import.erase()))
-            });
+            self.fiber.stack.push(Value::from_object(import.erase()));
 
             return Signal::More;
         }
@@ -168,23 +155,13 @@ impl Runtime {
             Err(err) => return self.fiber.runtime_error(err),
         };
 
-        self.fiber.with_stack(|stack| {
-            stack.push(Value::from_object(import.erase()))
-        });
-
-        let fiber = Fiber::new(Some(self.fiber));
+        self.fiber.stack.push(Value::from_object(import.erase()));
 
         let closure = self.manage(Closure::with_import(import));
 
-        fiber.with_stack(|stack| {
-            stack.push(Value::from_object(closure.erase()))
-        });
+        self.fiber.stack.push(Value::from_object(closure.erase()));
 
-        fiber.begin_frame(closure);
-
-        let fiber = self.manage(fiber);
-
-        return self.switch_to(Some(fiber));
+        self.call_closure(0, closure)
     }
 
     #[cold]
@@ -193,14 +170,12 @@ impl Runtime {
         let current_import = self.fiber.current_import();
         let identifier = current_import.symbol(index);
 
-        let import = self.fiber.with_stack(|stack| {
-            stack.peek_n(0)
-        });
+        let import = self.fiber.stack.peek_n(0);
 
         let import = as_obj!(self, import, Import);
 
         let value = import.global(identifier).unwrap_or(Value::NIL);
-        self.fiber.with_stack(|stack| stack.push(value));
+        self.fiber.stack.push(value);
 
         Signal::More
     }
@@ -216,9 +191,7 @@ impl Runtime {
     pub fn op_jump_if_false(&mut self) -> Signal {
         let to = self.next_i16();
 
-        let value = self.fiber.with_stack(|stack| {
-            stack.peek_n(0)
-        });
+        let value = self.fiber.stack.peek_n(0);
 
         if value.is_falsey() {
             self.set_ip(to);
@@ -234,25 +207,19 @@ impl Runtime {
         let current_import = self.fiber.current_import();
         let class = current_import.class(index);
         let class: Gc<Class> = self.manage(Class::new(class.name.clone()).into());
-        self.fiber.with_stack(|stack| {
-            stack.push(Value::from_object(class.erase()));
-        });
+        self.fiber.stack.push(Value::from_object(class.erase()));
 
         Signal::More
     }
 
     pub fn op_bool(&mut self, value: bool) -> Signal {
-        self.fiber.with_stack(|stack| {
-            stack.push(value.into())
-        });
+        self.fiber.stack.push(value.into());
 
         Signal::More
     }
 
     pub fn op_nil(&mut self) -> Signal {
-        self.fiber.with_stack(|stack| {
-            stack.push(Value::NIL)
-        });
+        self.fiber.stack.push(Value::NIL);
 
         Signal::More
     }
@@ -266,28 +233,22 @@ impl Runtime {
         let current_import = self.fiber.current_import();
         let identifier = current_import.symbol(index);
 
-        let (class, closure) = self.fiber.with_stack(|stack| {
-            (stack.peek_n(1), stack.peek_n(0))
-        });
+        let (class, closure) = (self.fiber.stack.peek_n(1), self.fiber.stack.peek_n(0));
 
         let class = as_obj!(self, class, Class);
         let closure = as_obj!(self, closure, Closure);
 
         class.set_method(identifier, Value::from_object(closure.erase()));
 
-        self.fiber.with_stack(|stack| {
-            stack.pop()
-        });
+        self.fiber.stack.pop();
 
         Signal::More
     }
 
-    pub fn op_return(&mut self) -> Signal {
-        let result = self.fiber.with_stack(|stack| stack.pop());
-
+    pub fn op_return_top(&mut self) -> Signal {
         let base_counter = self.fiber.current_frame().base_counter;
         self.fiber.close_upvalues(base_counter);
-        self.fiber.with_stack(|stack| stack.truncate(base_counter));
+        self.fiber.stack.truncate(base_counter);
 
         if let Some(error) = self.fiber.end_frame() {
             return error;
@@ -295,17 +256,30 @@ impl Runtime {
 
         if self.fiber.has_current_frame() {
             self.load_ip();
-            self.fiber.with_stack(|stack| stack.push(result));
             Signal::More
         } else {
-            self.switch_to(self.fiber.parent)
+            Signal::Done
         }
     }
 
+    pub fn op_return(&mut self) -> Signal {
+        let result = self.fiber.stack.pop();
+
+        let base_counter = self.fiber.current_frame().base_counter;
+        self.fiber.close_upvalues(base_counter);
+        self.fiber.stack.truncate(base_counter);
+
+        if let Some(error) = self.fiber.end_frame() {
+            return error;
+        }
+
+        self.load_ip();
+        self.fiber.stack.push(result);
+        Signal::More
+    }
+
     pub fn op_pop(&mut self) -> Signal {
-        self.fiber.with_stack(|stack| {
-            stack.pop()
-        });
+        self.fiber.stack.pop();
 
         Signal::More
     }
@@ -313,9 +287,7 @@ impl Runtime {
     pub fn op_call(&mut self) -> Signal {
         let arity = self.next_u8() as _;
 
-        let callee = self.fiber.with_stack(|stack| {
-            stack.peek_n(arity)
-        });
+        let callee = self.fiber.stack.peek_n(arity);
 
         self.call(arity, callee)
     }
@@ -324,9 +296,7 @@ impl Runtime {
         let index = self.next_u16();
         let value = self.fiber.current_import().number(index as _);
 
-        self.fiber.with_stack(|stack| {
-            stack.push(value.into())
-        });
+        self.fiber.stack.push(value.into());
 
         Signal::More
     }
@@ -335,124 +305,106 @@ impl Runtime {
         let index = self.next_u16();
         let value = self.fiber.current_import().string(index as _);
 
-        self.fiber.with_stack(|stack| {
-            stack.push(Value::from_object(value.erase()))
-        });
+        self.fiber.stack.push(Value::from_object(value.erase()));
 
         Signal::More
     }
 
     pub fn op_greater(&mut self) -> Signal {
-        self.fiber.with_stack(|stack| {
-            let b = stack.pop();
-            let a = stack.pop();
-            if a.is_number() && b.is_number() {
-                let a = a.as_number();
-                let b = b.as_number();
-                stack.push((a > b).into());
-            } else {
-                return self.fiber.runtime_error(VmError::UnexpectedValue);
-            }
+        let b = self.fiber.stack.pop();
+        let a = self.fiber.stack.pop();
+        if a.is_number() && b.is_number() {
+            let a = a.as_number();
+            let b = b.as_number();
+            self.fiber.stack.push((a > b).into());
+        } else {
+            return self.fiber.runtime_error(VmError::UnexpectedValue);
+        }
 
-            Signal::More
-        })
+        Signal::More
     }
 
     pub fn op_less(&mut self) -> Signal {
-        self.fiber.with_stack(|stack| {
-            let b = stack.pop();
-            let a = stack.pop();
-            if a.is_number() && b.is_number() {
-                let a = a.as_number();
-                let b = b.as_number();
-                stack.push((a < b).into());
-            } else {
-                return self.fiber.runtime_error(VmError::UnexpectedValue);
-            }
+        let b = self.fiber.stack.pop();
+        let a = self.fiber.stack.pop();
+        if a.is_number() && b.is_number() {
+            let a = a.as_number();
+            let b = b.as_number();
+            self.fiber.stack.push((a < b).into());
+        } else {
+            return self.fiber.runtime_error(VmError::UnexpectedValue);
+        }
 
-            Signal::More
-        })
+        Signal::More
     }
 
     pub fn op_negate(&mut self) -> Signal {
-        self.fiber.with_stack(|stack| {
-            let a = stack.pop();
-            if a.is_number() {
-                let a = a.as_number();
-                stack.push((-a).into())
-            } else {
-                return self.fiber.runtime_error(VmError::UnexpectedValue);
-            }
+        let a = self.fiber.stack.pop();
+        if a.is_number() {
+            let a = a.as_number();
+            self.fiber.stack.push((-a).into())
+        } else {
+            return self.fiber.runtime_error(VmError::UnexpectedValue);
+        }
 
-            Signal::More
-        })
+        Signal::More
     }
 
     pub fn op_not(&mut self) -> Signal {
-        self.fiber.with_stack(|stack| {
-            let is_falsey = stack.pop().is_falsey();
-            stack.push(is_falsey.into());
-            Signal::More
-        })
+        let is_falsey = self.fiber.stack.pop().is_falsey();
+        self.fiber.stack.push(is_falsey.into());
+        Signal::More
     }
 
     pub fn op_divide(&mut self) -> Signal {
-        self.fiber.with_stack(|stack| {
-            let b = stack.pop();
-            let a = stack.pop();
-            if a.is_number() && b.is_number() {
-                let a = a.as_number();
-                let b = b.as_number();
-                stack.push((a / b).into());
-            } else {
-                return self.fiber.runtime_error(VmError::UnexpectedValue);
-            }
+        let b = self.fiber.stack.pop();
+        let a = self.fiber.stack.pop();
+        if a.is_number() && b.is_number() {
+            let a = a.as_number();
+            let b = b.as_number();
+            self.fiber.stack.push((a / b).into());
+        } else {
+            return self.fiber.runtime_error(VmError::UnexpectedValue);
+        }
 
-            Signal::More
-        })
+        Signal::More
     }
 
     pub fn op_multiply(&mut self) -> Signal {
-        self.fiber.with_stack(|stack| {
-            let b = stack.pop();
-            let a = stack.pop();
-            if a.is_number() && b.is_number() {
-                let a = a.as_number();
-                let b = b.as_number();
-                stack.push((a * b).into());
-            } else {
-                return self.fiber.runtime_error(VmError::UnexpectedValue);
-            }
+        let b = self.fiber.stack.pop();
+        let a = self.fiber.stack.pop();
+        if a.is_number() && b.is_number() {
+            let a = a.as_number();
+            let b = b.as_number();
+            self.fiber.stack.push((a * b).into());
+        } else {
+            return self.fiber.runtime_error(VmError::UnexpectedValue);
+        }
 
-            Signal::More
-        })
+        Signal::More
     }
 
     pub fn op_subtract(&mut self) -> Signal {
-        self.fiber.with_stack(|stack| {
-            let b = stack.pop();
-            let a = stack.pop();
-            if a.is_number() && b.is_number() {
-                let a = a.as_number();
-                let b = b.as_number();
-                stack.push((a - b).into());
-            } else {
-                return self.fiber.runtime_error(VmError::UnexpectedValue);
-            }
+        let b = self.fiber.stack.pop();
+        let a = self.fiber.stack.pop();
+        if a.is_number() && b.is_number() {
+            let a = a.as_number();
+            let b = b.as_number();
+            self.fiber.stack.push((a - b).into());
+        } else {
+            return self.fiber.runtime_error(VmError::UnexpectedValue);
+        }
 
-            Signal::More
-        })
+        Signal::More
     }
 
     pub fn op_add(&mut self) -> Signal {
-        let (b, a) = self.fiber.with_stack(|stack| {
-            (stack.pop(), stack.pop())
-        });
+        let (b, a) = (self.fiber.stack.pop(), self.fiber.stack.pop());
 
         if a.is_number() && b.is_number() {
             let a = a.as_number();
             let b = b.as_number();
-            self.fiber.with_stack(|stack| stack.push((a + b).into()));
+            self.fiber.stack.push((a + b).into());
             return Signal::More;
         }
 
@@ -464,7 +416,7 @@ impl Runtime {
 
         let upvalue = self.fiber.current_frame().closure.upvalues[index];
         let value = self.fiber.resolve_upvalue_into_value(upvalue);
-        self.fiber.with_stack(|stack| stack.push(value));
+        self.fiber.stack.push(value);
 
         Signal::More
     }
@@ -472,9 +424,7 @@ impl Runtime {
     pub fn op_set_upvalue(&mut self) -> Signal {
         let index = self.next_u32() as usize;
 
-        let value = self.fiber.with_stack(|stack| {
-            stack.peek_n(0)
-        });
+        let value = self.fiber.stack.peek_n(0);
 
         let upvalue = self.fiber.current_frame().closure.upvalues[index];
         self.fiber.set_upvalue(upvalue, value);
@@ -482,15 +432,11 @@ impl Runtime {
     }
 
     pub fn op_close_upvalue(&mut self) -> Signal {
-        let index = self.fiber.with_stack(|stack| {
-            stack.len() - 1
-        });
+        let index = self.fiber.stack.len() - 1;
 
         self.fiber.close_upvalues(index);
 
-        self.fiber.with_stack(|stack| {
-            stack.pop();
-        });
+        self.fiber.stack.pop();
 
         Signal::More
     }
@@ -498,7 +444,7 @@ impl Runtime {
     //TODO consider redesigning
     #[cold]
     pub fn op_print(&mut self) -> Signal {
-        let value = self.fiber.with_stack(|stack| stack.pop());
+        let value = self.fiber.stack.pop();
         self.print(&format!("{}", value));
         Signal::More
     }
@@ -507,10 +453,8 @@ impl Runtime {
         let index = self.next_u32() as usize;
         let index = self.fiber.current_frame().base_counter + index;
 
-        self.fiber.with_stack(|stack| {
-            let value = stack.get(index);
-            stack.push(value);
-        });
+        let value = self.fiber.stack.get(index);
+        self.fiber.stack.push(value);
 
         Signal::More
     }
@@ -519,26 +463,21 @@ impl Runtime {
         let index = self.next_u32() as usize;
         let index = self.fiber.current_frame().base_counter + index;
 
-        self.fiber.with_stack(|stack| {
-            let value = stack.peek_n(0);
-            stack.set(index, value);
-        });
+        let value = self.fiber.stack.peek_n(0);
+        self.fiber.stack.set(index, value);
 
         Signal::More
     }
 
     pub fn op_equal(&mut self) -> Signal {
-        self.fiber.with_stack(|stack| {
-            let b = stack.pop();
-            let a = stack.pop();
+        let b = self.fiber.stack.pop();
+        let a = self.fiber.stack.pop();
 
-            if Value::is_same_type(a, b) {
-                stack.push((a == b).into());
-            } else {
-                stack.push(false.into())
-            }
-
-        });
+        if Value::is_same_type(a, b) {
+            self.fiber.stack.push((a == b).into());
+        } else {
+            self.fiber.stack.push(false.into())
+        }
 
         Signal::More
     }
@@ -549,7 +488,7 @@ impl Runtime {
 
         let current_import = self.fiber.current_import();
         let identifier = current_import.symbol(index);
-        let value = self.fiber.with_stack(|stack| stack.pop());
+        let value = self.fiber.stack.pop();
         current_import.set_global(identifier, value);
 
         Signal::More
@@ -562,7 +501,7 @@ impl Runtime {
         let identifier = current_import.symbol(index);
         let value = current_import.global(identifier);
         if let Some(value) = value {
-            self.fiber.with_stack(|stack| stack.push(value));
+            self.fiber.stack.push(value);
         } else {
             return self.fiber.runtime_error(VmError::GlobalNotDefined);
         }
@@ -575,7 +514,7 @@ impl Runtime {
 
         let current_import = self.fiber.current_import();
         let identifier = current_import.symbol(index);
-        let value = self.fiber.with_stack(|stack| stack.peek_n(0));
+        let value = self.fiber.stack.peek_n(0);
         if current_import.has_global(identifier) {
             current_import.set_global(identifier, value);
         } else {
@@ -591,21 +530,15 @@ impl Runtime {
         let current_import = self.fiber.current_import();
         let property = current_import.symbol(index);
 
-        let instance = self.fiber.with_stack(|stack| {
-            stack.peek_n(1)
-        });
+        let instance = self.fiber.stack.peek_n(1);
 
         let instance = as_obj!(self, instance, Instance);
 
-        self.fiber.with_stack(|stack| {
-            instance.set_field(property, stack.peek_n(0))
-        });
+        instance.set_field(property, self.fiber.stack.peek_n(0));
 
-        self.fiber.with_stack(|stack| {
-            let value = stack.pop();
-            stack.pop();
-            stack.push(value)
-        });
+        let value = self.fiber.stack.pop();
+        self.fiber.stack.pop();
+        self.fiber.stack.push(value);
 
         Signal::More
     }
@@ -616,7 +549,7 @@ impl Runtime {
         let current_import = self.fiber.current_import();
         let property = current_import.symbol(index);
 
-        let instance = self.fiber.with_stack(|stack| stack.pop());
+        let instance = self.fiber.stack.pop();
 
         if !instance.is_object() {
             return self.fiber.runtime_error(VmError::UnexpectedValue);
@@ -624,9 +557,7 @@ impl Runtime {
 
         if let Some(instance) = instance.try_cast::<Instance>() {
             if let Some(value) = instance.field(property) {
-                self.fiber.with_stack(|stack| {
-                    stack.push(value)
-                });
+                self.fiber.stack.push(value);
 
                 return Signal::More;
             }
@@ -644,9 +575,7 @@ impl Runtime {
             method,
         }.into());
 
-        self.fiber.with_stack(|stack| {
-            stack.push(Value::from_object(bind.erase()))
-        });
+        self.fiber.stack.push(Value::from_object(bind.erase()));
 
         Signal::More
     }
@@ -654,12 +583,11 @@ impl Runtime {
     pub fn op_closure(&mut self) -> Signal {
         let index = self.next_u32() as _;
 
-        let closure: Gc<Closure> = self.manage(Closure::new(index, self.fiber));
+        let closure = Closure::new(index, &mut self.fiber);
+        let closure: Gc<Closure> = self.manage(closure);
 
         let obj = Value::from_object(closure.erase());
-        self.fiber.with_stack(|stack| {
-            stack.push(obj)
-        });
+        self.fiber.stack.push(obj);
 
         Signal::More
     }
@@ -671,9 +599,7 @@ impl Runtime {
         let current_import = self.fiber.current_import();
         let property = current_import.symbol(index);
 
-        let instance = self.fiber.with_stack(|stack| {
-            stack.peek_n(arity)
-        });
+        let instance = self.fiber.stack.peek_n(arity);
 
         if !instance.is_object() {
             return self.fiber.runtime_error(VmError::UnexpectedValue);
@@ -681,9 +607,7 @@ impl Runtime {
 
         if let Some(instance) = instance.try_cast::<Instance>() {
             if let Some(value) = instance.field(property) {
-                self.fiber.with_stack(|stack| {
-                    stack.rset(arity, value);
-                });
+                self.fiber.stack.rset(arity, value);
                 return self.call(arity, value);
             }
         }
