@@ -61,8 +61,7 @@ fn test_stmt_print_numbers() {
                       opcode::NUMBER,
                       0, 0,
                       opcode::PRINT,
-                      opcode::NIL,
-                      opcode::RETURN,
+                      opcode::RETURN_TOP,
         ]);
 
         assert_numbers(&module, vec![3.0]);
@@ -83,8 +82,7 @@ fn test_stmt_print_numbers() {
             1, 0,
             opcode::ADD,
             opcode::PRINT,
-            opcode::NIL,
-            opcode::RETURN,
+            opcode::RETURN_TOP,
         ],
     );
     assert_first_chunk(
@@ -99,8 +97,7 @@ fn test_stmt_print_numbers() {
             1, 0,
             opcode::SUBTRACT,
             opcode::PRINT,
-            opcode::NIL,
-            opcode::RETURN,
+            opcode::RETURN_TOP,
         ],
     );
     assert_first_chunk(
@@ -111,8 +108,7 @@ fn test_stmt_print_numbers() {
         vec![
             opcode::NIL,
             opcode::PRINT,
-            opcode::NIL,
-            opcode::RETURN,
+            opcode::RETURN_TOP,
         ],
     );
 }
@@ -128,8 +124,7 @@ fn test_stmt_print_strings() {
             opcode::STRING,
             0, 0,
             opcode::PRINT,
-            opcode::NIL,
-            opcode::RETURN,
+            opcode::RETURN_TOP,
         ],
     );
     assert_first_chunk(
@@ -144,8 +139,7 @@ fn test_stmt_print_strings() {
             1, 0,
             opcode::ADD,
             opcode::PRINT,
-            opcode::NIL,
-            opcode::RETURN,
+            opcode::RETURN_TOP,
         ],
     );
 }
@@ -162,8 +156,7 @@ fn test_global_variables() {
             0, 0,
             opcode::DEFINE_GLOBAL,
             0, 0, 0, 0,
-            opcode::NIL,
-            opcode::RETURN,
+            opcode::RETURN_TOP,
         ],
     );
     assert_first_chunk(
@@ -175,8 +168,7 @@ fn test_global_variables() {
             opcode::NIL,
             opcode::DEFINE_GLOBAL,
             0, 0, 0, 0,
-            opcode::NIL,
-            opcode::RETURN,
+            opcode::RETURN_TOP,
         ],
     );
     assert_first_chunk(
@@ -192,8 +184,7 @@ fn test_global_variables() {
             opcode::GET_GLOBAL,
             0, 0, 0, 0,
             opcode::PRINT,
-            opcode::NIL,
-            opcode::RETURN,
+            opcode::RETURN_TOP,
         ],
     );
     assert_first_chunk(
@@ -211,8 +202,7 @@ fn test_global_variables() {
             opcode::SET_GLOBAL,
             0, 0, 0, 0,
             opcode::POP,
-            opcode::NIL,
-            opcode::RETURN,
+            opcode::RETURN_TOP,
         ],
     );
 }
@@ -228,8 +218,7 @@ fn test_local_variables() {
             opcode::NUMBER,
             0, 0,
             opcode::POP,
-            opcode::NIL,
-            opcode::RETURN,
+            opcode::RETURN_TOP,
         ],
     );
     assert_first_chunk(
@@ -244,8 +233,7 @@ fn test_local_variables() {
             1, 0, 0, 0,
             opcode::PRINT,
             opcode::POP,
-            opcode::NIL,
-            opcode::RETURN,
+            opcode::RETURN_TOP,
         ],
     );
     assert_first_chunk(
@@ -273,8 +261,7 @@ fn test_local_variables() {
             opcode::GET_GLOBAL,
             0, 0, 0, 0,
             opcode::PRINT,
-            opcode::NIL,
-            opcode::RETURN,
+            opcode::RETURN_TOP,
         ],
     );
     assert_first_chunk(
@@ -285,8 +272,7 @@ fn test_local_variables() {
         vec![
             opcode::NIL,
             opcode::POP,
-            opcode::NIL,
-            opcode::RETURN,
+            opcode::RETURN_TOP,
         ],
     );
     assert_first_chunk(
@@ -302,8 +288,7 @@ fn test_local_variables() {
             1, 0, 0, 0,
             opcode::POP,
             opcode::POP,
-            opcode::NIL,
-            opcode::RETURN,
+            opcode::RETURN_TOP,
         ],
     );
 }
@@ -314,15 +299,14 @@ fn test_expression() {
                        opcode::NUMBER,
                        0, 0, 
                        opcode::POP,
-                       opcode::NIL,
-                       opcode::RETURN,
+                       opcode::RETURN_TOP,
     ]);
 
-    assert_first_chunk("true;", vec![], vec![], vec![],vec![opcode::TRUE, opcode::POP, opcode::NIL, opcode::RETURN]);
+    assert_first_chunk("true;", vec![], vec![], vec![],vec![opcode::TRUE, opcode::POP, opcode::RETURN_TOP]);
 
-    assert_first_chunk("false;", vec![], vec![], vec![],vec![opcode::FALSE, opcode::POP, opcode::NIL, opcode::RETURN]);
+    assert_first_chunk("false;", vec![], vec![], vec![],vec![opcode::FALSE, opcode::POP, opcode::RETURN_TOP]);
 
-    assert_first_chunk("nil;", vec![], vec![], vec![],vec![opcode::NIL, opcode::POP, opcode::NIL, opcode::RETURN]);
+    assert_first_chunk("nil;", vec![], vec![], vec![],vec![opcode::NIL, opcode::POP, opcode::RETURN_TOP]);
 }
 
 #[test]
@@ -343,8 +327,7 @@ fn test_if() {
             opcode::NUMBER,
             1, 0,
             opcode::POP,
-            opcode::NIL,
-            opcode::RETURN,
+            opcode::RETURN_TOP,
         ],
     );
 
@@ -370,8 +353,7 @@ fn test_if() {
             opcode::NUMBER,
             2, 0,
             opcode::POP,
-            opcode::NIL,
-            opcode::RETURN,
+            opcode::RETURN_TOP,
         ],
     );
 }
@@ -392,8 +374,7 @@ fn test_logical_operators() {
             opcode::NUMBER,
             1, 0,
             opcode::POP,
-            opcode::NIL,
-            opcode::RETURN,
+            opcode::RETURN_TOP,
         ],
     );
 
@@ -413,8 +394,7 @@ fn test_logical_operators() {
             opcode::NUMBER,
             1, 0,
             opcode::POP,
-            opcode::NIL,
-            opcode::RETURN,
+            opcode::RETURN_TOP,
         ],
     );
 }
@@ -433,8 +413,7 @@ fn test_equality() {
             1, 0,
             opcode::LESS,
             opcode::POP,
-            opcode::NIL,
-            opcode::RETURN
+            opcode::RETURN_TOP
         ]);
 }
 
@@ -456,8 +435,7 @@ fn test_while() {
             opcode::JUMP,
             244, 255,
             opcode::POP,
-            opcode::NIL,
-            opcode::RETURN,
+            opcode::RETURN_TOP,
         ],
     );
 }
@@ -495,8 +473,7 @@ fn test_for() {
             219, 255,
             opcode::POP,
             opcode::POP,
-            opcode::NIL,
-            opcode::RETURN,
+            opcode::RETURN_TOP,
         ],
     );
 }
@@ -517,8 +494,7 @@ fn test_simple_function() {
             opcode::CALL,
             0,
             opcode::POP,
-            opcode::NIL,
-            opcode::RETURN,
+            opcode::RETURN_TOP,
         ],
     );
     assert_instructions(module.chunk(1), vec![opcode::NUMBER, 0, 0, opcode::PRINT, opcode::NIL, opcode::RETURN]);
@@ -553,8 +529,7 @@ fn test_function_with_one_argument() {
             opcode::CALL,
             1,
             opcode::POP,
-            opcode::NIL,
-            opcode::RETURN,
+            opcode::RETURN_TOP,
         ],
     );
     assert_instructions(module.chunk(1), vec![
@@ -595,8 +570,7 @@ fn test_recursive_function_with_one_argument() {
             opcode::CALL,
             1,
             opcode::POP,
-            opcode::NIL,
-            opcode::RETURN,
+            opcode::RETURN_TOP,
         ],
     );
     assert_instructions(
@@ -649,8 +623,7 @@ fn test_functions_calling_functions() {
             opcode::CALL,
             0,
             opcode::POP,
-            opcode::NIL,
-            opcode::RETURN,
+            opcode::RETURN_TOP,
         ],
     );
     assert_instructions(
@@ -700,8 +673,7 @@ fn test_simple_scoped_function() {
             0,
             opcode::POP,
             opcode::POP,
-            opcode::NIL,
-            opcode::RETURN,
+            opcode::RETURN_TOP,
         ],
     );
     assert_instructions(module.chunk(1), vec![
@@ -735,8 +707,7 @@ fn test_simple_scoped_recursive_function() {
             0,
             opcode::POP,
             opcode::CLOSE_UPVALUE,
-            opcode::NIL,
-            opcode::RETURN,
+            opcode::RETURN_TOP,
         ],
     );
     assert_instructions(
@@ -767,8 +738,7 @@ fn test_function_with_return() {
             0, 0, 0, 0,
             opcode::DEFINE_GLOBAL,
             0, 0, 0, 0,
-            opcode::NIL,
-            opcode::RETURN,
+            opcode::RETURN_TOP,
         ],
     );
     assert_instructions(module.chunk(1), vec![
@@ -804,8 +774,7 @@ fn test_upvalue() {
         0, 0, 0, 0,
         opcode::POP,
         opcode::CLOSE_UPVALUE,
-        opcode::NIL,
-        opcode::RETURN,
+        opcode::RETURN_TOP,
         ]);
     assert_instructions(module.chunk(1), vec![
                         opcode::GET_UPVALUE,
@@ -836,8 +805,7 @@ fn test_double_upvalue() {
         1, 0, 0, 0,
         opcode::POP,
         opcode::CLOSE_UPVALUE,
-        opcode::NIL,
-        opcode::RETURN,
+        opcode::RETURN_TOP,
         ]);
     assert_instructions(module.chunk(1), vec![
                         opcode::CLOSURE,
@@ -878,8 +846,7 @@ fn test_multiple_upvalue() {
             opcode::POP,
             opcode::CLOSE_UPVALUE,
             opcode::CLOSE_UPVALUE,
-            opcode::NIL,
-            opcode::RETURN,
+            opcode::RETURN_TOP,
         ],
     );
     assert_instructions(
@@ -919,8 +886,7 @@ fn test_multiple_double_upvalue() {
             opcode::POP,
             opcode::CLOSE_UPVALUE,
             opcode::CLOSE_UPVALUE,
-            opcode::NIL,
-            opcode::RETURN,
+            opcode::RETURN_TOP,
         ],
     );
     assert_instructions(module.chunk(1), vec![
@@ -972,8 +938,7 @@ fn test_scoped_upvalue() {
             opcode::CALL,
             0,
             opcode::POP,
-            opcode::NIL,
-            opcode::RETURN,
+            opcode::RETURN_TOP,
         ],
     );
     assert_instructions(
@@ -1026,8 +991,7 @@ fn test_simple_import() {
             opcode::IMPORT,
             0, 0, 0, 0,
             opcode::POP,
-            opcode::NIL,
-            opcode::RETURN
+            opcode::RETURN_TOP
         ]);
 
     assert_numbers(&module, vec![]);
@@ -1048,8 +1012,7 @@ fn test_complex_import() {
             opcode::DEFINE_GLOBAL,
             0, 0, 0, 0,
             opcode::POP,
-            opcode::NIL,
-            opcode::RETURN
+            opcode::RETURN_TOP
         ]);
 
     assert_numbers(&module, vec![]);
@@ -1076,8 +1039,7 @@ fn test_complex_local_import() {
             1, 0, 0, 0,
             opcode::PRINT,
             opcode::POP,
-            opcode::NIL,
-            opcode::RETURN
+            opcode::RETURN_TOP
     ]);
 
     assert_numbers(&module, vec![]);
@@ -1102,8 +1064,7 @@ fn test_empty_class_global() {
             opcode::GET_GLOBAL,
             0, 0, 0, 0,
             opcode::POP,
-            opcode::NIL,
-            opcode::RETURN
+            opcode::RETURN_TOP
         ]);
 
     assert_numbers(&module, vec![]);
@@ -1129,8 +1090,7 @@ fn test_empty_class_local() {
                         1, 0, 0, 0,
                         opcode::POP,
                         opcode::POP,
-                        opcode::NIL,
-                        opcode::RETURN,
+                        opcode::RETURN_TOP,
     ]);
 
     assert_classes(&module, vec![
@@ -1154,8 +1114,7 @@ fn test_set_property() {
             SET_PROPERTY,
             1, 0, 0, 0,
             POP,
-            NIL,
-            RETURN
+            RETURN_TOP
         ]);
 
     assert_numbers(&module, vec![3.0]);
@@ -1178,8 +1137,7 @@ fn test_get_property() {
             GET_GLOBAL, 0, 0, 0, 0, 
             GET_PROPERTY, 1, 0, 0, 0, 
             POP, 
-            NIL, 
-            RETURN
+            RETURN_TOP
         ],
     );
 
