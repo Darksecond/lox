@@ -3,12 +3,12 @@ use std::cell::Cell;
 use lox_gc::{Gc, Trace, Tracer};
 use crate::memory::{Import, Upvalue};
 use crate::fiber::Fiber;
-use arrayvec::ArrayVec;
 use crate::string::LoxString;
+use crate::array::Array;
 
 pub struct Closure {
     pub function: Function,
-    pub upvalues: ArrayVec<Gc<Cell<Upvalue>>, 128>,
+    pub upvalues: Array<Gc<Cell<Upvalue>>>,
 }
 
 unsafe impl Trace for Closure {
@@ -57,7 +57,7 @@ impl Closure {
         };
 
         Closure {
-            upvalues: ArrayVec::new(),
+            upvalues: Array::new(),
             function,
         }
     }

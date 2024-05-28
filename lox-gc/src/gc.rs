@@ -61,7 +61,7 @@ impl ManagedHeap {
         }
     }
 
-    pub fn finalize(&self, gc: Gc<()>) {
+    fn finalize(&self, gc: Gc<()>) {
         self.finalizers.borrow_mut().push(gc);
     }
 
@@ -90,13 +90,20 @@ impl ManagedHeap {
     pub fn manage<T>(&self, data: T) -> Gc<T> where T: Trace + 'static {
         let layout = std::alloc::Layout::new::<Allocation<T>>();
         let ptr = self.heap.alloc(layout) as *mut Allocation<T>;
-        unsafe {
+        let gc = unsafe {
             ptr.write(Allocation::new(data));
 
             Gc {
                 ptr: NonNull::new_unchecked(ptr),
             }
+        };
+
+        if std::mem::needs_drop::<T>() {
+            //eprintln!("Type {} needs drop. Adding to finalizers.", std::any::type_name::<T>());
+            self.finalize(gc.erase());
         }
+
+        gc
     }
 
     pub fn collect(&self, roots: &[&dyn Trace]) {
